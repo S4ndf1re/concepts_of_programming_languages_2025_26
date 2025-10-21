@@ -95,6 +95,35 @@ void main() {
 ## Memory Management
 
 
+## Concept Queries
+```rust
+
+// 1. Alternative
+// Wird dann automatisch dependency injected
+let tuple: {(Component1, Component2) | Component3, !Component4};
+
+fn my_func(players: {PositionComponent, VelocityComponent | PlayerComponent, !BotComponent })
+
+
+// 2. Alternative
+let tuple: query (Component1, Component2) 
+            with (Component3, Component4)
+            without Component6;
+
+fn my_func(players: query (Entity, PositionComponent, VelocityComponent) with PlayerComponent without BotComponent)
+
+// 3. Alternative
+let tuple: Query<(Component1, Component2), (Component3, Component4), (Component5)>;
+
+fn my_func(players: Query<(Component1, Component2), (Component3, Component4), (Component5)>)
+
+
+// 3. Alternative
+let tuple: <(Component1, Component2) $ (Component3 || Component4) && !Component5>;
+
+fn my_func(players: <(Component1, Component2) $ (Component3 || Component4) && !Component5>)
+```
+
 
 ## Fragen an Gips
 - Wo ist die Grenze zwischen DSL, vollständiger Programmiersprache und netter Kommandozeile?
