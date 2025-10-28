@@ -17,6 +17,7 @@ let b = 10;
 ## Typen
 ```rust
 let a: Int = 10; // Int
+let a = 10; // Int
 let b: Float = 10.1; // Float
 let c: String = "Hello"; // String
 let h: Bool = false;
@@ -54,25 +55,6 @@ register <system> on <event>
 
 ```
 ## Queries
-```rust
-fn abc(query: ((&PositionComponent, &VelocityComponent, Entity), Without<PlayerComponent>)) {
-    if query.is_empty() return
-
-
-    for entry in query {
-        entry.0 += entry.1
-
-        if entry.0 > (100, 100) {
-            add OutOfBoundsComponent to entry.2
-            entry.1 = -entry.1
-        } 
-
-        if entry.0 < (100, 100) {
-            remove OutOfBoundsComponent from entry.2
-        }
-    }
-}
-```
 
 ## Keywords
 register <>
@@ -99,32 +81,55 @@ void main() {
 ```rust
 
 // 1. Alternative
-// Wird dann automatisch dependency injected
-let tuple: {(Component1, Component2) | Component3, !Component4};
-
 fn my_func(players: {PositionComponent, VelocityComponent | PlayerComponent, !BotComponent })
 
 
-// 2. Alternative
-let tuple: query (Component1, Component2) 
-            with (Component3, Component4)
-            without Component6;
-
-fn my_func(players: query (Entity, PositionComponent, VelocityComponent) with PlayerComponent without BotComponent)
-
-// 3. Alternative
-let tuple: Query<(Component1, Component2), (Component3, Component4), (Component5)>;
-
-fn my_func(players: Query<(Component1, Component2), (Component3, Component4), (Component5)>)
+// 2. Alternative (Favorit)
+fn my_func(players: query query (Component1, Component2) 
+            where (Component3 | Component4) & Component5 & !Component6)
 
 
-// 3. Alternative
-let tuple: <(Component1, Component2) $ (Component3 || Component4) && !Component5>;
-
+// 4. Alternative
 fn my_func(players: <(Component1, Component2) $ (Component3 || Component4) && !Component5>)
+
+
+fn my_system(
+    param: query (Component1, Component2) 
+            where (Component3 | Component4) & Component5 & !Component6
+) {
+    ...
+    ...
+    ...
+
+}
+```
+
+```rust
+fn abc(query: ((&PositionComponent, &VelocityComponent, Entity), Without<PlayerComponent>)) {
+    if query.is_empty() return
+
+
+    for entry in query {
+        entry.0 += entry.1
+
+        if entry.0 > (100, 100) {
+            add OutOfBoundsComponent to entry.2
+            entry.1 = -entry.1
+        } 
+
+        if entry.0 < (100, 100) {
+            remove OutOfBoundsComponent from entry.2
+        }
+    }
+}
 ```
 
 
 ## Fragen an Gips
 - Wo ist die Grenze zwischen DSL, vollständiger Programmiersprache und netter Kommandozeile?
 - Sollen die Scripte auch abgelegt werden (als Datei), und dann bei Programmstart, oder sogar während des Programmes ausgeführt/ interpretiert werden, oder ist nur ein REPL notwending?
+- Sollen Components erzeugt werden können?
+- Wie funktionieren Events in dem Dungeon?
+- Gibt es Resourcen?
+- Wie sieht das Level Management aus? (Beispiel BridgeGuardRiddleLevel.java)? Müssen level hintereinander gespawned werden können? Wie könnten Tasks generell in Level Eingebaut werden (das schein sehr aufwendig zu sein!)?
+- Wie werden Tasks überhaupt getriggert? InteractionComponent wird irgendwie nie benutzt
