@@ -32,13 +32,32 @@ a := []
 ## Tasks
 
 
+## Functions
+```js
+function f (a: <type>, b: <type>, c: <type>): <Returntype> => do shit in one line
+
+function f (a: <type>, b: <type>, c: <type>): <Returntype> {
+  do
+  shit
+  in
+  multiple
+  lines
+
+  return "is allowed anywhere"
+
+  last value is return
+}
+```
+
+## Systems
+```js
+
+system s (a: <P1>, b: <P2>, c: <P3>)
+querying
+  <P1> as List with {Entity, Component1, Component2 | !Component3}
+  <P2> as List with {Entity, Component1, #Parent: { Component2, Component3}, Any<#Children>{Component4} | Component6 && Component7 && !Component 8 || Component9}
+  <P3> as Single with {Entity, Camera | MainCamera}
+```
 
 
 ## Fragen an Gips
-- Wo ist die Grenze zwischen DSL, vollständiger Programmiersprache und netter Kommandozeile?
-- Sollen die Scripte auch abgelegt werden (als Datei), und dann bei Programmstart, oder sogar während des Programmes ausgeführt/ interpretiert werden, oder ist nur ein REPL notwending?
-- Sollen Components erzeugt werden können?
-- Wie funktionieren Events in dem Dungeon?
-- Gibt es Resourcen?
-- Wie sieht das Level Management aus? (Beispiel BridgeGuardRiddleLevel.java)? Müssen level hintereinander gespawned werden können? Wie könnten Tasks generell in Level Eingebaut werden (das schein sehr aufwendig zu sein!)?
-- Wie werden Tasks überhaupt getriggert? InteractionComponent wird irgendwie nie benutzt
