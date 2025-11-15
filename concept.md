@@ -1,3 +1,15 @@
+## Features der Sprache im Kontext von CPL
+- JIT (wenn Zeit ist)
+- Starke Typisierung ( typechecking ) ( type inference ) ( generics nur für eingebaute typen )
+- Interpreter
+- LALRPOP + RUST
+- Interfaces, aber keine OOP und Vererbung ( Prozedural + Interfaces, wie in GO)
+- Impl Blöcke wie in Rust??
+- GC => RefCounting ( alles ist RefCounting, so wie in Swift), heißt man braucht auch irgendwie ein WEAK RC
+- 2(4) Stages: Type Inference / Type Checking / Cycle Detection (for warnings) => (optimizing stage) => (compile to bytecode) => running stage (as bytecode)
+- https://github.com/TheDan64/inkwell als LLVM JIT Wrapper, https://createlang.rs/01_calculator/jit_intro.html als guide dazu
+
+
 ## Typisierung
 - Einfache Typen
 - Int, Float, String, Bool, Array(List), (Map)?, Struct (einfaches Gruppieren von Attributen), Function Types, Vielleicht Tupel
@@ -6,7 +18,7 @@
 - float/double
 - string
 - bool
-- Array(List)
+- ArrayList / Vector / Vec => keine arrays
 - Map
 
 ## Kommentare
@@ -19,6 +31,7 @@
 ```go
 // Creation
 a := 10
+b := a
 
 // Assignment
 a = 20
@@ -31,9 +44,9 @@ a = "Hello"
 // Lists
 a := []
 a += e //append e
-a -= e //delete e
+a -= e //delete e, nur das erste
 e := a[0] //access
-a[0] = e //
+a[0] = e // einfügen, wenn idx < a.size
 
 // Maps
 a := int -> string
@@ -64,11 +77,6 @@ while (true){
   ...
 }
 ```
-
-## Levels
-
-
-## Tasks
 
 
 ## Functions
