@@ -2,6 +2,13 @@
 - Einfache Typen
 - Int, Float, String, Bool, Array(List), (Map)?, Struct (einfaches Gruppieren von Attributen), Function Types, Vielleicht Tupel
 
+- int
+- float/double
+- string
+- bool
+- Array(List)
+- Map
+
 ## Kommentare
 ```c
 // Dies ist ein kommentar, Mehrzeilige Kommentare gibt es nicht
@@ -23,8 +30,19 @@ a = "Hello"
 
 // Lists
 a := []
+a += e //append e
+a -= e //delete e
 
 ```
+
+## Operators
+create: :=
+assign: =
+equal: == , !=
+compare: <,>, <=, >= 
+calulate: +, -, *, /
+modulo: %
+
 
 ## Flow Control
 ```c
