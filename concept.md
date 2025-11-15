@@ -26,6 +26,21 @@ a := []
 
 ```
 
+## Flow Control
+```c
+if (true){
+  ...
+} else if (...){
+  ...
+} else{
+  ...
+}
+
+while (true){
+  ...
+}
+```
+
 ## Levels
 
 
