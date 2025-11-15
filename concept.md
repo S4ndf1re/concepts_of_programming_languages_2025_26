@@ -32,6 +32,12 @@ a = "Hello"
 a := []
 a += e //append e
 a -= e //delete e
+e := a[0] //access
+a[0] = e //
+
+// Maps
+a := int -> string
+a[key] = value
 
 ```
 
