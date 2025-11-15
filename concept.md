@@ -78,12 +78,52 @@ while (true){
 }
 ```
 
+## Includes / Use / Import
+```js
+import module as m
+import module2
+
+import ffi "raylib.h" as ray
+
+ray.Vector2
+m.<S>
+module2.<S>
+```
+
+## Struct 
+```js
+struct <S> {
+  a: float, 
+  b: string,
+  c: bool,
+}
+
+component <C> {
+  a: float,
+  b: string,
+  s: S,
+  c: bool,
+}
+
+
+impl <S|C> {
+  fun f(a: float, b: float): <S|C> {
+    
+  }
+}
+
+impl <I> for <S|C> {
+  fun hello_world() {
+    println("string")
+  }
+}
+```
 
 ## Functions
 ```js
-function f (a: <type>, b: <type>, c: <type>): <Returntype> => do shit in one line
+fun f (a: <type>, b: <type>, c: <type>): <Returntype> => do shit in one line
 
-function f (a: <type>, b: <type>, c: <type>): <Returntype> {
+fun f (a: <type>, b: <type>, c: <type>): <Returntype> {
   do
   shit
   in
