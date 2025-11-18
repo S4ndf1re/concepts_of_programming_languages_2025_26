@@ -1,4 +1,4 @@
-use ecs::{Component, IntoBoxedSystem, SystemWrapper, World};
+use ecs::{Component, World};
 
 #[derive(Debug)]
 pub struct PositionComponent {
@@ -9,7 +9,7 @@ pub struct PositionComponent {
 
 impl Component for PositionComponent {}
 
-fn my_system(world: &World, world2: &World) {
+fn my_system(world: &World) {
     for entity in world.get_entites() {
         let Some(mut entity) = world.get_entity_mut(entity) else {
             continue;

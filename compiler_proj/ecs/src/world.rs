@@ -2,7 +2,7 @@ use std::{any::TypeId, cell::RefCell, collections::HashSet, rc::Rc};
 
 use typed_generational_arena::{Index, NonzeroGeneration, StandardArena};
 
-use crate::{Component, Entity, EntityCommandsMut, IntoBoxedSystem, IntoSystem, System, SystemParameter};
+use crate::{Component, Entity, EntityCommandsMut, IntoSystem, System, SystemParameter};
 
 pub struct World {
     pub(crate) entites: Rc<RefCell<StandardArena<Entity>>>,
