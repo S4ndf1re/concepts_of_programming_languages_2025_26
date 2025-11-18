@@ -2,7 +2,7 @@ use std::{any::TypeId, cell::RefCell, collections::HashSet, rc::Rc};
 
 use typed_generational_arena::{Index, NonzeroGeneration, StandardArena};
 
-use crate::{Component, Entity, EntityCommandsMut, IntoBoxedSystem, System, SystemParameter};
+use crate::{Component, Entity, EntityCommandsMut, IntoBoxedSystem, IntoSystem, System, SystemParameter};
 
 pub struct World {
     pub(crate) entites: Rc<RefCell<StandardArena<Entity>>>,
@@ -48,8 +48,8 @@ impl World {
         }
     }
 
-    pub fn add_system(&mut self, system: Box<dyn System>) {
-        self.systems.push(Box::into_raw(system));
+    pub fn add_system<Marker: 'static, I: IntoSystem<Marker>>(&mut self, into_system: I) {
+        self.systems.push(Box::into_raw(into_system.into_system()));
     }
 
     pub fn run(&mut self) {
@@ -92,7 +92,7 @@ impl SystemParameter for &World {
 
     fn instantiate_from_world(_: &World) -> Self::State {}
 
-    fn get_parm<'w>(_: &mut Self::State, world: &'w World) -> Self::Item<'w> {
+    fn get_param<'w>(_: &mut Self::State, world: &'w World) -> Self::Item<'w> {
         world
     }
 }

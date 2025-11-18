@@ -26,7 +26,7 @@ fn my_system(world: &World, world2: &World) {
 fn main() {
     let mut world = World::default();
 
-    world.add_system(SystemWrapper::<_, (&World, &World)>::new(my_system).into_boxed());
+    world.add_system(my_system);
 
     let mut entity = world.spawn();
     entity.add_component(PositionComponent {
