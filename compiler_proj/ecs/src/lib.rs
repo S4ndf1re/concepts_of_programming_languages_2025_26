@@ -6,7 +6,7 @@ pub use world::*;
 
 use std::{
     any::{Any, TypeId},
-    collections::HashMap,
+    collections::{HashMap, btree_map::Keys},
 };
 
 use typed_generational_arena::{Index, NonzeroGeneration};

@@ -2,7 +2,7 @@ use std::{any::TypeId, cell::RefCell, collections::HashSet, rc::Rc};
 
 use typed_generational_arena::{Index, NonzeroGeneration, StandardArena};
 
-use crate::{Component, Entity, EntityCommandsMut, System, SystemParameter};
+use crate::{Component, Entity, EntityCommandsMut, IntoBoxedSystem, System, SystemParameter};
 
 pub struct World {
     pub(crate) entites: Rc<RefCell<StandardArena<Entity>>>,
@@ -48,9 +48,7 @@ impl World {
         }
     }
 
-    pub fn add_system<S: System + 'static>(&mut self, system: S) {
-        let s_boxed = Box::new(system);
-        let system: Box<dyn System> = Box::new(*s_boxed);
+    pub fn add_system(&mut self, system: Box<dyn System>) {
         self.systems.push(Box::into_raw(system));
     }
 

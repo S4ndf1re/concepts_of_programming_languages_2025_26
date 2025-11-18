@@ -1,6 +1,4 @@
-use std::marker::PhantomData;
-
-use ecs::{Component, IntoSystem, World};
+use ecs::{Component, IntoBoxedSystem, SystemWrapper, World};
 
 #[derive(Debug)]
 pub struct PositionComponent {
@@ -11,7 +9,7 @@ pub struct PositionComponent {
 
 impl Component for PositionComponent {}
 
-fn my_system(world: &World) {
+fn my_system(world: &World, world2: &World) {
     for entity in world.get_entites() {
         let Some(mut entity) = world.get_entity_mut(entity) else {
             continue;
@@ -27,10 +25,8 @@ fn my_system(world: &World) {
 
 fn main() {
     let mut world = World::default();
-    world.add_system(IntoSystem {
-        func: my_system,
-        marker: PhantomData::<&World>,
-    });
+
+    world.add_system(SystemWrapper::<_, (&World, &World)>::new(my_system).into_boxed());
 
     let mut entity = world.spawn();
     entity.add_component(PositionComponent {
