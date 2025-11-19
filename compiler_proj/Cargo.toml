@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ecs = { path = "./ecs" }
+ecs = { path = "./crates/ecs" }

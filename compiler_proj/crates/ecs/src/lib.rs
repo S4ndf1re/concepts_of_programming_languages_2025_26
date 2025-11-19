@@ -5,7 +5,7 @@ pub mod world;
 pub use world::*;
 
 use std::{
-    any::{Any, TypeId},
+    any::TypeId,
     collections::{HashMap, btree_map::Keys},
 };
 
