@@ -27,26 +27,30 @@ Statement: AstNode = {
     Returnable,
 };
 
+
 NonReturnable: AstNode = {
     <Expr> semicolon,
-    fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Statement?> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body.map(|v| Box::new(v))},
+    fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body},
 };
 
 Returnable: AstNode = {
-    Term,
     Comparison,
 };
 
+Block: Vec<Box<AstNode>> = {
+    <s:Statement*> => s.into_iter().map(|s| Box::new(s)).collect::<Vec<_>>(),
+}
+
 Term: AstNode = {
-    if_term <cond:Comparison> l_brace <body:Statement?> r_brace <elif:ElseIf*> <el:Else?> => AstNode::Branch {cond: Box::new(cond), body: body.map(|v| Box::new(v)), else_if_branches: elif, else_branch: el.flatten()},
+    if_term <cond:Comparison> l_brace <body:Block> r_brace <elif:ElseIf*> <el:Else?> => AstNode::Branch {cond: Box::new(cond), body, else_if_branches: elif, else_branch: el},
     <s:id> => AstNode::Symbol(s),
     <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
     l_paren <Returnable> r_paren,
 }
 
 Expr: AstNode = {
-    <s:id> declare <e:Statement> => AstNode::Declaration{new_symbol: s, expression: Box::new(e)},
-    <s:id> assign <e:Statement> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)},
+    <s:id> declare <e:Returnable> => AstNode::Declaration{new_symbol: s, expression: Box::new(e)},
+    <s:id> assign <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)},
 };
 
 // a == b
@@ -65,12 +69,12 @@ Comparison: AstNode = {
     <a:Comparison> greater_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::GreaterThanEquals, Box::new(b)),
 };
 
-ElseIf: (Box<AstNode>, Option<Box<AstNode>>) = {
-    else_term if_term <cond:Comparison> l_brace <body:Statement?> r_brace => (Box::new(cond), body.map(|b| Box::new(b))),
+ElseIf: (Box<AstNode>, Vec<Box<AstNode>>) = {
+    else_term if_term <cond:Comparison> l_brace <body:Block> r_brace => (Box::new(cond), body),
 };
 
-Else: Option<Box<AstNode>> = {
-    else_term l_brace <body:Statement?> r_brace => body.map(|b| Box::new(b)),
+Else: Vec<Box<AstNode>> = {
+    else_term l_brace <body:Block> r_brace => body,
 };
 
 

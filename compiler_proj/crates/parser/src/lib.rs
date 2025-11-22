@@ -77,7 +77,7 @@ mod tests {
             AstNode::TypeDef {
                 typename: _,
                 typedef: _,
-                execution_body: None
+                execution_body: _, 
             }
         ));
     }
@@ -114,7 +114,7 @@ mod tests {
             expr[0],
             AstNode::Branch {
                 cond: _,
-                body: None,
+                body: _,
                 else_if_branches: _,
                 else_branch: _
             }
@@ -189,5 +189,28 @@ mod tests {
                 else_branch: Some(_),
             }
         ));
+    }
+
+
+    #[test]
+    fn returnable_test() {
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                        a := (a == b) != c != d;
+                        a = a >= b;
+                        c := a;
+                        c := a.c();
+                        "#,
+            )
+            .unwrap();
+
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                        a.c();
+                        "#,
+            );
+        assert!(expr.is_err());
     }
 }

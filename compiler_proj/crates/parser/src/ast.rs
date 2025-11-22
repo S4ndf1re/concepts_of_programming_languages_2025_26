@@ -9,6 +9,7 @@ pub type Alias = String;
 pub type DyLibName = String;
 
 /// The symbol that represents any existing type
+#[derive(Debug)]
 pub struct TypeSymbol {
     name: String,
     resolved: bool,
@@ -25,8 +26,10 @@ impl TypeSymbol {
     }
 }
 
+#[derive(Debug)]
 pub enum Query {}
 
+#[derive(Debug)]
 pub enum AstTypeDefinition {
     Int,
     Float,
@@ -41,6 +44,7 @@ pub enum AstTypeDefinition {
     Result(TypeSymbol, TypeSymbol),
 }
 
+#[derive(Debug)]
 pub enum AssignmentOperations {
     Identity,
     Plus,
@@ -50,6 +54,7 @@ pub enum AssignmentOperations {
     Modulo,
 }
 
+#[derive(Debug)]
 pub enum InfixOperator {
     // Computation
     Plus,
@@ -69,11 +74,13 @@ pub enum InfixOperator {
     Or,
 }
 
+#[derive(Debug)]
 pub enum PrefixOperator {
     Not,    // '!'
     Negate, // '-'
 }
 
+#[derive(Debug)]
 pub enum AstNode {
     Import(Module, Option<Alias>),
     ImportNative(Header, DyLibName, Option<Alias>),
@@ -89,7 +96,7 @@ pub enum AstNode {
     TypeDef {
         typename: Symbol,
         typedef: AstTypeDefinition,
-        execution_body: Option<Box<AstNode>>,
+        execution_body: Vec<Box<AstNode>>,
     },
     FunctionCall {
         params: Vec<Box<AstNode>>,
@@ -104,12 +111,11 @@ pub enum AstNode {
 
     Branch {
         cond: Box<AstNode>, 
-        body: Option<Box<AstNode>>,
-        else_if_branches: Vec<(Box<AstNode>, Option<Box<AstNode>>)>,
-        else_branch: Option<Box<AstNode>>
+        body: Vec<Box<AstNode>>,
+        else_if_branches: Vec<(Box<AstNode>, Vec<Box<AstNode>>)>,
+        else_branch: Option<Vec<Box<AstNode>>>
     },
     Symbol(Symbol),
-
 }
 
 pub enum Expr {
