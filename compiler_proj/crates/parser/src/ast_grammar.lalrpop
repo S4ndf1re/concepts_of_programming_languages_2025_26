@@ -38,7 +38,7 @@ ReturnableStatement: AstNode = {
 }
 
 Returnable: AstNode = {
-    Comparison,
+    Logic,
 };
 
 Term: AstNode = {
@@ -47,6 +47,15 @@ Term: AstNode = {
     <s:id> => AstNode::Symbol(s),
     <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
     l_paren <Returnable> r_paren,
+}
+
+Logic: AstNode = {
+    #[precedence(level="0")]
+    Comparison,
+    #[precedence(level="1")] #[assoc(side="left")]
+    <a:Logic> and <b:Logic> => AstNode::InfixCall(Box::new(a), InfixOperator::And, Box::new(b)),
+    #[precedence(level="2")] #[assoc(side="left")]
+    <a:Logic> or <b:Logic> => AstNode::InfixCall(Box::new(a), InfixOperator::Or, Box::new(b)),
 }
 
 Comparison: AstNode = {

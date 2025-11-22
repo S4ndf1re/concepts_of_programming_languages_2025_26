@@ -266,4 +266,29 @@ mod tests {
             )
             .unwrap();
     }
+
+    #[test]
+    fn logic1() {
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                    a:= a && b;
+                    a = a || b;
+                            "#,
+            )
+            .unwrap();
+    }
+
+
+    #[test]
+    fn logic2() {
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                    a:= a < 5 && (b || c);
+                    a = (a <= b && b <= c) || a >= b && b>= c;
+                            "#,
+            )
+            .unwrap();
+    }
 }
