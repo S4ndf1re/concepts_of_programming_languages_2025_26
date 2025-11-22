@@ -201,6 +201,7 @@ mod tests {
                         a = a >= b;
                         c := a;
                         c := a.c();
+                        a.c();
                         "#,
             )
             .unwrap();
@@ -208,7 +209,7 @@ mod tests {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
-                        a.c();
+                        a.c()
                         "#,
             );
         assert!(expr.is_err());
