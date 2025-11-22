@@ -274,6 +274,7 @@ mod tests {
                 r#"
                     a:= a && b;
                     a = a || b;
+                    a = a || a + b;
                             "#,
             )
             .unwrap();
