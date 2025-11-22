@@ -248,4 +248,22 @@ mod tests {
             )
             .unwrap();
     }
+
+    #[test]
+    fn math1() {
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                    a:= a+b;
+                    a = a-b;
+                    a = a*b;
+                    a = a/b;
+                    a = a/b+c;
+                    a = a*b*c;
+                    a = a-b*c;
+                    a = a%b;
+                            "#,
+            )
+            .unwrap();
+    }
 }

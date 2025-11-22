@@ -51,7 +51,7 @@ Term: AstNode = {
 
 Comparison: AstNode = {
     #[precedence(level="0")]
-    Term,
+    Math,
     #[precedence(level="1")] #[assoc(side="left")]
     <a:Comparison> equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::Equals, Box::new(b)),
     <a:Comparison> not_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::NotEquals, Box::new(b)),
@@ -60,6 +60,19 @@ Comparison: AstNode = {
     <a:Comparison> r_angle <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::GreaterThan, Box::new(b)),
     <a:Comparison> greater_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::GreaterThanEquals, Box::new(b)),
 };
+
+Math: AstNode = {
+    #[precedence(level="0")]
+    Term,
+    #[precedence(level="1")] #[assoc(side="left")]
+    <a:Math> asterisk <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Multiply, Box::new(b)),
+    <a:Math> slash <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Divide, Box::new(b)),
+    <a:Math> modulo <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Modulo, Box::new(b)),
+    #[precedence(level="2")] #[assoc(side="left")]
+    <a:Math> plus <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Plus, Box::new(b)),
+    <a:Math> minus <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Minus, Box::new(b)),
+
+}
 
 FunctionDefinition: AstNode = {
     fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body},
@@ -231,6 +244,9 @@ asterisk: () = {
 };
 slash: () = {
     "/" => ()
+};
+modulo: () = {
+    "%" => ()
 };
 less_equals: () = {
     "<=" => ()
