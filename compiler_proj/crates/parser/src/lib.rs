@@ -77,7 +77,7 @@ mod tests {
             AstNode::TypeDef {
                 typename: _,
                 typedef: _,
-                execution_body: _, 
+                execution_body: _,
             }
         ));
     }
@@ -94,7 +94,8 @@ mod tests {
             expr[0],
             AstNode::Declaration {
                 new_symbol: _,
-                expression: _
+                expression: _,
+                assumed_type: _,
             }
         ));
     }
@@ -136,7 +137,8 @@ mod tests {
             expr[0],
             AstNode::Declaration {
                 new_symbol: _,
-                expression: _
+                expression: _,
+                assumed_type: _,
             }
         ));
     }
@@ -191,7 +193,6 @@ mod tests {
         ));
     }
 
-
     #[test]
     fn returnable_test() {
         let expr = ast_grammar::ProgrammParser::new()
@@ -206,12 +207,30 @@ mod tests {
             )
             .unwrap();
 
+        let expr = ast_grammar::ProgrammParser::new().parse(
+            r#"
+                        a.c()
+                        "#,
+        );
+        assert!(expr.is_err());
+    }
+
+    #[test]
+    fn loops1() {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
-                        a.c()
+                        for ;; {}
+
+                        for i := 6; i < 8; i+=2 {}
+
+                        for i = 3 ; i == 9;  {}
+
+                        for a in list {}
+
+                        while 1 == 2 {}
                         "#,
-            );
-        assert!(expr.is_err());
+            )
+            .unwrap();
     }
 }

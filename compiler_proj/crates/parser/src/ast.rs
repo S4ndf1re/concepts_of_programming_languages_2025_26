@@ -47,8 +47,8 @@ pub enum AstTypeDefinition {
 #[derive(Debug)]
 pub enum AssignmentOperations {
     Identity,
-    Plus,
-    Minus,
+    Add,
+    Subtract,
     Divide,
     Multiply,
     Modulo,
@@ -84,9 +84,14 @@ pub enum PrefixOperator {
 pub enum AstNode {
     Import(Module, Option<Alias>),
     ImportNative(Header, DyLibName, Option<Alias>),
+    Int(i64),
+    Float(f64),
+    String(String),
+    Bool(bool),
     Declaration {
         new_symbol: Symbol,
         expression: Box<AstNode>,
+        assumed_type: Option<TypeSymbol>,
     },
     AssignmentOp {
         recipient: Symbol,
@@ -108,12 +113,26 @@ pub enum AstNode {
         method: Symbol,
         params: Vec<Box<AstNode>>,
     },
-
     Branch {
         cond: Box<AstNode>, 
         body: Vec<Box<AstNode>>,
         else_if_branches: Vec<(Box<AstNode>, Vec<Box<AstNode>>)>,
         else_branch: Option<Vec<Box<AstNode>>>
+    },
+    While {
+        cond: Box<AstNode>, 
+        body: Vec<Box<AstNode>>,
+    },
+    ForEach {
+        recipient: Symbol,
+        iterable: Box<AstNode>,
+        body: Vec<Box<AstNode>>,
+    },
+    For {
+        declaration: Option<Box<AstNode>>,
+        condition: Option<Box<AstNode>>,
+        assignment: Option<Box<AstNode>>,
+        body: Vec<Box<AstNode>>,
     },
     Symbol(Symbol),
 }

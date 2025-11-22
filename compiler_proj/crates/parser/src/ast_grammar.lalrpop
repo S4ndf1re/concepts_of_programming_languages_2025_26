@@ -26,7 +26,9 @@ Statement: AstNode = {
     NonReturnable,
     //Returnable,
     ReturnableStatement,
-    If //Note: das if ist hier nicht zweideutig, wegen dem LR(1)-Lookup von dem Semikolon
+    If, //Note: das if ist hier nicht zweideutig, wegen dem LR(1)-Lookup von dem Semikolon
+    While, 
+    For,
 };
 // nonreturnable: loops, assignments, funcdef, structdef
 // returnable: comparison, funccall, math, logic, symbols, constants
@@ -35,37 +37,17 @@ ReturnableStatement: AstNode = {
     <Returnable> semicolon
 }
 
-
-NonReturnable: AstNode = {
-    <Assignments> semicolon,
-    fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body},
-};
-
 Returnable: AstNode = {
     Comparison,
 };
 
-Block: Vec<Box<AstNode>> = {
-    <s:Statement*> => s.into_iter().map(|s| Box::new(s)).collect::<Vec<_>>(),
-}
-If: AstNode= {
-    if_term <cond:Comparison> l_brace <body:Block> r_brace <elif:ElseIf*> <el:Else?> => AstNode::Branch {cond: Box::new(cond), body, else_if_branches: elif, else_branch: el},
-}
 Term: AstNode = {
     If,
+    Primitive,
     <s:id> => AstNode::Symbol(s),
     <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
     l_paren <Returnable> r_paren,
 }
-
-Assignments: AstNode = {
-    <s:id> declare <e:Returnable> => AstNode::Declaration{new_symbol: s, expression: Box::new(e)},
-    <s:id> assign <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)},
-};
-
-// a == b
-// (a != b) && c
-// (a || b || c) != c
 
 Comparison: AstNode = {
     #[precedence(level="0")]
@@ -79,26 +61,72 @@ Comparison: AstNode = {
     <a:Comparison> greater_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::GreaterThanEquals, Box::new(b)),
 };
 
+NonReturnable: AstNode = {
+    <AssignmentOrDeclaration> semicolon,
+    fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body},
+};
+
+Block: Vec<Box<AstNode>> = {
+    <s:Statement*> => s.into_iter().map(|s| Box::new(s)).collect::<Vec<_>>(),
+}
+
+If: AstNode = {
+    if_term <cond:Comparison> l_brace <body:Block> r_brace <elif:ElseIf*> <el:Else?> => AstNode::Branch {cond: Box::new(cond), body, else_if_branches: elif, else_branch: el},
+}
+
 ElseIf: (Box<AstNode>, Vec<Box<AstNode>>) = {
     else_term if_term <cond:Comparison> l_brace <body:Block> r_brace => (Box::new(cond), body),
 };
 
 Else: Vec<Box<AstNode>> = {
-    else_term l_brace <body:Block> r_brace => body,
+    else_term l_brace <Block> r_brace,
 };
 
+While: AstNode = {
+    while_term <cond:Comparison> l_brace <body:Block> r_brace => AstNode::While {cond: Box::new(cond), body},
+}
+
+For: AstNode = {
+    for_term <s:id> in_term <iter:Returnable> l_brace <body:Block> r_brace => AstNode::ForEach {recipient: s, iterable: Box::new(iter), body},
+    for_term <d:AssignmentOrDeclaration?> semicolon <cond:Comparison?> semicolon <a:Assignment?> l_brace <body:Block> r_brace => AstNode::For {declaration: d.map(|d| Box::new(d)), condition: cond.map(|cond| Box::new(cond)), assignment: a.map(|a| Box::new(a)), body},
+}
+
+Declaration: AstNode = {
+    <s:id> declare <e:Returnable> => AstNode::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None},
+    let_term <st:TypeParamRule> assign <e:Returnable> => AstNode::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)},
+}
+
+Assignment: AstNode = {
+    <s:id> assign <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)},
+    <s:id> assign_add <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)},
+    <s:id> assign_sub <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)},
+    <s:id> assign_mul <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)},
+    <s:id> assign_div <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)},
+    <s:id> assign_mod <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)},
+};
+
+AssignmentOrDeclaration = {
+    Declaration,
+    Assignment,
+}
 
 ReturnTypeRule: TypeSymbol = {
     colon <t:id> => TypeSymbol::new(t)
 };
 TypeParamRule: (Symbol, TypeSymbol) = {
-    <s:id> colon <t:id> => (s, TypeSymbol::new(t))
+    id ReturnTypeRule,
 };
 
 AliasRule: Alias = {
-    as_term <id> => <>
+    as_term <id>,
 };
 
+Primitive: AstNode = {
+    <i:int> => AstNode::Int(i),
+    <f:float> => AstNode::Float(f),
+    <s:string> => AstNode::String(s),
+    <b:Bool> => AstNode::Bool(b),
+}
 
 Bool: bool = {
     bool_true => true,
@@ -180,6 +208,21 @@ not_equals: () = {
 assign: () = {
     "=" => ()
 };
+assign_add: () = {
+    "+=" => ()
+};
+assign_sub: () = {
+    "-=" => ()
+};
+assign_mul: () = {
+    "*=" => ()
+};
+assign_div: () = {
+    "/=" => ()
+};
+assign_mod: () = {
+    "%=" => ()
+};
 declare: () = {
     ":=" => ()
 };
@@ -198,12 +241,18 @@ right_arrow: () = {
 fn_term: () = {
     "fn" => ()
 };
-let: () = {
+let_term: () = {
     "let" => ()
 };
-while: () = {
+while_term: () = {
     "while" => ()
 };
+for_term: () = {
+    "for" => ()
+};
+in_term: () = {
+    "in" => ()
+}
 if_term: () = {
     "if" => ()
 };
