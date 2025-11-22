@@ -1,0 +1,259 @@
+use std::str::FromStr;
+use crate::ast::*;
+
+grammar;
+
+Comma<T>: Vec<T> = { // (0)
+    <mut v:(<T> ",")*> <e:T?> => match e { // (1)
+        None=> v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+pub Programm: Vec<AstNode> = {
+    <imports:Import*> <statements:Statement*> => imports.into_iter().chain(statements).collect::<Vec<AstNode>>()
+};
+
+Import: AstNode = {
+    import <module:id> <alias:AliasRule?> semicolon => AstNode::Import(module, alias),
+    import native <header:string> <lib:string> <alias:AliasRule?> semicolon => AstNode::ImportNative(header, lib, alias),
+};
+
+Statement: AstNode = {
+    NonReturnable,
+    Returnable,
+};
+
+NonReturnable: AstNode = {
+    <Expr> semicolon,
+    fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Statement?> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body.map(|v| Box::new(v))},
+};
+
+Returnable: AstNode = {
+    Term,
+    Comparison,
+};
+
+Term: AstNode = {
+    if_term <cond:Comparison> l_brace <body:Statement?> r_brace <elif:ElseIf*> <el:Else?> => AstNode::Branch {cond: Box::new(cond), body: body.map(|v| Box::new(v)), else_if_branches: elif, else_branch: el.flatten()},
+    <s:id> => AstNode::Symbol(s),
+    <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
+    l_paren <Returnable> r_paren,
+}
+
+Expr: AstNode = {
+    <s:id> declare <e:Statement> => AstNode::Declaration{new_symbol: s, expression: Box::new(e)},
+    <s:id> assign <e:Statement> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)},
+};
+
+// a == b
+// (a != b) && c
+// (a || b || c) != c
+
+Comparison: AstNode = {
+    #[precedence(level="0")]
+    Term,
+    #[precedence(level="1")] #[assoc(side="left")]
+    <a:Comparison> equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::Equals, Box::new(b)),
+    <a:Comparison> not_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::NotEquals, Box::new(b)),
+    <a:Comparison> l_angle <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::LessThan, Box::new(b)),
+    <a:Comparison> less_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::LessThanEquals, Box::new(b)),
+    <a:Comparison> r_angle <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::GreaterThan, Box::new(b)),
+    <a:Comparison> greater_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::GreaterThanEquals, Box::new(b)),
+};
+
+ElseIf: (Box<AstNode>, Option<Box<AstNode>>) = {
+    else_term if_term <cond:Comparison> l_brace <body:Statement?> r_brace => (Box::new(cond), body.map(|b| Box::new(b))),
+};
+
+Else: Option<Box<AstNode>> = {
+    else_term l_brace <body:Statement?> r_brace => body.map(|b| Box::new(b)),
+};
+
+
+ReturnTypeRule: TypeSymbol = {
+    colon <t:id> => TypeSymbol::new(t)
+};
+TypeParamRule: (Symbol, TypeSymbol) = {
+    <s:id> colon <t:id> => (s, TypeSymbol::new(t))
+};
+
+AliasRule: Alias = {
+    as_term <id> => <>
+};
+
+
+Bool: bool = {
+    bool_true => true,
+    bool_false => false,
+};
+
+// Datatypes
+int: i64 = {
+    r"[0-9]+" => i64::from_str(<>).unwrap()
+};
+float: f64 = {
+    r"[0-9]+\.[0-9]+" => f64::from_str(<>).unwrap()
+};
+bool_true: bool = {
+    "true" => true
+};
+bool_false: bool = {
+    "false" => false 
+};
+
+string: String = {
+    // https://stackoverflow.com/a/47214303
+    <s:r#""([^"][\x00-\x7f])*""#> => s.to_owned()
+};
+
+id: String = {
+    <s:r"[a-zA-Z][a-zA-Z_0-9]*"> => s.to_owned()
+};
+
+// Terminal Symbols
+l_paren: () = {
+    "(" => ()
+};
+r_paren: () = {
+    ")" => ()
+};
+l_bracket: () = {
+    "[" => ()
+};
+r_bracket: ()= {
+    "[" => ()
+};
+l_brace: () = {
+    "{" => ()
+};
+r_brace: ()= {
+    "}" => ()
+};
+l_angle: () = {
+    "<" => ()
+};
+r_angle: ()= {
+    ">" => ()
+};
+plus: () = {
+    "+" => ()
+};
+minus: () = {
+    "-" => ()
+};
+asterisk: () = {
+    "*" => ()
+};
+slash: () = {
+    "/" => ()
+};
+less_equals: () = {
+    "<=" => ()
+};
+greater_equals: () = {
+    ">=" => ()
+};
+equals: () = {
+    "==" => ()
+};
+not_equals: () = {
+    "!=" => ()
+};
+assign: () = {
+    "=" => ()
+};
+declare: () = {
+    ":=" => ()
+};
+slash_term: () = {
+    "/" => ()
+};
+and: () = {
+    "&&" => ()
+}
+or: () = {
+    "||" => ()
+}
+right_arrow: () = {
+    "->" => ()
+};
+fn_term: () = {
+    "fn" => ()
+};
+let: () = {
+    "let" => ()
+};
+while: () = {
+    "while" => ()
+};
+if_term: () = {
+    "if" => ()
+};
+else_term: () = {
+    "else" => ()
+};
+return: () = {
+    "return" => ()
+};
+with: () = {
+    "with" => ()
+};
+default: () = {
+    "default" => ()
+};
+import: () = {
+    "import" => ()
+};
+native: () = {
+    "native" => ()
+};
+as_term: () = {
+    "as" => ()
+};
+ffi: () = {
+    "ffi" => ()
+};
+arrow: () = {
+    "->" => ()
+};
+semicolon: () = {
+    ";" => ()
+};
+colon: () = {
+    ":" => ()
+};
+dot: () = {
+    "." => ()
+}
+
+// pub Expr: Box<Expr> = {
+//     #[precedence(level="0")]
+//     Term,
+//     #[precedence(level="1")] #[assoc(side="left")]
+//     Expr FactorOp Expr => Box::new(Expr::Op(<>)),
+//     #[precedence(level="2")] #[assoc(side="left")]
+//     Expr ExprOp Expr => Box::new(Expr::Op(<>)),
+// };
+//
+// ExprOp: OpCode = {
+//     "+" => OpCode::Add,
+//     "-" => OpCode::Sub,
+// };
+//
+// FactorOp: OpCode = {
+//     "*" => OpCode::Mul,
+//     "/" => OpCode::Div,
+// };
+//
+// Term: Box<Expr> = {
+//     Num => Box::new(Expr::Number(<>)), // (4)
+//     "(" <Expr> ")"
+// };
+//
+// Num: i32 = {
+//     r"[0-9]+" => i32::from_str(<>).unwrap()
+// };

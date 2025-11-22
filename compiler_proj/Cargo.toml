@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 ecs = { path = "./crates/ecs" }
+parser = { path = "./crates/parser" }
