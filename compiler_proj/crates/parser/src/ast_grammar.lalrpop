@@ -61,14 +61,20 @@ Comparison: AstNode = {
     <a:Comparison> greater_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::GreaterThanEquals, Box::new(b)),
 };
 
+FunctionDefinition: AstNode = {
+    fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body},
+}
+
+StructDefinition: AstNode = {
+    struct_term <name:id> l_brace <body:StructBlock> r_brace => AstNode::TypeDef{typename: name, typedef: AstTypeDefinition::Struct(body.attributes), execution_body: body.functions},
+}
+
 NonReturnable: AstNode = {
     <AssignmentOrDeclaration> semicolon,
-    fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body},
+    FunctionDefinition,
+    StructDefinition,
 };
 
-Block: Vec<Box<AstNode>> = {
-    <s:Statement*> => s.into_iter().map(|s| Box::new(s)).collect::<Vec<_>>(),
-}
 
 If: AstNode = {
     if_term <cond:Comparison> l_brace <body:Block> r_brace <elif:ElseIf*> <el:Else?> => AstNode::Branch {cond: Box::new(cond), body, else_if_branches: elif, else_branch: el},
@@ -108,6 +114,39 @@ Assignment: AstNode = {
 AssignmentOrDeclaration = {
     Declaration,
     Assignment,
+}
+
+Block: Vec<Box<AstNode>> = {
+    <s:Statement*> => s.into_iter().map(|s| Box::new(s)).collect::<Vec<_>>(),
+}
+
+
+
+// struct t {
+// a: float,
+// 
+// fn c() {
+// }
+// 
+// b: String,
+// }
+
+StructBlock: StructBody = {
+    <func:FunctionDefinition> <body:StructBlock?> => if let Some(body) = body {
+        StructBody {functions: body.functions.into_iter().chain(vec![Box::new(func)]).collect::<Vec<_>>(), attributes: body.attributes}
+    } else {
+        StructBody {functions: vec![Box::new(func)], attributes: Vec::new()}
+    },
+    <attr:TypeParamRule> <body:FurtherStructBlock?> => if let Some(body) = body.flatten() {
+        StructBody {functions: body.functions, attributes: body.attributes.into_iter().chain(vec![attr]).collect::<Vec<_>>()}
+    } else {
+        StructBody {functions: Vec::new(), attributes: vec![attr]}
+    },
+}
+
+FurtherStructBlock: Option<StructBody> = {
+    "," <StructBlock> => Some(<>),
+    "," => None,
 }
 
 ReturnTypeRule: TypeSymbol = {
@@ -241,6 +280,9 @@ right_arrow: () = {
 fn_term: () = {
     "fn" => ()
 };
+struct_term: () = {
+    "struct" => ()
+}
 let_term: () = {
     "let" => ()
 };

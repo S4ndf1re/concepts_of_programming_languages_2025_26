@@ -233,4 +233,19 @@ mod tests {
             )
             .unwrap();
     }
+
+    #[test]
+    fn structs1() {
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                        struct A {
+                            a: float,
+                            fn my_function_name(a: int, b: string, c: MyStruct): float {
+                            }
+                        }
+                            "#,
+            )
+            .unwrap();
+    }
 }

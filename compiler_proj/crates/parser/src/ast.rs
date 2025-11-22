@@ -9,7 +9,7 @@ pub type Alias = String;
 pub type DyLibName = String;
 
 /// The symbol that represents any existing type
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeSymbol {
     name: String,
     resolved: bool,
@@ -78,6 +78,13 @@ pub enum InfixOperator {
 pub enum PrefixOperator {
     Not,    // '!'
     Negate, // '-'
+}
+
+
+
+pub struct StructBody {
+    pub functions: Vec<Box<AstNode>>,
+    pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
 
 #[derive(Debug)]
