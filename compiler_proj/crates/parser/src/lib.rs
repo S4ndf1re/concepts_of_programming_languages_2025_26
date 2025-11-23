@@ -397,6 +397,23 @@ mod tests {
     }
 
     #[test]
+    fn weak_test2() {
+        let _expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                let a: weak [T] = 10;
+                let a: [weak T] = 10;
+                let a: weak [weak T] = 10;
+                let b: weak {A -> B} = 10;
+                let b: {weak A -> B} = 10;
+                let c: {weak A -> weak B} = 10;
+                let c: weak {weak A -> weak B} = 10;
+                "#,
+            )
+            .unwrap();
+    }
+
+    #[test]
     fn list_test1() {
         let _expr = ast_grammar::ProgrammParser::new()
             .parse(

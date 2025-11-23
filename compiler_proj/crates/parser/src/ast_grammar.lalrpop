@@ -223,13 +223,10 @@ FurtherStructBlock: Option<StructBody> = {
 
 
 ReturnType: TypeSymbol = {
-    #[precedence(level="0")]
     <t:id> => TypeSymbol::strong(TypeSymbolType::Symbol(t)),
-    <r:ReturnType> l_bracket r_bracket => TypeSymbol::strong(TypeSymbolType::List(Box::new(r))),
+    l_bracket <r:ReturnType> r_bracket => TypeSymbol::strong(TypeSymbolType::List(Box::new(r))),
     l_brace <a:ReturnType> right_arrow <b:ReturnType> r_brace => TypeSymbol::strong(TypeSymbolType::Map(Box::new(a), Box::new(b))),
-    #[precedence(level="1")] #[assoc(side="right")]
     weak_term <t:ReturnType> => TypeSymbol::make_weak(t),
-    // TODO: This is still broken, figure out how to match weak weak T[], or similar
 }
 
 
