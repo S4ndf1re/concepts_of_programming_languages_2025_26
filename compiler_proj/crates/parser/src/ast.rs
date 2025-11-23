@@ -12,14 +12,16 @@ pub type DyLibName = String;
 #[derive(Debug, Clone)]
 pub struct TypeSymbol {
     name: String,
+    is_weak: bool,
     resolved: bool,
     inferred: bool,
 }
 
 impl TypeSymbol {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, is_weak: bool) -> Self {
         Self {
             name,
+            is_weak,
             resolved: false,
             inferred: false,
         }

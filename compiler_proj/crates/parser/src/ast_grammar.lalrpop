@@ -219,7 +219,8 @@ FurtherStructBlock: Option<StructBody> = {
 }
 
 ReturnTypeRule: TypeSymbol = {
-    colon <t:id> => TypeSymbol::new(t)
+    colon <t:id> => TypeSymbol::new(t, false),
+    colon weak_term <t:id> => TypeSymbol::new(t, true),
 };
 TypeParamRule: (Symbol, TypeSymbol) = {
     id ReturnTypeRule,
@@ -408,6 +409,9 @@ dot: () = {
 }
 exclamation_mark: () = {
     "!" => ()
+}
+weak_term: () = {
+    "weak" => ()
 }
 
 // pub Expr: Box<Expr> = {

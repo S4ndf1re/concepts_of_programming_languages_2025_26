@@ -199,6 +199,15 @@ mod tests {
             .parse(
                 r#"
                 if a {};
+                "#,
+            )
+            .is_err();
+
+        assert!(expr);
+
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
                 if if a {} else {} {}
                 "#,
             )
@@ -209,7 +218,7 @@ mod tests {
 
     #[test]
     fn returnable_test() {
-        let expr = ast_grammar::ProgrammParser::new()
+        let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                         a := (a == b) != c != d;
@@ -231,7 +240,7 @@ mod tests {
 
     #[test]
     fn loops1() {
-        let expr = ast_grammar::ProgrammParser::new()
+        let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                         for ;; {}
@@ -250,13 +259,14 @@ mod tests {
 
     #[test]
     fn structs1() {
-        let expr = ast_grammar::ProgrammParser::new()
+        let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                         struct A {
                             a: float,
                             fn my_function_name(a: int, b: string, c: MyStruct): float {
                             }
+                            c: String,
                         }
                             "#,
             )
@@ -265,7 +275,7 @@ mod tests {
 
     #[test]
     fn math1() {
-        let expr = ast_grammar::ProgrammParser::new()
+        let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                     a:= a+b;
@@ -283,7 +293,7 @@ mod tests {
 
     #[test]
     fn logic1() {
-        let expr = ast_grammar::ProgrammParser::new()
+        let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                     a:= a && b;
@@ -296,7 +306,7 @@ mod tests {
 
     #[test]
     fn logic2() {
-        let expr = ast_grammar::ProgrammParser::new()
+        let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                     a:= a < 5 && (b || c);
@@ -308,7 +318,7 @@ mod tests {
 
     #[test]
     fn function_call() {
-        let expr = ast_grammar::ProgrammParser::new()
+        let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                         a();
@@ -329,21 +339,60 @@ mod tests {
                     "#,
             )
             .is_err();
+
+        assert!(expr);
     }
 
     #[test]
     fn unary1() {
-        let expr = ast_grammar::ProgrammParser::new()
+        let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                 -a - -a;
                 !a;
                 a && !b;
+                -10;
+                -10.0;
+                --10.0;
                 !(a || b);
                     "#,
             )
             .unwrap();
                 // a := !a;
                 // b := !b && -a;
+    }
+
+    #[test]
+    fn special_assigns1() {
+        let _expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                a := if b == c { d; } else { d.f.g(a,b,c).c.d().h; };
+                    "#,
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn weak_test1() {
+        let _expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                let a: weak T = 10;
+
+                fn f(a: weak T, b: T): weak R {
+                }
+
+                struct MyStruct {
+                    a: weak float,
+
+                    fn f(a: weak T, b: T): weak R {
+                    }
+
+                    c: float,
+                }
+                    "#,
+            )
+            .unwrap();
     }
 }
