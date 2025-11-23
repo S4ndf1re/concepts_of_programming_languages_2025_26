@@ -233,24 +233,8 @@ ReturnType: TypeSymbol = {
 }
 
 
-// let i: int = 10;
-// let i: ABC = 10;
-// i := 10;
 ReturnTypeRule: TypeSymbol = {
     colon <t:ReturnType> => t,
-    // Symbol
-    // colon <t:ReturnTypeRule> => t,
-    // colon weak_term <t:ReturnTypeRule> => TypeSymbol::make_weak(t),
-    // // List
-    // colon <t:id> l_bracket r_bracket => TypeSymbol::strong(TypeSymbolType::List(t)),
-    // colon weak_term <t:id> l_bracket r_bracket => TypeSymbol::make_w(TypeSymbolType::List(t)),
-    // // Map
-    // colon l_brace <a:id> right_arrow <b:id> r_brace => TypeSymbol::strong(TypeSymbolType::Map(a, b)),
-    // colon weak_term l_brace <a:id> right_arrow <b:id> r_brace => TypeSymbol::weak(TypeSymbolType::Map(a, b)),
-    // // Option
-    // colon l_brace <a:id> right_arrow <b:id> r_brace => TypeSymbol::strong(TypeSymbolType::Map(a, b)),
-    // colon weak_term l_brace <a:id> right_arrow <b:id> r_brace => TypeSymbol::weak(TypeSymbolType::Map(a, b)),
-    // {A: T[]}
 };
 TypeParamRule: (Symbol, TypeSymbol) = {
     id ReturnTypeRule,
