@@ -13,6 +13,16 @@ Comma<T>: Vec<T> = { // (0)
     }
 };
 
+Dot<T>: Vec<T> = { // (0)
+    <mut v:(<T> ".")*> <e:T?> => match e { // (1)
+        None=> v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
 pub Programm: Vec<AstNode> = {
     <imports:Import*> <statements:Statement*> => imports.into_iter().chain(statements).collect::<Vec<AstNode>>()
 };
@@ -41,13 +51,6 @@ Returnable: AstNode = {
     Logic,
 };
 
-Term: AstNode = {
-    If,
-    Primitive,
-    <s:id> => AstNode::Symbol(s),
-    <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
-    l_paren <Returnable> r_paren,
-}
 
 Logic: AstNode = {
     #[precedence(level="0")]
@@ -83,8 +86,29 @@ Math: AstNode = {
 
 }
 
+Term: AstNode = {
+    If,
+    Primitive,
+    <s:id> => AstNode::Symbol(s),
+    l_paren <Returnable> r_paren,
+    FunctionCall,
+}
+
+
 FunctionDefinition: AstNode = {
     fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body},
+}
+
+
+Call: AstNode = {
+    <function_name:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::FunctionCall{function_name,  params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
+    <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
+}
+
+MemberAccess: Vec<MemberAccess> = { //a.b.c().e
+    //<name:id> (l_paren <params:Dot<id>> r_paren
+    dot <name:id> <member_access:MemberAccess?> => vec![MemberAccess{member: name, params: None}],
+    //dot <name:id> MemberAccess? l_paren <params:Comma<Returnable>> r_paren, 
 }
 
 StructDefinition: AstNode = {

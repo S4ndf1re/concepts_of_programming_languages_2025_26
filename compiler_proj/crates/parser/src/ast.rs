@@ -87,6 +87,11 @@ pub struct StructBody {
     pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
 
+pub struct MemberAccess { //a.c(e,f).d
+    pub member: Symbol,
+    pub params: Option<Vec<Box<AstNode>>>,
+}
+
 #[derive(Debug)]
 pub enum AstNode {
     Import(Module, Option<Alias>),
@@ -111,6 +116,7 @@ pub enum AstNode {
         execution_body: Vec<Box<AstNode>>,
     },
     FunctionCall {
+        function_name: Symbol,
         params: Vec<Box<AstNode>>,
     },
     InfixCall(Box<AstNode>, InfixOperator, Box<AstNode>),

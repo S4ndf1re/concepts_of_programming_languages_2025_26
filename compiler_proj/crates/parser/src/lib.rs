@@ -292,4 +292,29 @@ mod tests {
             )
             .unwrap();
     }
+
+        #[test]
+    fn function_call() {
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                    a();
+                    a.c();
+                    a(a.c(d.e(a,e())));
+
+
+
+                            "#,
+            )
+            .unwrap();
+
+        let expr = ast_grammar::ProgrammParser::new().parse(
+            r#"
+                        a.c.e()
+                        "#,
+        );
+        assert!(expr.is_err());
+    }
+
+    
 }
