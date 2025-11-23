@@ -194,6 +194,20 @@ mod tests {
     }
 
     #[test]
+    fn branch_test5() {
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                if a {};
+                if if a {} else {} {}
+                "#,
+            )
+            .is_err();
+
+        assert!(expr);
+    }
+
+    #[test]
     fn returnable_test() {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
@@ -280,7 +294,6 @@ mod tests {
             .unwrap();
     }
 
-
     #[test]
     fn logic2() {
         let expr = ast_grammar::ProgrammParser::new()
@@ -293,28 +306,44 @@ mod tests {
             .unwrap();
     }
 
-        #[test]
+    #[test]
     fn function_call() {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
-                    a();
-                    a.c();
-                    a(a.c(d.e(a,e())));
-
-
-
-                            "#,
+                        a();
+                        a.c();
+                        a(a.c(d.e.f.g().c(a,e())));
+                        a.c();
+                        a.c.e();
+                        f := a();
+                        f();
+                    "#,
             )
             .unwrap();
 
-        let expr = ast_grammar::ProgrammParser::new().parse(
-            r#"
-                        a.c.e()
-                        "#,
-        );
-        assert!(expr.is_err());
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                        a()();
+                    "#,
+            )
+            .is_err();
     }
 
-    
+    #[test]
+    fn unary1() {
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                -a - -a;
+                !a;
+                a && !b;
+                !(a || b);
+                    "#,
+            )
+            .unwrap();
+                // a := !a;
+                // b := !b && -a;
+    }
 }

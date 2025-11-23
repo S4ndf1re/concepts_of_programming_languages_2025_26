@@ -87,6 +87,7 @@ pub struct StructBody {
     pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
 
+#[derive(Debug)]
 pub struct MemberAccess { //a.c(e,f).d
     pub member: Symbol,
     pub params: Option<Vec<Box<AstNode>>>,
@@ -121,10 +122,9 @@ pub enum AstNode {
     },
     InfixCall(Box<AstNode>, InfixOperator, Box<AstNode>),
     PrefixCall(PrefixOperator, Box<AstNode>),
-    MethodCall {
-        caller: Symbol,
-        method: Symbol,
-        params: Vec<Box<AstNode>>,
+    MemberCall {
+        parent: Symbol,
+        calls: Vec<MemberAccess>,
     },
     Branch {
         cond: Box<AstNode>, 

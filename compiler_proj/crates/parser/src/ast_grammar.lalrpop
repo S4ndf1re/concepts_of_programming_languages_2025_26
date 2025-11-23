@@ -76,22 +76,26 @@ Comparison: AstNode = {
 Math: AstNode = {
     #[precedence(level="0")]
     Term,
-    #[precedence(level="1")] #[assoc(side="left")]
+    #[precedence(level="1")] #[assoc(side="right")]
+    exclamation_mark <Math> => AstNode::PrefixCall(PrefixOperator::Not, Box::new(<>)),
+    minus <Math> => AstNode::PrefixCall(PrefixOperator::Negate, Box::new(<>)),
+    #[precedence(level="2")] #[assoc(side="left")]
     <a:Math> asterisk <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Multiply, Box::new(b)),
     <a:Math> slash <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Divide, Box::new(b)),
     <a:Math> modulo <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Modulo, Box::new(b)),
-    #[precedence(level="2")] #[assoc(side="left")]
+    #[precedence(level="3")] #[assoc(side="left")]
     <a:Math> plus <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Plus, Box::new(b)),
     <a:Math> minus <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Minus, Box::new(b)),
-
 }
 
+// if -a {
+// }
+
 Term: AstNode = {
-    If,
     Primitive,
     <s:id> => AstNode::Symbol(s),
     l_paren <Returnable> r_paren,
-    FunctionCall,
+    Call,
 }
 
 
@@ -102,13 +106,26 @@ FunctionDefinition: AstNode = {
 
 Call: AstNode = {
     <function_name:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::FunctionCall{function_name,  params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
-    <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
+    <caller:id> <ma:MemberAccess> => AstNode::MemberCall{parent: caller, calls: ma},
+    // <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
 }
 
 MemberAccess: Vec<MemberAccess> = { //a.b.c().e
     //<name:id> (l_paren <params:Dot<id>> r_paren
-    dot <name:id> <member_access:MemberAccess?> => vec![MemberAccess{member: name, params: None}],
-    //dot <name:id> MemberAccess? l_paren <params:Comma<Returnable>> r_paren, 
+    dot <name:id> <member_access:MemberAccess?> => {
+            let mut v = vec![MemberAccess{member: name, params: None}]; 
+            if let Some(ma) = member_access {
+                v = v.into_iter().chain(ma).collect::<Vec<_>>();
+            }
+            v
+        },
+    dot <name:id> l_paren <params:Comma<Returnable>> r_paren <member_access:MemberAccess?> => {
+            let mut v = vec![MemberAccess{member: name, params: Some(params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>())}]; 
+            if let Some(ma) = member_access {
+                v = v.into_iter().chain(ma).collect::<Vec<_>>();
+            }
+            v
+        }, 
 }
 
 StructDefinition: AstNode = {
@@ -143,18 +160,24 @@ For: AstNode = {
     for_term <d:AssignmentOrDeclaration?> semicolon <cond:Comparison?> semicolon <a:Assignment?> l_brace <body:Block> r_brace => AstNode::For {declaration: d.map(|d| Box::new(d)), condition: cond.map(|cond| Box::new(cond)), assignment: a.map(|a| Box::new(a)), body},
 }
 
+
+ReturnableOrIf: AstNode = {
+    Returnable,
+    If,
+}
+
 Declaration: AstNode = {
-    <s:id> declare <e:Returnable> => AstNode::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None},
-    let_term <st:TypeParamRule> assign <e:Returnable> => AstNode::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)},
+    <s:id> declare <e:ReturnableOrIf> => AstNode::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None},
+    let_term <st:TypeParamRule> assign <e:ReturnableOrIf> => AstNode::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)},
 }
 
 Assignment: AstNode = {
-    <s:id> assign <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)},
-    <s:id> assign_add <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)},
-    <s:id> assign_sub <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)},
-    <s:id> assign_mul <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)},
-    <s:id> assign_div <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)},
-    <s:id> assign_mod <e:Returnable> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)},
+    <s:id> assign <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)},
+    <s:id> assign_add <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)},
+    <s:id> assign_sub <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)},
+    <s:id> assign_mul <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)},
+    <s:id> assign_div <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)},
+    <s:id> assign_mod <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)},
 };
 
 AssignmentOrDeclaration = {
@@ -382,6 +405,9 @@ colon: () = {
 };
 dot: () = {
     "." => ()
+}
+exclamation_mark: () = {
+    "!" => ()
 }
 
 // pub Expr: Box<Expr> = {
