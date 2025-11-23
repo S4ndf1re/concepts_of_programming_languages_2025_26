@@ -395,4 +395,27 @@ mod tests {
             )
             .unwrap();
     }
+
+    #[test]
+    fn list_test1() {
+        let _expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                let a: weak T = 10;
+
+                fn f(a: weak T, b: T): weak R {
+                }
+
+                struct MyStruct {
+                    a: weak float,
+
+                    fn f(a: weak T, b: T): weak R {
+                    }
+
+                    c: float,
+                }
+                    "#,
+            )
+            .unwrap();
+    }
 }

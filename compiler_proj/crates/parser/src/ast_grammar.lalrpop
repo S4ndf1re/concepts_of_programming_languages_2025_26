@@ -13,16 +13,6 @@ Comma<T>: Vec<T> = { // (0)
     }
 };
 
-Dot<T>: Vec<T> = { // (0)
-    <mut v:(<T> ".")*> <e:T?> => match e { // (1)
-        None=> v,
-        Some(e) => {
-            v.push(e);
-            v
-        }
-    }
-};
-
 pub Programm: Vec<AstNode> = {
     <imports:Import*> <statements:Statement*> => imports.into_iter().chain(statements).collect::<Vec<AstNode>>()
 };
@@ -96,8 +86,21 @@ Term: AstNode = {
     <s:id> => AstNode::Symbol(s),
     l_paren <Returnable> r_paren,
     Call,
+    ListCreate,
+    MapCreate,
 }
 
+ListCreate: AstNode = {
+    l_bracket <elems:Comma<Returnable>> r_bracket => AstNode::List(elems.into_iter().map(|e| Box::new(e)).collect::<Vec<_>>())
+}
+
+MapElem: (Box<AstNode>, Box<AstNode>) = {
+    <a:Returnable> right_arrow <b:Returnable> => (Box::new(a), Box::new(b)),
+}
+
+MapCreate: AstNode = {
+    l_brace <mapped:Comma<MapElem>> r_brace => AstNode::Map(mapped),
+}
 
 FunctionDefinition: AstNode = {
     fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body},
@@ -218,9 +221,36 @@ FurtherStructBlock: Option<StructBody> = {
     "," => None,
 }
 
+
+ReturnType: TypeSymbol = {
+    #[precedence(level="0")]
+    <t:id> => TypeSymbol::strong(TypeSymbolType::Symbol(t)),
+    <r:ReturnType> l_bracket r_bracket => TypeSymbol::strong(TypeSymbolType::List(Box::new(r))),
+    l_brace <a:ReturnType> right_arrow <b:ReturnType> r_brace => TypeSymbol::strong(TypeSymbolType::Map(Box::new(a), Box::new(b))),
+    #[precedence(level="1")] #[assoc(side="right")]
+    weak_term <t:ReturnType> => TypeSymbol::make_weak(t),
+    // TODO: This is still broken, figure out how to match weak weak T[], or similar
+}
+
+
+// let i: int = 10;
+// let i: ABC = 10;
+// i := 10;
 ReturnTypeRule: TypeSymbol = {
-    colon <t:id> => TypeSymbol::new(t, false),
-    colon weak_term <t:id> => TypeSymbol::new(t, true),
+    colon <t:ReturnType> => t,
+    // Symbol
+    // colon <t:ReturnTypeRule> => t,
+    // colon weak_term <t:ReturnTypeRule> => TypeSymbol::make_weak(t),
+    // // List
+    // colon <t:id> l_bracket r_bracket => TypeSymbol::strong(TypeSymbolType::List(t)),
+    // colon weak_term <t:id> l_bracket r_bracket => TypeSymbol::make_w(TypeSymbolType::List(t)),
+    // // Map
+    // colon l_brace <a:id> right_arrow <b:id> r_brace => TypeSymbol::strong(TypeSymbolType::Map(a, b)),
+    // colon weak_term l_brace <a:id> right_arrow <b:id> r_brace => TypeSymbol::weak(TypeSymbolType::Map(a, b)),
+    // // Option
+    // colon l_brace <a:id> right_arrow <b:id> r_brace => TypeSymbol::strong(TypeSymbolType::Map(a, b)),
+    // colon weak_term l_brace <a:id> right_arrow <b:id> r_brace => TypeSymbol::weak(TypeSymbolType::Map(a, b)),
+    // {A: T[]}
 };
 TypeParamRule: (Symbol, TypeSymbol) = {
     id ReturnTypeRule,
@@ -276,7 +306,7 @@ l_bracket: () = {
     "[" => ()
 };
 r_bracket: ()= {
-    "[" => ()
+    "]" => ()
 };
 l_brace: () = {
     "{" => ()

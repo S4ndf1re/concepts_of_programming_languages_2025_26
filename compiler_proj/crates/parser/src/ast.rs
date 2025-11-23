@@ -8,28 +8,51 @@ pub type Header = String;
 pub type Alias = String;
 pub type DyLibName = String;
 
+
+#[derive(Debug, Clone)]
+pub enum TypeSymbolType {
+    Symbol(Symbol),
+    List(Box<TypeSymbol>),
+    Map(Box<TypeSymbol>, Box<TypeSymbol>),
+    Option(Box<TypeSymbol>),
+}
+
 /// The symbol that represents any existing type
 #[derive(Debug, Clone)]
 pub struct TypeSymbol {
-    name: String,
     is_weak: bool,
+    type_of: TypeSymbolType,
     resolved: bool,
     inferred: bool,
 }
 
 impl TypeSymbol {
-    pub fn new(name: String, is_weak: bool) -> Self {
+    pub fn strong(type_of: TypeSymbolType) -> Self {
         Self {
-            name,
-            is_weak,
+            is_weak: false,
+            type_of,
             resolved: false,
             inferred: false,
         }
+    }
+
+    pub fn weak(type_of: TypeSymbolType) -> Self {
+        Self {
+            is_weak: true,
+            type_of,
+            resolved: false,
+            inferred: false,
+        }
+    }
+    pub fn make_weak(mut self) -> Self {
+        self.is_weak = true;
+        self
     }
 }
 
 #[derive(Debug)]
 pub enum Query {}
+
 
 #[derive(Debug)]
 pub enum AstTypeDefinition {
@@ -39,7 +62,7 @@ pub enum AstTypeDefinition {
     Bool,
     Struct(Vec<(Symbol, TypeSymbol)>),
     List(TypeSymbol),
-    Map(TypeSymbol, TypeSymbol),
+    Map(Symbol, TypeSymbol),
     Function(Vec<(Symbol, TypeSymbol)>, Option<TypeSymbol>),
     System(Vec<(Symbol, Query)>),
     Option(TypeSymbol),
@@ -103,6 +126,8 @@ pub enum AstNode {
     Float(f64),
     String(String),
     Bool(bool),
+    List(Vec<Box<AstNode>>),
+    Map(Vec<(Box<AstNode>, Box<AstNode>)>),
     Declaration {
         new_symbol: Symbol,
         expression: Box<AstNode>,
