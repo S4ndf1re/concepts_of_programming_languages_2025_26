@@ -61,10 +61,10 @@ match {
     "!" => exclamation_mark,
     "?" => question_mark,
     "weak" => weak_term,
-    "none" => none_term, 
-    "some" => some_term, 
-    "ok" => ok_term, 
-    "err" => err_term, 
+    "none" => none_term,
+    "some" => some_term,
+    "ok" => ok_term,
+    "err" => err_term,
 }
 
 Comma<T>: Vec<T> = { // (0)
@@ -92,7 +92,7 @@ Statement: AstNode = {
     //Returnable,
     ReturnableStatement,
     If, //Note: das if ist hier nicht zweideutig, wegen dem LR(1)-Lookup von dem Semikolon
-    While, 
+    While,
     For,
 };
 
@@ -198,19 +198,19 @@ Call: AstNode = {
 MemberAccess: Vec<MemberAccess> = { //a.b.c().e
     //<name:id> (l_paren <params:Dot<id>> r_paren
     <l:@L> dot <name:id> <r:@R> <member_access:MemberAccess?> => {
-            let mut v = vec![MemberAccess{member: name, params: None, range: l..r}]; 
+            let mut v = vec![MemberAccess{member: name, params: None, range: l..r}];
             if let Some(ma) = member_access {
                 v = v.into_iter().chain(ma).collect::<Vec<_>>();
             }
             v
         },
     <l:@L> dot <name:id> l_paren <params:Comma<Returnable>> r_paren <r:@R> <member_access:MemberAccess?> => {
-            let mut v = vec![MemberAccess{member: name, params: Some(params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()), range: l..r}]; 
+            let mut v = vec![MemberAccess{member: name, params: Some(params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()), range: l..r}];
             if let Some(ma) = member_access {
                 v = v.into_iter().chain(ma).collect::<Vec<_>>();
             }
             v
-        }, 
+        },
 }
 
 StructDefinition: AstNode = {
@@ -279,10 +279,10 @@ Block: Vec<Box<AstNode>> = {
 
 // struct t {
 // a: float,
-// 
+//
 // fn c() {
 // }
-// 
+//
 // b: String,
 // }
 
@@ -361,7 +361,7 @@ Bool: bool = {
 // };
 // bool_false: bool = {
 //     BOOLFALSE => false
-//     //"false" => false 
+//     //"false" => false
 // };
 
 // string: String = {
@@ -390,7 +390,7 @@ bool_true: bool = {
 }
 bool_false: bool = {
     //BOOL => <>
-    BOOLFALSE => false 
+    BOOLFALSE => false
 }
 
 string: String = {

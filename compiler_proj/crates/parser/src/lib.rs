@@ -13,7 +13,7 @@ lalrpop_mod!(pub ast_grammar);
 
 #[cfg(test)]
 mod tests {
-    use crate::{AstNodeType, ast_grammar, print_error};
+    use crate::{AstNodeType, BeautifyError, ast_grammar};
 
     #[test]
     fn import_test1() {
@@ -22,8 +22,7 @@ mod tests {
         let expr = ast_grammar::ProgrammParser::new().parse(source);
 
         if let Err(expr) = expr {
-            print_error(source, &expr);
-            panic!("{}", expr);
+            expr.panic_error(source);
         } else if let Ok(expr) = expr {
             assert!(expr.len() == 2);
 
@@ -39,7 +38,7 @@ mod tests {
         let expr = ast_grammar::ProgrammParser::new().parse(source);
 
         if let Err(expr) = expr {
-            print_error(source, &expr);
+            expr.print_error(source);
             panic!("{}", expr);
         } else if let Ok(expr) = expr {
             assert!(expr.len() == 2);
@@ -517,7 +516,7 @@ mod tests {
         let expr = ast_grammar::ProgrammParser::new().parse(source);
 
         if let Err(err) = expr {
-            print_error(source, &err);
+            err.print_error(source);
             panic!("{}", err)
         }
     }
