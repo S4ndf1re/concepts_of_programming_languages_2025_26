@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Range};
 
 /// Any symbol, that is not a type definition
 pub type Symbol = String;
@@ -7,7 +7,6 @@ pub type Module = String;
 pub type Header = String;
 pub type Alias = String;
 pub type DyLibName = String;
-
 
 #[derive(Debug, Clone)]
 pub enum TypeSymbolType {
@@ -52,7 +51,6 @@ impl TypeSymbol {
 
 #[derive(Debug)]
 pub enum Query {}
-
 
 #[derive(Debug)]
 pub enum AstTypeDefinition {
@@ -105,21 +103,33 @@ pub enum PrefixOperator {
     Negate, // '-'
 }
 
-
-
 pub struct StructBody {
     pub functions: Vec<Box<AstNode>>,
     pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
 
 #[derive(Debug)]
-pub struct MemberAccess { //a.c(e,f).d
+pub struct MemberAccess {
+    //a.c(e,f).d
     pub member: Symbol,
     pub params: Option<Vec<Box<AstNode>>>,
+    pub range: Range<usize>,
 }
 
 #[derive(Debug)]
-pub enum AstNode {
+pub struct AstNode {
+    pub range: Range<usize>,
+    pub type_of: AstNodeType,
+}
+
+impl AstNode {
+    pub fn new(range: Range<usize>, type_of: AstNodeType) -> Self {
+        Self { range, type_of }
+    }
+}
+
+#[derive(Debug)]
+pub enum AstNodeType {
     Import(Module, Option<Alias>),
     ImportNative(Header, DyLibName, Option<Alias>),
     Int(i64),
@@ -154,13 +164,13 @@ pub enum AstNode {
         calls: Vec<MemberAccess>,
     },
     Branch {
-        cond: Box<AstNode>, 
+        cond: Box<AstNode>,
         body: Vec<Box<AstNode>>,
         else_if_branches: Vec<(Box<AstNode>, Vec<Box<AstNode>>)>,
-        else_branch: Option<Vec<Box<AstNode>>>
+        else_branch: Option<Vec<Box<AstNode>>>,
     },
     While {
-        cond: Box<AstNode>, 
+        cond: Box<AstNode>,
         body: Vec<Box<AstNode>>,
     },
     ForEach {
@@ -174,7 +184,7 @@ pub enum AstNode {
         assignment: Option<Box<AstNode>>,
         body: Vec<Box<AstNode>>,
     },
-    ReturnStatement{
+    ReturnStatement {
         return_value: Box<AstNode>,
     },
     Symbol(Symbol),

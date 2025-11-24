@@ -10,7 +10,7 @@ lalrpop_mod!(pub ast_grammar);
 
 #[cfg(test)]
 mod tests {
-    use crate::{AstNode, ast_grammar};
+    use crate::{AstNodeType, ast_grammar};
 
     #[test]
     fn import_test1() {
@@ -23,8 +23,8 @@ mod tests {
 
         assert!(expr.len() == 2);
 
-        assert!(matches!(expr[0], AstNode::Import(_, _)));
-        assert!(matches!(expr[1], AstNode::Import(_, _)));
+        assert!(matches!(expr[0].type_of, AstNodeType::Import(_, _)));
+        assert!(matches!(expr[1].type_of, AstNodeType::Import(_, _)));
     }
 
     #[test]
@@ -38,8 +38,8 @@ mod tests {
 
         assert!(expr.len() == 2);
 
-        assert!(matches!(expr[0], AstNode::ImportNative(_, _, _)));
-        assert!(matches!(expr[1], AstNode::ImportNative(_, _, _)));
+        assert!(matches!(expr[0].type_of, AstNodeType::ImportNative(_, _, _)));
+        assert!(matches!(expr[1].type_of, AstNodeType::ImportNative(_, _, _)));
     }
 
     #[test]
@@ -55,10 +55,10 @@ mod tests {
 
         assert!(expr.len() == 4);
 
-        assert!(matches!(expr[0], AstNode::Import(_, _)));
-        assert!(matches!(expr[1], AstNode::ImportNative(_, _, _)));
-        assert!(matches!(expr[2], AstNode::Import(_, _)));
-        assert!(matches!(expr[3], AstNode::ImportNative(_, _, _)));
+        assert!(matches!(expr[0].type_of, AstNodeType::Import(_, _)));
+        assert!(matches!(expr[1].type_of, AstNodeType::ImportNative(_, _, _)));
+        assert!(matches!(expr[2].type_of, AstNodeType::Import(_, _)));
+        assert!(matches!(expr[3].type_of, AstNodeType::ImportNative(_, _, _)));
     }
 
     #[test]
@@ -73,8 +73,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::TypeDef {
+            expr[0].type_of,
+            AstNodeType::TypeDef {
                 typename: _,
                 typedef: _,
                 execution_body: _,
@@ -91,8 +91,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::Declaration {
+            expr[0].type_of,
+            AstNodeType::Declaration {
                 new_symbol: _,
                 expression: _,
                 assumed_type: _,
@@ -112,8 +112,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::Branch {
+            expr[0].type_of,
+            AstNodeType::Branch {
                 cond: _,
                 body: _,
                 else_if_branches: _,
@@ -134,8 +134,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::Declaration {
+            expr[0].type_of,
+            AstNodeType::Declaration {
                 new_symbol: _,
                 expression: _,
                 assumed_type: _,
@@ -157,8 +157,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::Branch {
+            expr[0].type_of,
+            AstNodeType::Branch {
                 cond: _,
                 body: _,
                 else_if_branches: _,
@@ -183,8 +183,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::Branch {
+            expr[0].type_of,
+            AstNodeType::Branch {
                 cond: _,
                 body: _,
                 else_if_branches: _,
