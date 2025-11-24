@@ -10,7 +10,7 @@ match {
     r"[0-9]+\.[0-9]+" => FLOAT,
     "true" => BOOLTRUE,
     "false" => BOOLFALSE,
-    r#""([^"\\]|\\.)*""# => STRING,
+    r#""(\\\\|\\"|\\n|\\t|\\r|[^"\\])*""# => STRING,
     r"[a-zA-Z][a-zA-Z_0-9]*" => ID,
     "(" => l_paren,
     ")" => r_paren,
@@ -376,7 +376,7 @@ bool_false: bool = {
 string: String = {
     //STRING => <>
     // https://stackoverflow.com/a/47214303
-    <s:STRING> => s.to_owned()
+    <s:STRING> => apply_string_escapes(&s[1..s.len()-1]),
 }
 
 id: String = {

@@ -221,3 +221,38 @@ impl Debug for OpCode {
         }
     }
 }
+
+pub fn apply_string_escapes(s: &str) -> String {
+    let mut result = String::new();
+    let s = s.chars().collect::<Vec<char>>();
+
+    let mut i = 0;
+    while i < s.len() {
+        if s[i] == '\\' {
+            if s[i + 1] == '\\' {
+                result.push('\\');
+                i += 1;
+            } else if s[i + 1] == '"' {
+                result.push('\"');
+                i += 1;
+            } else if s[i + 1] == 'n' {
+                result.push('\n');
+                i += 1;
+            } else if s[i + 1] == 'r' {
+                result.push('\n');
+                i += 1;
+            } else if s[i + 1] == 't' {
+                result.push('\n');
+                i += 1;
+            }
+
+
+            result.push('\\');
+        } else {
+            result.push(s[i]);
+        }
+        i += 1;
+    }
+
+    result
+}
