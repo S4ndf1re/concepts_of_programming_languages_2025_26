@@ -220,7 +220,7 @@ NonReturnable: AstNode = {
     <AssignmentOrDeclaration> semicolon,
     FunctionDefinition,
     StructDefinition,
-    return <a:Returnable> semicolon=> AstNode::ReturnStatement{return_value: Box::new(a)},
+    <l:@L> return <a:Returnable> semicolon <r:@R>=> AstNode::new(l..r, AstNodeType::ReturnStatement{return_value: Box::new(a)}),
 };
 
 
