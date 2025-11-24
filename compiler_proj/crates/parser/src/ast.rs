@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Range};
 
 /// Any symbol, that is not a type definition
 pub type Symbol = String;
@@ -8,13 +8,13 @@ pub type Header = String;
 pub type Alias = String;
 pub type DyLibName = String;
 
-
 #[derive(Debug, Clone)]
 pub enum TypeSymbolType {
     Symbol(Symbol),
     List(Box<TypeSymbol>),
     Map(Box<TypeSymbol>, Box<TypeSymbol>),
     Option(Box<TypeSymbol>),
+    Result(Box<TypeSymbol>, Box<TypeSymbol>),
 }
 
 /// The symbol that represents any existing type
@@ -53,7 +53,6 @@ impl TypeSymbol {
 #[derive(Debug)]
 pub enum Query {}
 
-
 #[derive(Debug)]
 pub enum AstTypeDefinition {
     Int,
@@ -62,7 +61,7 @@ pub enum AstTypeDefinition {
     Bool,
     Struct(Vec<(Symbol, TypeSymbol)>),
     List(TypeSymbol),
-    Map(Symbol, TypeSymbol),
+    Map(TypeSymbol, TypeSymbol),
     Function(Vec<(Symbol, TypeSymbol)>, Option<TypeSymbol>),
     System(Vec<(Symbol, Query)>),
     Option(TypeSymbol),
@@ -105,21 +104,33 @@ pub enum PrefixOperator {
     Negate, // '-'
 }
 
-
-
 pub struct StructBody {
     pub functions: Vec<Box<AstNode>>,
     pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
 
 #[derive(Debug)]
-pub struct MemberAccess { //a.c(e,f).d
+pub struct MemberAccess {
+    //a.c(e,f).d
     pub member: Symbol,
     pub params: Option<Vec<Box<AstNode>>>,
+    pub range: Range<usize>,
 }
 
 #[derive(Debug)]
-pub enum AstNode {
+pub struct AstNode {
+    pub range: Range<usize>,
+    pub type_of: AstNodeType,
+}
+
+impl AstNode {
+    pub fn new(range: Range<usize>, type_of: AstNodeType) -> Self {
+        Self { range, type_of }
+    }
+}
+
+#[derive(Debug)]
+pub enum AstNodeType {
     Import(Module, Option<Alias>),
     ImportNative(Header, DyLibName, Option<Alias>),
     Int(i64),
@@ -128,6 +139,8 @@ pub enum AstNode {
     Bool(bool),
     List(Vec<Box<AstNode>>),
     Map(Vec<(Box<AstNode>, Box<AstNode>)>),
+    Option(Option<Box<AstNode>>),
+    Result(Result<Box<AstNode>, Box<AstNode>>),
     Declaration {
         new_symbol: Symbol,
         expression: Box<AstNode>,
@@ -154,13 +167,13 @@ pub enum AstNode {
         calls: Vec<MemberAccess>,
     },
     Branch {
-        cond: Box<AstNode>, 
+        cond: Box<AstNode>,
         body: Vec<Box<AstNode>>,
         else_if_branches: Vec<(Box<AstNode>, Vec<Box<AstNode>>)>,
-        else_branch: Option<Vec<Box<AstNode>>>
+        else_branch: Option<Vec<Box<AstNode>>>,
     },
     While {
-        cond: Box<AstNode>, 
+        cond: Box<AstNode>,
         body: Vec<Box<AstNode>>,
     },
     ForEach {
@@ -174,7 +187,7 @@ pub enum AstNode {
         assignment: Option<Box<AstNode>>,
         body: Vec<Box<AstNode>>,
     },
-    ReturnStatement{
+    ReturnStatement {
         return_value: Box<AstNode>,
     },
     Symbol(Symbol),
@@ -210,4 +223,39 @@ impl Debug for OpCode {
             OpCode::Sub => write!(f, "-"),
         }
     }
+}
+
+pub fn apply_string_escapes(s: &str) -> String {
+    let mut result = String::new();
+    let s = s.chars().collect::<Vec<char>>();
+
+    let mut i = 0;
+    while i < s.len() {
+        if s[i] == '\\' {
+            if s[i + 1] == '\\' {
+                result.push('\\');
+                i += 1;
+            } else if s[i + 1] == '"' {
+                result.push('\"');
+                i += 1;
+            } else if s[i + 1] == 'n' {
+                result.push('\n');
+                i += 1;
+            } else if s[i + 1] == 'r' {
+                result.push('\n');
+                i += 1;
+            } else if s[i + 1] == 't' {
+                result.push('\n');
+                i += 1;
+            }
+
+
+            result.push('\\');
+        } else {
+            result.push(s[i]);
+        }
+        i += 1;
+    }
+
+    result
 }

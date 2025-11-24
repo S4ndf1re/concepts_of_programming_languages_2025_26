@@ -10,7 +10,7 @@ match {
     r"[0-9]+\.[0-9]+" => FLOAT,
     "true" => BOOLTRUE,
     "false" => BOOLFALSE,
-    r#""([^"\\]|\\.)*""# => STRING,
+    r#""(\\\\|\\"|\\n|\\t|\\r|[^"\\])*""# => STRING,
     r"[a-zA-Z][a-zA-Z_0-9]*" => ID,
     "(" => l_paren,
     ")" => r_paren,
@@ -59,7 +59,12 @@ match {
     "." => dot,
     "," => comma,
     "!" => exclamation_mark,
-    "weak" => weak_term
+    "?" => question_mark,
+    "weak" => weak_term,
+    "none" => none_term,
+    "some" => some_term,
+    "ok" => ok_term,
+    "err" => err_term,
 }
 
 Comma<T>: Vec<T> = { // (0)
@@ -78,15 +83,15 @@ pub Programm: Vec<AstNode> = {
 };
 
 Import: AstNode = {
-    import <module:id> <alias:AliasRule?> semicolon => AstNode::Import(module, alias),
-    import native <header:string> <lib:string> <alias:AliasRule?> semicolon => AstNode::ImportNative(header, lib, alias),
+    <l:@L> import <module:id> <alias:AliasRule?> semicolon <r:@R> => AstNode::new(l..r, AstNodeType::Import(module, alias)),
+    <l:@L> import native <header:string> <lib:string> <alias:AliasRule?> semicolon <r:@R> => AstNode::new(l..r, AstNodeType::ImportNative(header, lib, alias)),
 };
 
 Statement: AstNode = {
     NonReturnable,
     ReturnableStatement,
     If, //Note: das if ist hier nicht zweideutig, wegen dem LR(1)-Lookup von dem Semikolon
-    While, 
+    While,
     For,
 };
 
@@ -110,36 +115,36 @@ Logic: AstNode = {
     #[precedence(level="0")]
     Comparison,
     #[precedence(level="1")] #[assoc(side="left")]
-    <a:Logic> and <b:Logic> => AstNode::InfixCall(Box::new(a), InfixOperator::And, Box::new(b)),
+    <l:@L> <a:Logic> and <b:Logic> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::And, Box::new(b))),
     #[precedence(level="2")] #[assoc(side="left")]
-    <a:Logic> or <b:Logic> => AstNode::InfixCall(Box::new(a), InfixOperator::Or, Box::new(b)),
+    <l:@L> <a:Logic> or <b:Logic> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Or, Box::new(b))),
 }
 
 Comparison: AstNode = {
     #[precedence(level="0")]
     Math,
     #[precedence(level="1")] #[assoc(side="left")]
-    <a:Comparison> equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::Equals, Box::new(b)),
-    <a:Comparison> not_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::NotEquals, Box::new(b)),
-    <a:Comparison> l_angle <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::LessThan, Box::new(b)),
-    <a:Comparison> less_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::LessThanEquals, Box::new(b)),
-    <a:Comparison> r_angle <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::GreaterThan, Box::new(b)),
-    <a:Comparison> greater_equals <b:Comparison> => AstNode::InfixCall(Box::new(a), InfixOperator::GreaterThanEquals, Box::new(b)),
-};
+    <l: @L> <a:Comparison> equals <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Equals, Box::new(b))),
+    <l: @L> <a:Comparison> not_equals <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::NotEquals, Box::new(b))),
+    <l: @L> <a:Comparison> l_angle <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::LessThan, Box::new(b))),
+    <l: @L> <a:Comparison> less_equals <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::LessThanEquals, Box::new(b))),
+    <l: @L> <a:Comparison> r_angle <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::GreaterThan, Box::new(b))),
+    <l: @L> <a:Comparison> greater_equals <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::GreaterThanEquals, Box::new(b))),
+}
 
 Math: AstNode = {
     #[precedence(level="0")]
     Term,
     #[precedence(level="1")] #[assoc(side="right")]
-    exclamation_mark <Math> => AstNode::PrefixCall(PrefixOperator::Not, Box::new(<>)),
-    minus <Math> => AstNode::PrefixCall(PrefixOperator::Negate, Box::new(<>)),
+    <l:@L> exclamation_mark <m:Math> <r:@R> => AstNode::new(l..r, AstNodeType::PrefixCall(PrefixOperator::Not, Box::new(m))),
+    <l:@L> minus <m:Math> <r:@R> => AstNode::new(l..r, AstNodeType::PrefixCall(PrefixOperator::Negate, Box::new(m))),
     #[precedence(level="2")] #[assoc(side="left")]
-    <a:Math> asterisk <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Multiply, Box::new(b)),
-    <a:Math> slash <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Divide, Box::new(b)),
-    <a:Math> modulo <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Modulo, Box::new(b)),
+    <l:@L> <a:Math> asterisk <b:Math> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Multiply, Box::new(b))),
+    <l:@L> <a:Math> slash <b:Math> <r:@R> =>    AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Divide, Box::new(b))),
+    <l:@L> <a:Math> modulo <b:Math> <r:@R> =>   AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Modulo, Box::new(b))),
     #[precedence(level="3")] #[assoc(side="left")]
-    <a:Math> plus <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Plus, Box::new(b)),
-    <a:Math> minus <b:Math> => AstNode::InfixCall(Box::new(a), InfixOperator::Minus, Box::new(b)),
+    <l:@L> <a:Math> plus <b:Math> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Plus, Box::new(b))),
+    <l:@L> <a:Math> minus <b:Math> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Minus, Box::new(b))),
 }
 
 // if -a {
@@ -147,17 +152,27 @@ Math: AstNode = {
 
 Term: AstNode = {
     Primitive,
-    <s:id> => AstNode::Symbol(s),
+    <l:@L> <s:id> <r:@R> => AstNode::new(l..r, AstNodeType::Symbol(s)),
     l_paren <Returnable> r_paren,
     Call,
     ListCreate,
     MapCreate,
-
+    OptionCreate,
+    ResultCreate,
 }
 
+OptionCreate: AstNode = {
+    <l:@L> none_term <r:@R> => AstNode::new(l..r, AstNodeType::Option(None)),
+    <l:@L> some_term l_paren <v:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Option(Some(Box::new(v)))),
+}
+
+ResultCreate: AstNode = {
+    <l:@L> err_term l_paren <e:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Result(Err(Box::new(e)))),
+    <l:@L> ok_term l_paren <v:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Result(Ok(Box::new(v)))),
+}
 
 ListCreate: AstNode = {
-    l_bracket <elems:Comma<Returnable>> r_bracket => AstNode::List(elems.into_iter().map(|e| Box::new(e)).collect::<Vec<_>>())
+    <l:@L> l_bracket <elems:Comma<Returnable>> r_bracket <r:@R> => AstNode::new(l..r, AstNodeType::List(elems.into_iter().map(|e| Box::new(e)).collect::<Vec<_>>()))
 }
 
 MapElem: (Box<AstNode>, Box<AstNode>) = {
@@ -165,40 +180,40 @@ MapElem: (Box<AstNode>, Box<AstNode>) = {
 }
 
 MapCreate: AstNode = {
-    l_brace <mapped:Comma<MapElem>> r_brace => AstNode::Map(mapped),
+    <l:@L> l_brace <mapped:Comma<MapElem>> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::Map(mapped)),
 }
 
 FunctionDefinition: AstNode = {
-    fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace => AstNode::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body},
+    <l:@L> fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body}),
 }
 
 
 Call: AstNode = {
-    <function_name:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::FunctionCall{function_name,  params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
-    <caller:id> <ma:MemberAccess> => AstNode::MemberCall{parent: caller, calls: ma},
+    <l:@L> <function_name:id> l_paren <params:Comma<Returnable>> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::FunctionCall{function_name,  params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()}),
+    <l:@L> <caller:id> <ma:MemberAccess> <r:@R> => AstNode::new(l..r, AstNodeType::MemberCall{parent: caller, calls: ma}),
     // <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
 }
 
 MemberAccess: Vec<MemberAccess> = { //a.b.c().e
     //<name:id> (l_paren <params:Dot<id>> r_paren
-    dot <name:id> <member_access:MemberAccess?> => {
-            let mut v = vec![MemberAccess{member: name, params: None}]; 
+    <l:@L> dot <name:id> <r:@R> <member_access:MemberAccess?> => {
+            let mut v = vec![MemberAccess{member: name, params: None, range: l..r}];
             if let Some(ma) = member_access {
                 v = v.into_iter().chain(ma).collect::<Vec<_>>();
             }
             v
         },
-    dot <name:id> l_paren <params:Comma<Returnable>> r_paren <member_access:MemberAccess?> => {
-            let mut v = vec![MemberAccess{member: name, params: Some(params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>())}]; 
+    <l:@L> dot <name:id> l_paren <params:Comma<Returnable>> r_paren <r:@R> <member_access:MemberAccess?> => {
+            let mut v = vec![MemberAccess{member: name, params: Some(params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()), range: l..r}];
             if let Some(ma) = member_access {
                 v = v.into_iter().chain(ma).collect::<Vec<_>>();
             }
             v
-        }, 
+        },
 }
 
 StructDefinition: AstNode = {
-    struct_term <name:id> l_brace <body:StructBlock> r_brace => AstNode::TypeDef{typename: name, typedef: AstTypeDefinition::Struct(body.attributes), execution_body: body.functions},
+    <l:@L> struct_term <name:id> l_brace <body:StructBlock> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef{typename: name, typedef: AstTypeDefinition::Struct(body.attributes), execution_body: body.functions}),
 }
 
 NonReturnable: AstNode = {
@@ -210,24 +225,24 @@ NonReturnable: AstNode = {
 
 
 If: AstNode = {
-    if_term <cond:Comparison> l_brace <body:Block> r_brace <elif:ElseIf*> <el:Else?> => AstNode::Branch {cond: Box::new(cond), body, else_if_branches: elif, else_branch: el},
+    <l:@L> if_term <cond:Comparison> l_brace <body:Block> r_brace <elif:ElseIf*> <el:Else?> <r:@R> => AstNode::new(l..r, AstNodeType::Branch {cond: Box::new(cond), body, else_if_branches: elif, else_branch: el}),
 }
 
 ElseIf: (Box<AstNode>, Vec<Box<AstNode>>) = {
     else_term if_term <cond:Comparison> l_brace <body:Block> r_brace => (Box::new(cond), body),
-};
+}
 
 Else: Vec<Box<AstNode>> = {
     else_term l_brace <Block> r_brace,
-};
+}
 
 While: AstNode = {
-    while_term <cond:Comparison> l_brace <body:Block> r_brace => AstNode::While {cond: Box::new(cond), body},
+    <l:@L> while_term <cond:Comparison> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::While {cond: Box::new(cond), body}),
 }
 
 For: AstNode = {
-    for_term <s:id> in_term <iter:Returnable> l_brace <body:Block> r_brace => AstNode::ForEach {recipient: s, iterable: Box::new(iter), body},
-    for_term <d:AssignmentOrDeclaration?> semicolon <cond:Comparison?> semicolon <a:Assignment?> l_brace <body:Block> r_brace => AstNode::For {declaration: d.map(|d| Box::new(d)), condition: cond.map(|cond| Box::new(cond)), assignment: a.map(|a| Box::new(a)), body},
+    <l:@L> for_term <s:id> in_term <iter:Returnable> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::ForEach {recipient: s, iterable: Box::new(iter), body}),
+    <l:@L> for_term <d:AssignmentOrDeclaration?> semicolon <cond:Comparison?> semicolon <a:Assignment?> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::For {declaration: d.map(|d| Box::new(d)), condition: cond.map(|cond| Box::new(cond)), assignment: a.map(|a| Box::new(a)), body}),
 }
 
 
@@ -237,18 +252,18 @@ ReturnableOrIf: AstNode = {
 }
 
 Declaration: AstNode = {
-    <s:id> declare <e:ReturnableOrIf> => AstNode::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None},
-    let_term <st:TypeParamRule> assign <e:ReturnableOrIf> => AstNode::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)},
+    <l:@L> <s:id> declare <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None}),
+    <l:@L> let_term <st:TypeParamRule> assign <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)}),
 }
 
 Assignment: AstNode = {
-    <s:id> assign <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)},
-    <s:id> assign_add <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)},
-    <s:id> assign_sub <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)},
-    <s:id> assign_mul <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)},
-    <s:id> assign_div <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)},
-    <s:id> assign_mod <e:ReturnableOrIf> => AstNode::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)},
-};
+    <l:@L> <s:id> assign     <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_add <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_sub <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_mul <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_div <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_mod <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
+}
 
 AssignmentOrDeclaration = {
     Declaration,
@@ -263,10 +278,10 @@ Block: Vec<Box<AstNode>> = {
 
 // struct t {
 // a: float,
-// 
+//
 // fn c() {
 // }
-// 
+//
 // b: String,
 // }
 
@@ -290,23 +305,29 @@ FurtherStructBlock: Option<StructBody> = {
 
 
 ReturnType: TypeSymbol = {
+    #[precedence(level="0")]
     <t:id> => TypeSymbol::strong(TypeSymbolType::Symbol(t)),
     l_bracket <r:ReturnType> r_bracket => TypeSymbol::strong(TypeSymbolType::List(Box::new(r))),
     l_brace <a:ReturnType> right_arrow <b:ReturnType> r_brace => TypeSymbol::strong(TypeSymbolType::Map(Box::new(a), Box::new(b))),
     weak_term <t:ReturnType> => TypeSymbol::make_weak(t),
+
+    #[precedence(level="1")] #[assoc(side="left")]
+    <a:ReturnType> question_mark => TypeSymbol::strong(TypeSymbolType::Option(Box::new(a))),
+    <a:ReturnType> exclamation_mark <b:ReturnType> => TypeSymbol::strong(TypeSymbolType::Result(Box::new(a), Box::new(b))),
 }
 
 
 ReturnTypeRule: TypeSymbol = {
     colon <t:ReturnType> => t,
-};
+}
+
 TypeParamRule: (Symbol, TypeSymbol) = {
     id ReturnTypeRule,
-};
+}
 
 AliasRule: Alias = {
     as_term <id>,
-};
+}
 
 Primitive: AstNode = {
     // INT => AstNode::Int(<>),
@@ -314,16 +335,16 @@ Primitive: AstNode = {
     // STRING => AstNode::String(<>),
     // BOOLTRUE => AstNode::Bool(<>),
     // BOOLFALSE => AstNode::Bool(<>)
-    <i:int> => AstNode::Int(i),
-    <f:float> => AstNode::Float(f),
-    <s:string> => AstNode::String(s),
-    <b:Bool> => AstNode::Bool(b),
+    <l:@L> <i:int>     <r:@R> => AstNode::new(l..r, AstNodeType::Int(i)),
+    <l:@L> <f:float>   <r:@R> => AstNode::new(l..r, AstNodeType::Float(f)),
+    <l:@L> <s:string>  <r:@R> => AstNode::new(l..r, AstNodeType::String(s)),
+    <l:@L> <b:Bool>    <r:@R> => AstNode::new(l..r, AstNodeType::Bool(b)),
 }
 
 Bool: bool = {
     bool_true => true,
     bool_false => false,
-};
+}
 
 // int: i64 = {
 //     INT => int(<>)
@@ -339,7 +360,7 @@ Bool: bool = {
 // };
 // bool_false: bool = {
 //     BOOLFALSE => false
-//     //"false" => false 
+//     //"false" => false
 // };
 
 // string: String = {
@@ -357,30 +378,30 @@ Bool: bool = {
 int: i64 = {
     //INT => <>
     INT => i64::from_str(<>).unwrap()
-};
+}
 float: f64 = {
     //FLOAT => <>
     FLOAT => f64::from_str(<>).unwrap()
-};
+}
 bool_true: bool = {
     //BOOL => <>
     BOOLTRUE => true
-};
+}
 bool_false: bool = {
     //BOOL => <>
-    BOOLFALSE => false 
-};
+    BOOLFALSE => false
+}
 
 string: String = {
     //STRING => <>
     // https://stackoverflow.com/a/47214303
-    <s:STRING> => s.to_owned()
-};
+    <s:STRING> => apply_string_escapes(&s[1..s.len()-1]),
+}
 
 id: String = {
     //ID => <>
     <s:ID> => s.to_owned()
-};
+}
 
 // //Terminal Symbols
 // l_paren: () = {

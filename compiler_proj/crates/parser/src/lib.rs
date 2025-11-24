@@ -4,42 +4,54 @@ pub use ast::*;
 pub mod lexer;
 pub use lexer::*;
 
+pub mod errors;
+pub use errors::*;
+
 use lalrpop_util::lalrpop_mod;
 
 lalrpop_mod!(pub ast_grammar);
 
 #[cfg(test)]
 mod tests {
-    use crate::{AstNode, ast_grammar};
+    use crate::{AstNodeType, BeautifyError, ast_grammar};
 
     #[test]
     fn import_test1() {
-        let expr = ast_grammar::ProgrammParser::new()
-            .parse(
-                r#"import name as abc;
-                            import name2;"#,
-            )
-            .unwrap();
+        let source = r#"import name as abc;
+                            import name2;"#;
+        let expr = ast_grammar::ProgrammParser::new().parse(source);
 
-        assert!(expr.len() == 2);
+        if let Err(expr) = expr {
+            expr.panic_error(source);
+        } else if let Ok(expr) = expr {
+            assert!(expr.len() == 2);
 
-        assert!(matches!(expr[0], AstNode::Import(_, _)));
-        assert!(matches!(expr[1], AstNode::Import(_, _)));
+            assert!(matches!(expr[0].type_of, AstNodeType::Import(_, _)));
+            assert!(matches!(expr[1].type_of, AstNodeType::Import(_, _)));
+        }
     }
 
     #[test]
     fn import_test2() {
-        let expr = ast_grammar::ProgrammParser::new()
-            .parse(
-                r#"import native "module" "file";
-                            import native "module" "file" as my_module;"#,
-            )
-            .unwrap();
+        let source = r#"import native "module" "file";
+                            import native "module" "file" as my_module;"#;
+        let expr = ast_grammar::ProgrammParser::new().parse(source);
 
-        assert!(expr.len() == 2);
+        if let Err(expr) = expr {
+            expr.print_error(source);
+            panic!("{}", expr);
+        } else if let Ok(expr) = expr {
+            assert!(expr.len() == 2);
 
-        assert!(matches!(expr[0], AstNode::ImportNative(_, _, _)));
-        assert!(matches!(expr[1], AstNode::ImportNative(_, _, _)));
+            assert!(matches!(
+                expr[0].type_of,
+                AstNodeType::ImportNative(_, _, _)
+            ));
+            assert!(matches!(
+                expr[1].type_of,
+                AstNodeType::ImportNative(_, _, _)
+            ));
+        }
     }
 
     #[test]
@@ -55,10 +67,16 @@ mod tests {
 
         assert!(expr.len() == 4);
 
-        assert!(matches!(expr[0], AstNode::Import(_, _)));
-        assert!(matches!(expr[1], AstNode::ImportNative(_, _, _)));
-        assert!(matches!(expr[2], AstNode::Import(_, _)));
-        assert!(matches!(expr[3], AstNode::ImportNative(_, _, _)));
+        assert!(matches!(expr[0].type_of, AstNodeType::Import(_, _)));
+        assert!(matches!(
+            expr[1].type_of,
+            AstNodeType::ImportNative(_, _, _)
+        ));
+        assert!(matches!(expr[2].type_of, AstNodeType::Import(_, _)));
+        assert!(matches!(
+            expr[3].type_of,
+            AstNodeType::ImportNative(_, _, _)
+        ));
     }
 
     #[test]
@@ -73,8 +91,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::TypeDef {
+            expr[0].type_of,
+            AstNodeType::TypeDef {
                 typename: _,
                 typedef: _,
                 execution_body: _,
@@ -91,8 +109,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::Declaration {
+            expr[0].type_of,
+            AstNodeType::Declaration {
                 new_symbol: _,
                 expression: _,
                 assumed_type: _,
@@ -112,8 +130,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::Branch {
+            expr[0].type_of,
+            AstNodeType::Branch {
                 cond: _,
                 body: _,
                 else_if_branches: _,
@@ -134,8 +152,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::Declaration {
+            expr[0].type_of,
+            AstNodeType::Declaration {
                 new_symbol: _,
                 expression: _,
                 assumed_type: _,
@@ -157,8 +175,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::Branch {
+            expr[0].type_of,
+            AstNodeType::Branch {
                 cond: _,
                 body: _,
                 else_if_branches: _,
@@ -183,8 +201,8 @@ mod tests {
         assert!(expr.len() == 1);
 
         assert!(matches!(
-            expr[0],
-            AstNode::Branch {
+            expr[0].type_of,
+            AstNodeType::Branch {
                 cond: _,
                 body: _,
                 else_if_branches: _,
@@ -358,8 +376,8 @@ mod tests {
                     "#,
             )
             .unwrap();
-                // a := !a;
-                // b := !b && -a;
+        // a := !a;
+        // b := !b && -a;
     }
 
     #[test]
@@ -436,8 +454,6 @@ mod tests {
             .unwrap();
     }
 
-
-    
     #[test]
     fn return_test1() {
         let _expr = ast_grammar::ProgrammParser::new()
@@ -473,5 +489,35 @@ mod tests {
                     "#,
             )
             .unwrap();
+    }
+
+    #[test]
+    fn option_test1() {
+        let _expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                let a: B? = some(10);
+                let a: B? = none;
+                a := some(10);
+                b := none;
+                    "#,
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn result_test1() {
+        let source = r#"
+                let a: B!C = ok(10);
+                let a: B!D = err(10);
+                a := ok(10);
+                b := err(10);
+                    "#;
+        let expr = ast_grammar::ProgrammParser::new().parse(source);
+
+        if let Err(err) = expr {
+            err.print_error(source);
+            panic!("{}", err)
+        }
     }
 }
