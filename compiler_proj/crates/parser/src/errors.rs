@@ -1,7 +1,11 @@
 use std::fmt::Display;
 
-use annotate_snippets::{AnnotationKind, Level, Renderer, Snippet, renderer::DecorStyle};
+use annotate_snippets::{AnnotationKind, Level, Patch, Renderer, Snippet, renderer::DecorStyle};
 use lalrpop_util::ParseError;
+
+pub trait BeautifyError {
+    fn print_error(source: &str);
+}
 
 pub fn print_error<T: Display, E: Display>(source: &str, err: &ParseError<usize, T, E>) {
     match err {
@@ -18,15 +22,23 @@ pub fn print_error<T: Display, E: Display>(source: &str, err: &ParseError<usize,
             println!("{}", renderer.render(report));
         }
         ParseError::UnrecognizedToken { token, expected } => {
-            let report = &[Level::ERROR
-                .primary_title(format!("unexpected token {}", token.1))
-                .element(
-                    Snippet::source(source).annotation(
-                        AnnotationKind::Primary
-                            .span(token.0..token.2)
-                            .label(format!("expected, {}", expected.join(", "))),
+            let report = &[
+                Level::ERROR
+                    .primary_title(format!("unexpected token {}", token.1))
+                    .element(
+                        Snippet::source(source).annotation(
+                            AnnotationKind::Primary
+                                .span(token.0..token.2)
+                                .label(format!("expected, {}", expected.join(", "))),
+                        ),
                     ),
-                )];
+                Level::HELP
+                    .secondary_title("Possible fix")
+                    .element(Snippet::source(source).patch(Patch::new(
+                        token.0..token.0+1,
+                        format!("try inserting one of [{}] here", expected.join(", ")),
+                    ))),
+            ];
 
             let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
             println!("{}", renderer.render(report));

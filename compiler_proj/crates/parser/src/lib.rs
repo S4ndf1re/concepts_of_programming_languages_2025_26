@@ -508,15 +508,17 @@ mod tests {
 
     #[test]
     fn result_test1() {
-        let _expr = ast_grammar::ProgrammParser::new()
-            .parse(
-                r#"
+        let source = r#"
                 let a: B!C = ok(10);
                 let a: B!D = err(10);
                 a := ok(10);
                 b := err(10);
-                    "#,
-            )
-            .unwrap();
+                    "#;
+        let expr = ast_grammar::ProgrammParser::new().parse(source);
+
+        if let Err(err) = expr {
+            print_error(source, &err);
+            panic!("{}", err)
+        }
     }
 }
