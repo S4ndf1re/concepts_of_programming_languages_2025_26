@@ -34,11 +34,13 @@ Statement: AstNode = {
 // returnable: comparison, funccall, math, logic, symbols, constants
 
 ReturnableStatement: AstNode = {
-    <Returnable> semicolon
+    <Returnable> semicolon,
+
 }
 
 Returnable: AstNode = {
     Logic,
+    return <Returnable>,
 };
 
 
@@ -88,7 +90,9 @@ Term: AstNode = {
     Call,
     ListCreate,
     MapCreate,
+
 }
+
 
 ListCreate: AstNode = {
     l_bracket <elems:Comma<Returnable>> r_bracket => AstNode::List(elems.into_iter().map(|e| Box::new(e)).collect::<Vec<_>>())

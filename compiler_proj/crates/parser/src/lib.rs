@@ -435,4 +435,29 @@ mod tests {
             )
             .unwrap();
     }
+
+
+    
+    #[test]
+    fn return_test1() {
+        let _expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                fn f(a: int, b: String): int {
+                    return a;
+                }
+                return a < b && b + 7;
+                    "#,
+            )
+            .unwrap();
+
+        let expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                return if a == b {
+                };
+                    "#,
+            )
+            .is_err();
+    }
 }
