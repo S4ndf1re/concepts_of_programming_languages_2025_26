@@ -460,4 +460,18 @@ mod tests {
             )
             .is_err();
     }
+
+    fn comment_test1() {
+        let _expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                fn f(a: int, b: String): int { //this is my commenttest
+                    return a;
+                }
+                //here, i return something
+                return a < b && b + 7;
+                    "#,
+            )
+            .unwrap();
+    }
 }

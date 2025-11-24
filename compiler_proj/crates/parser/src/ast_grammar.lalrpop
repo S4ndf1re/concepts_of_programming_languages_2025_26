@@ -3,8 +3,68 @@ use crate::ast::*;
 
 grammar;
 
+match {
+    r"\s*" => { },
+    r"\/\/[^\n\r]*[\n\r]*" => { }, // Skip `// comments`
+    r"[0-9]+" => INT,
+    r"[0-9]+\.[0-9]+" => FLOAT,
+    "true" => BOOLTRUE,
+    "false" => BOOLFALSE,
+    r#""([^"\\]|\\.)*""# => STRING,
+    r"[a-zA-Z][a-zA-Z_0-9]*" => ID,
+    "(" => l_paren,
+    ")" => r_paren,
+    "[" => l_bracket,
+    "]" => r_bracket,
+    "{" => l_brace,
+    "}" => r_brace,
+    "<" => l_angle,
+    ">" => r_angle,
+    "+" => plus,
+    "-" => minus,
+    "*" => asterisk,
+    "/" => slash,
+    "%" => modulo,
+    "<=" => less_equals,
+    ">=" => greater_equals,
+    "==" => equals,
+    "!=" => not_equals,
+    "=" => assign,
+    "+=" => assign_add,
+    "-=" => assign_sub,
+    "*=" => assign_mul,
+    "/=" => assign_div,
+    "%=" => assign_mod,
+    ":=" => declare,
+    "&&" => and,
+    "||" => or,
+    "->" => right_arrow,
+    "fn" => fn_term,
+    "struct" => struct_term,
+    "let" => let_term,
+    "while" => while_term,
+    "for" => for_term,
+    "in" => in_term,
+    "if" => if_term,
+    "else" => else_term,
+    "return" => return,
+    "with" => with,
+    "default" => default,
+    "import" => import,
+    "native" => native,
+    "as" => as_term,
+    "ffi" => ffi,
+    ";" => semicolon,
+    ":" => colon,
+    "." => dot,
+    "," => comma,
+    "!" => exclamation_mark,
+    "weak" => weak_term
+}
+
 Comma<T>: Vec<T> = { // (0)
-    <mut v:(<T> ",")*> <e:T?> => match e { // (1)
+    <mut v:(<T> comma)*> <e:T?> => match e { // (1)
+    //<mut v:(<T> ",")*> <e:T?> => match e { // (1)
         None=> v,
         Some(e) => {
             v.push(e);
@@ -30,6 +90,10 @@ Statement: AstNode = {
     While, 
     For,
 };
+
+// Comment: () = {
+//     r"//[^\n]*" => (),
+// }
 // nonreturnable: loops, assignments, funcdef, structdef
 // returnable: comparison, funccall, math, logic, symbols, constants
 
@@ -221,8 +285,8 @@ StructBlock: StructBody = {
 }
 
 FurtherStructBlock: Option<StructBody> = {
-    "," <StructBlock> => Some(<>),
-    "," => None,
+    comma <StructBlock> => Some(<>),
+    comma => None,
 }
 
 
@@ -246,6 +310,11 @@ AliasRule: Alias = {
 };
 
 Primitive: AstNode = {
+    // INT => AstNode::Int(<>),
+    // FLOAT => AstNode::Float(<>),
+    // STRING => AstNode::String(<>),
+    // BOOLTRUE => AstNode::Bool(<>),
+    // BOOLFALSE => AstNode::Bool(<>)
     <i:int> => AstNode::Int(i),
     <f:float> => AstNode::Float(f),
     <s:string> => AstNode::String(s),
@@ -257,177 +326,215 @@ Bool: bool = {
     bool_false => false,
 };
 
+// int: i64 = {
+//     INT => int(<>)
+//     //r"[0-9]+" => i64::from_str(<>).unwrap()
+// };
+// float: f64 = {
+//     FLOAT => float(<>)
+//     //r"[0-9]+\.[0-9]+" => f64::from_str(<>).unwrap()
+// };
+// bool_true: bool = {
+//     BOOLTRUE => true
+//     //"true" => true
+// };
+// bool_false: bool = {
+//     BOOLFALSE => false
+//     //"false" => false 
+// };
+
+// string: String = {
+//     STRING => <>
+//     // https://stackoverflow.com/a/47214303
+
+// };
+
+// id: String = {
+//     ID => <>
+
+// };
+
 // Datatypes
 int: i64 = {
-    r"[0-9]+" => i64::from_str(<>).unwrap()
+    //INT => <>
+    INT => i64::from_str(<>).unwrap()
 };
 float: f64 = {
-    r"[0-9]+\.[0-9]+" => f64::from_str(<>).unwrap()
+    //FLOAT => <>
+    FLOAT => f64::from_str(<>).unwrap()
 };
 bool_true: bool = {
-    "true" => true
+    //BOOL => <>
+    BOOLTRUE => true
 };
 bool_false: bool = {
-    "false" => false 
+    //BOOL => <>
+    BOOLFALSE => false 
 };
 
 string: String = {
+    //STRING => <>
     // https://stackoverflow.com/a/47214303
-    <s:r#""([^"][\x00-\x7f])*""#> => s.to_owned()
+    <s:STRING> => s.to_owned()
 };
 
 id: String = {
-    <s:r"[a-zA-Z][a-zA-Z_0-9]*"> => s.to_owned()
+    //ID => <>
+    <s:ID> => s.to_owned()
 };
 
-// Terminal Symbols
-l_paren: () = {
-    "(" => ()
-};
-r_paren: () = {
-    ")" => ()
-};
-l_bracket: () = {
-    "[" => ()
-};
-r_bracket: ()= {
-    "]" => ()
-};
-l_brace: () = {
-    "{" => ()
-};
-r_brace: ()= {
-    "}" => ()
-};
-l_angle: () = {
-    "<" => ()
-};
-r_angle: ()= {
-    ">" => ()
-};
-plus: () = {
-    "+" => ()
-};
-minus: () = {
-    "-" => ()
-};
-asterisk: () = {
-    "*" => ()
-};
-slash: () = {
-    "/" => ()
-};
-modulo: () = {
-    "%" => ()
-};
-less_equals: () = {
-    "<=" => ()
-};
-greater_equals: () = {
-    ">=" => ()
-};
-equals: () = {
-    "==" => ()
-};
-not_equals: () = {
-    "!=" => ()
-};
-assign: () = {
-    "=" => ()
-};
-assign_add: () = {
-    "+=" => ()
-};
-assign_sub: () = {
-    "-=" => ()
-};
-assign_mul: () = {
-    "*=" => ()
-};
-assign_div: () = {
-    "/=" => ()
-};
-assign_mod: () = {
-    "%=" => ()
-};
-declare: () = {
-    ":=" => ()
-};
-slash_term: () = {
-    "/" => ()
-};
-and: () = {
-    "&&" => ()
-}
-or: () = {
-    "||" => ()
-}
-right_arrow: () = {
-    "->" => ()
-};
-fn_term: () = {
-    "fn" => ()
-};
-struct_term: () = {
-    "struct" => ()
-}
-let_term: () = {
-    "let" => ()
-};
-while_term: () = {
-    "while" => ()
-};
-for_term: () = {
-    "for" => ()
-};
-in_term: () = {
-    "in" => ()
-}
-if_term: () = {
-    "if" => ()
-};
-else_term: () = {
-    "else" => ()
-};
-return: () = {
-    "return" => ()
-};
-with: () = {
-    "with" => ()
-};
-default: () = {
-    "default" => ()
-};
-import: () = {
-    "import" => ()
-};
-native: () = {
-    "native" => ()
-};
-as_term: () = {
-    "as" => ()
-};
-ffi: () = {
-    "ffi" => ()
-};
-arrow: () = {
-    "->" => ()
-};
-semicolon: () = {
-    ";" => ()
-};
-colon: () = {
-    ":" => ()
-};
-dot: () = {
-    "." => ()
-}
-exclamation_mark: () = {
-    "!" => ()
-}
-weak_term: () = {
-    "weak" => ()
-}
+// //Terminal Symbols
+// l_paren: () = {
+//     "(" => ()
+// };
+// r_paren: () = {
+//     ")" => ()
+// };
+// l_bracket: () = {
+//     "[" => ()
+// };
+// r_bracket: ()= {
+//     "]" => ()
+// };
+// l_brace: () = {
+//     "{" => ()
+// };
+// r_brace: ()= {
+//     "}" => ()
+// };
+// l_angle: () = {
+//     "<" => ()
+// };
+// r_angle: ()= {
+//     ">" => ()
+// };
+// plus: () = {
+//     "+" => ()
+// };
+// minus: () = {
+//     "-" => ()
+// };
+// asterisk: () = {
+//     "*" => ()
+// };
+// slash: () = {
+//     "/" => ()
+// };
+// modulo: () = {
+//     "%" => ()
+// };
+// less_equals: () = {
+//     "<=" => ()
+// };
+// greater_equals: () = {
+//     ">=" => ()
+// };
+// equals: () = {
+//     "==" => ()
+// };
+// not_equals: () = {
+//     "!=" => ()
+// };
+// assign: () = {
+//     "=" => ()
+// };
+// assign_add: () = {
+//     "+=" => ()
+// };
+// assign_sub: () = {
+//     "-=" => ()
+// };
+// assign_mul: () = {
+//     "*=" => ()
+// };
+// assign_div: () = {
+//     "/=" => ()
+// };
+// assign_mod: () = {
+//     "%=" => ()
+// };
+// declare: () = {
+//     ":=" => ()
+// };
+// slash_term: () = {
+//     "/" => ()
+// };
+// and: () = {
+//     "&&" => ()
+// }
+// or: () = {
+//     "||" => ()
+// }
+// right_arrow: () = {
+//     "->" => ()
+// };
+// fn_term: () = {
+//     "fn" => ()
+// };
+// struct_term: () = {
+//     "struct" => ()
+// }
+// let_term: () = {
+//     "let" => ()
+// };
+// while_term: () = {
+//     "while" => ()
+// };
+// for_term: () = {
+//     "for" => ()
+// };
+// in_term: () = {
+//     "in" => ()
+// }
+// if_term: () = {
+//     "if" => ()
+// };
+// else_term: () = {
+//     "else" => ()
+// };
+// return: () = {
+//     "return" => ()
+// };
+// with: () = {
+//     "with" => ()
+// };
+// default: () = {
+//     "default" => ()
+// };
+// import: () = {
+//     "import" => ()
+// };
+// native: () = {
+//     "native" => ()
+// };
+// as_term: () = {
+//     "as" => ()
+// };
+// ffi: () = {
+//     "ffi" => ()
+// };
+// arrow: () = {
+//     "->" => ()
+// };
+// semicolon: () = {
+//     ";" => ()
+// };
+// colon: () = {
+//     ":" => ()
+// };
+// dot: () = {
+//     "." => ()
+// }
+// comma: () = {
+//     "," => ()
+// }
+// exclamation_mark: () = {
+//     "!" => ()
+// }
+// weak_term: () = {
+//     "weak" => ()
+// }
+
 
 // pub Expr: Box<Expr> = {
 //     #[precedence(level="0")]
