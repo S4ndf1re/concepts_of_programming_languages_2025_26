@@ -174,6 +174,9 @@ pub enum AstNode {
         assignment: Option<Box<AstNode>>,
         body: Vec<Box<AstNode>>,
     },
+    ReturnStatement{
+        return_value: Box<AstNode>,
+    },
     Symbol(Symbol),
 }
 

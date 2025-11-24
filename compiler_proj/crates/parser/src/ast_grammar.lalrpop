@@ -104,7 +104,6 @@ ReturnableStatement: AstNode = {
 
 Returnable: AstNode = {
     Logic,
-    return <Returnable>,
 };
 
 
@@ -207,6 +206,7 @@ NonReturnable: AstNode = {
     <AssignmentOrDeclaration> semicolon,
     FunctionDefinition,
     StructDefinition,
+    //return <a:Returnable> => AstNode::ReturnStatement{return_value: Box::new(a)} semicolon,
 };
 
 
