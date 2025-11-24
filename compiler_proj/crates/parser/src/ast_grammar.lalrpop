@@ -84,7 +84,6 @@ Import: AstNode = {
 
 Statement: AstNode = {
     NonReturnable,
-    //Returnable,
     ReturnableStatement,
     If, //Note: das if ist hier nicht zweideutig, wegen dem LR(1)-Lookup von dem Semikolon
     While, 
@@ -206,7 +205,7 @@ NonReturnable: AstNode = {
     <AssignmentOrDeclaration> semicolon,
     FunctionDefinition,
     StructDefinition,
-    //return <a:Returnable> => AstNode::ReturnStatement{return_value: Box::new(a)} semicolon,
+    return <a:Returnable> semicolon=> AstNode::ReturnStatement{return_value: Box::new(a)},
 };
 
 
