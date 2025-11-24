@@ -59,7 +59,12 @@ match {
     "." => dot,
     "," => comma,
     "!" => exclamation_mark,
-    "weak" => weak_term
+    "?" => question_mark,
+    "weak" => weak_term,
+    "none" => none_term, 
+    "some" => some_term, 
+    "ok" => ok_term, 
+    "err" => err_term, 
 }
 
 Comma<T>: Vec<T> = { // (0)
@@ -153,9 +158,19 @@ Term: AstNode = {
     Call,
     ListCreate,
     MapCreate,
-
+    OptionCreate,
+    ResultCreate,
 }
 
+OptionCreate: AstNode = {
+    <l:@L> none_term <r:@R> => AstNode::new(l..r, AstNodeType::Option(None)),
+    <l:@L> some_term l_paren <v:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Option(Some(Box::new(v)))),
+}
+
+ResultCreate: AstNode = {
+    <l:@L> err_term l_paren <e:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Result(Err(Box::new(e)))),
+    <l:@L> ok_term l_paren <v:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Result(Ok(Box::new(v)))),
+}
 
 ListCreate: AstNode = {
     <l:@L> l_bracket <elems:Comma<Returnable>> r_bracket <r:@R> => AstNode::new(l..r, AstNodeType::List(elems.into_iter().map(|e| Box::new(e)).collect::<Vec<_>>()))
@@ -291,10 +306,15 @@ FurtherStructBlock: Option<StructBody> = {
 
 
 ReturnType: TypeSymbol = {
+    #[precedence(level="0")]
     <t:id> => TypeSymbol::strong(TypeSymbolType::Symbol(t)),
     l_bracket <r:ReturnType> r_bracket => TypeSymbol::strong(TypeSymbolType::List(Box::new(r))),
     l_brace <a:ReturnType> right_arrow <b:ReturnType> r_brace => TypeSymbol::strong(TypeSymbolType::Map(Box::new(a), Box::new(b))),
     weak_term <t:ReturnType> => TypeSymbol::make_weak(t),
+
+    #[precedence(level="1")] #[assoc(side="left")]
+    <a:ReturnType> question_mark => TypeSymbol::strong(TypeSymbolType::Option(Box::new(a))),
+    <a:ReturnType> exclamation_mark <b:ReturnType> => TypeSymbol::strong(TypeSymbolType::Result(Box::new(a), Box::new(b))),
 }
 
 

@@ -14,6 +14,7 @@ pub enum TypeSymbolType {
     List(Box<TypeSymbol>),
     Map(Box<TypeSymbol>, Box<TypeSymbol>),
     Option(Box<TypeSymbol>),
+    Result(Box<TypeSymbol>, Box<TypeSymbol>),
 }
 
 /// The symbol that represents any existing type
@@ -60,7 +61,7 @@ pub enum AstTypeDefinition {
     Bool,
     Struct(Vec<(Symbol, TypeSymbol)>),
     List(TypeSymbol),
-    Map(Symbol, TypeSymbol),
+    Map(TypeSymbol, TypeSymbol),
     Function(Vec<(Symbol, TypeSymbol)>, Option<TypeSymbol>),
     System(Vec<(Symbol, Query)>),
     Option(TypeSymbol),
@@ -138,6 +139,8 @@ pub enum AstNodeType {
     Bool(bool),
     List(Vec<Box<AstNode>>),
     Map(Vec<(Box<AstNode>, Box<AstNode>)>),
+    Option(Option<Box<AstNode>>),
+    Result(Result<Box<AstNode>, Box<AstNode>>),
     Declaration {
         new_symbol: Symbol,
         expression: Box<AstNode>,
