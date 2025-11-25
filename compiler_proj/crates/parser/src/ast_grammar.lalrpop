@@ -340,12 +340,12 @@ ReturnType: TypeSymbol = {
 /// Any return type
 ReturnTypeRule: TypeSymbol = {
     colon <t:ReturnType> => t,
-    self_term => TypeSymbol::strong(TypeSymbolType::SelfType),
-    weak_term self_term => TypeSymbol::weak(TypeSymbolType::SelfType),
 }
 
 TypeParamRule: (Symbol, TypeSymbol) = {
     id ReturnTypeRule,
+    self_term => ("self".to_owned(), TypeSymbol::strong(TypeSymbolType::SelfType)),
+    weak_term self_term => ("self".to_owned(), TypeSymbol::weak(TypeSymbolType::SelfType)),
 }
 
 StructParamRule: (Symbol, Box<AstNode>) = {
