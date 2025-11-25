@@ -520,4 +520,20 @@ mod tests {
             panic!("{}", err)
         }
     }
+
+    fn struct_test1() {
+        let source = r#"
+                    a := B {
+                        v: 10,
+                        g: 10.0,
+                        h: C {},
+                    };
+                    "#;
+        let expr = ast_grammar::ProgrammParser::new().parse(source);
+
+        if let Err(err) = expr {
+            err.print_error(source);
+            panic!("{}", err)
+        }
+    }
 }

@@ -65,11 +65,12 @@ match {
     "some" => some_term,
     "ok" => ok_term,
     "err" => err_term,
+    "self" => self_term,
 }
 
+/// Matches a or 1,...,n meaning any comma separated list
 Comma<T>: Vec<T> = { // (0)
     <mut v:(<T> comma)*> <e:T?> => match e { // (1)
-    //<mut v:(<T> ",")*> <e:T?> => match e { // (1)
         None=> v,
         Some(e) => {
             v.push(e);
@@ -78,15 +79,18 @@ Comma<T>: Vec<T> = { // (0)
     }
 };
 
+/// Start point of the grammar
 pub Programm: Vec<AstNode> = {
     <imports:Import*> <statements:Statement*> => imports.into_iter().chain(statements).collect::<Vec<AstNode>>()
 };
 
+/// Any import, i.e. native ffi import and normal 
 Import: AstNode = {
     <l:@L> import <module:id> <alias:AliasRule?> semicolon <r:@R> => AstNode::new(l..r, AstNodeType::Import(module, alias)),
     <l:@L> import native <header:string> <lib:string> <alias:AliasRule?> semicolon <r:@R> => AstNode::new(l..r, AstNodeType::ImportNative(header, lib, alias)),
 };
 
+/// Any statement, meaning if, while, for, anything non returnable like function definitions, struct definitions and assignments. Additionally Returnable statements with semicolon
 Statement: AstNode = {
     NonReturnable,
     //Returnable,
@@ -96,22 +100,19 @@ Statement: AstNode = {
     For,
 };
 
-// Comment: () = {
-//     r"//[^\n]*" => (),
-// }
-// nonreturnable: loops, assignments, funcdef, structdef
-// returnable: comparison, funccall, math, logic, symbols, constants
-
+/// Anything that may return a value, but with a trailing semicolon
 ReturnableStatement: AstNode = {
     <Returnable> semicolon,
 
 }
 
+/// Anything returnable, like function calls, symbols (return themselves) and primities
 Returnable: AstNode = {
     Logic,
 };
 
 
+/// Any logic operation, i.e. a && b || c
 Logic: AstNode = {
     #[precedence(level="0")]
     Comparison,
@@ -121,6 +122,7 @@ Logic: AstNode = {
     <l:@L> <a:Logic> or <b:Logic> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Or, Box::new(b))),
 }
 
+/// Any comparison like a == b , b < c
 Comparison: AstNode = {
     #[precedence(level="0")]
     Math,
@@ -133,13 +135,14 @@ Comparison: AstNode = {
     <l: @L> <a:Comparison> greater_equals <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::GreaterThanEquals, Box::new(b))),
 }
 
+/// Any math operation like a + b * c, additionally, unary operators like !a und -a are supported here
 Math: AstNode = {
     #[precedence(level="0")]
     Term,
-    #[precedence(level="1")] #[assoc(side="right")]
+    #[precedence(level="1")] #[assoc(side="right")] // Unary
     <l:@L> exclamation_mark <m:Math> <r:@R> => AstNode::new(l..r, AstNodeType::PrefixCall(PrefixOperator::Not, Box::new(m))),
     <l:@L> minus <m:Math> <r:@R> => AstNode::new(l..r, AstNodeType::PrefixCall(PrefixOperator::Negate, Box::new(m))),
-    #[precedence(level="2")] #[assoc(side="left")]
+    #[precedence(level="2")] #[assoc(side="left")] // Infix
     <l:@L> <a:Math> asterisk <b:Math> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Multiply, Box::new(b))),
     <l:@L> <a:Math> slash <b:Math> <r:@R> =>    AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Divide, Box::new(b))),
     <l:@L> <a:Math> modulo <b:Math> <r:@R> =>   AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Modulo, Box::new(b))),
@@ -148,9 +151,8 @@ Math: AstNode = {
     <l:@L> <a:Math> minus <b:Math> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Minus, Box::new(b))),
 }
 
-// if -a {
-// }
 
+/// Anything that is returnable. Is used in all logic and math rules
 Term: AstNode = {
     Primitive,
     <l:@L> <s:id> <r:@R> => AstNode::new(l..r, AstNodeType::Symbol(s)),
@@ -162,20 +164,24 @@ Term: AstNode = {
     ResultCreate,
 }
 
+/// Creates some(v) or none as an option
 OptionCreate: AstNode = {
     <l:@L> none_term <r:@R> => AstNode::new(l..r, AstNodeType::Option(None)),
     <l:@L> some_term l_paren <v:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Option(Some(Box::new(v)))),
 }
 
+/// Creates ok(v) or err(v) as a result
 ResultCreate: AstNode = {
     <l:@L> err_term l_paren <e:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Result(Err(Box::new(e)))),
     <l:@L> ok_term l_paren <v:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Result(Ok(Box::new(v)))),
 }
 
+/// Creates [a,b,c, ...] as a list ([] also supported)
 ListCreate: AstNode = {
     <l:@L> l_bracket <elems:Comma<Returnable>> r_bracket <r:@R> => AstNode::new(l..r, AstNodeType::List(elems.into_iter().map(|e| Box::new(e)).collect::<Vec<_>>()))
 }
 
+/// Creates {a -> b, b -> c} as a map
 MapElem: (Box<AstNode>, Box<AstNode>) = {
     <a:Returnable> right_arrow <b:Returnable> => (Box::new(a), Box::new(b)),
 }
@@ -184,11 +190,27 @@ MapCreate: AstNode = {
     <l:@L> l_brace <mapped:Comma<MapElem>> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::Map(mapped)),
 }
 
+/// Creates s {a: 10, b: ""} as a struct. Nested structs are also supported
+StructCreate: AstNode = {
+    <l:@L> <sname:id> l_brace <p:StructAssignmentList> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::StructInitializer{name: sname, values: p})
+}
+
+StructAssignmentList: Vec<(Symbol, Box<AstNode>)> = {
+    <p:StructParamRule> <n:FurtherStructAssignment> => vec![p].into_iter().chain(n).collect::<Vec<_>>(),
+}
+
+FurtherStructAssignment: Vec<(Symbol, Box<AstNode>)> = {
+    comma <StructAssignmentList>,
+    comma => vec![],
+}
+
+
+/// Defines any function
 FunctionDefinition: AstNode = {
     <l:@L> fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body}),
 }
 
-
+/// call any function or method, using chained member access, i.e. a.b().c.d()
 Call: AstNode = {
     <l:@L> <function_name:id> l_paren <params:Comma<Returnable>> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::FunctionCall{function_name,  params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()}),
     <l:@L> <caller:id> <ma:MemberAccess> <r:@R> => AstNode::new(l..r, AstNodeType::MemberCall{parent: caller, calls: ma}),
@@ -213,15 +235,16 @@ MemberAccess: Vec<MemberAccess> = { //a.b.c().e
         },
 }
 
+/// Any struct definition s {a: float, b: int, fn abc() {} }
 StructDefinition: AstNode = {
     <l:@L> struct_term <name:id> l_brace <body:StructBlock> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef{typename: name, typedef: AstTypeDefinition::Struct(body.attributes), execution_body: body.functions}),
 }
 
+/// Anything that may not return, i.e. struct and function definitions, inclusive assignments
 NonReturnable: AstNode = {
     <AssignmentOrDeclaration> semicolon,
     FunctionDefinition,
     StructDefinition,
-    //return <a:Returnable> => AstNode::ReturnStatement{return_value: Box::new(a)} semicolon,
 }
 
 
@@ -247,16 +270,19 @@ For: AstNode = {
 }
 
 
+/// Special rule for any returnable or if. For assignments, if may return a value, hence it is returnable for a single rule context
 ReturnableOrIf: AstNode = {
     Returnable,
     If,
 }
 
+/// let a = b; or a := b;
 Declaration: AstNode = {
     <l:@L> <s:id> declare <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None}),
     <l:@L> let_term <st:TypeParamRule> assign <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)}),
 }
 
+/// a = b; also a += b; a -= b; etc.
 Assignment: AstNode = {
     <l:@L> <s:id> assign     <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)}),
     <l:@L> <s:id> assign_add <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)}),
@@ -271,21 +297,13 @@ AssignmentOrDeclaration = {
     Assignment,
 }
 
+/// Any block of a list of statements, primarily used in functions, loops and if branches
 Block: Vec<Box<AstNode>> = {
     <s:Statement*> => s.into_iter().map(|s| Box::new(s)).collect::<Vec<_>>(),
 }
 
 
-
-// struct t {
-// a: float,
-//
-// fn c() {
-// }
-//
-// b: String,
-// }
-
+/// A block specifically for struct definitions
 StructBlock: StructBody = {
     <func:FunctionDefinition> <body:StructBlock?> => if let Some(body) = body {
         StructBody {functions: body.functions.into_iter().chain(vec![Box::new(func)]).collect::<Vec<_>>(), attributes: body.attributes}
@@ -305,6 +323,7 @@ FurtherStructBlock: Option<StructBody> = {
 }
 
 
+/// a Type definition. Can be weak. Is only combined within the returnTypeRule. 
 ReturnType: TypeSymbol = {
     #[precedence(level="0")]
     <t:id> => TypeSymbol::strong(TypeSymbolType::Symbol(t)),
@@ -318,12 +337,19 @@ ReturnType: TypeSymbol = {
 }
 
 
+/// Any return type
 ReturnTypeRule: TypeSymbol = {
     colon <t:ReturnType> => t,
+    self_term => TypeSymbol::strong(TypeSymbolType::SelfType),
+    weak_term self_term => TypeSymbol::weak(TypeSymbolType::SelfType),
 }
 
 TypeParamRule: (Symbol, TypeSymbol) = {
     id ReturnTypeRule,
+}
+
+StructParamRule: (Symbol, Box<AstNode>) = {
+    <n:id> colon <v:Returnable> => (n, Box::new(v))
 }
 
 AliasRule: Alias = {
@@ -331,11 +357,6 @@ AliasRule: Alias = {
 }
 
 Primitive: AstNode = {
-    // INT => AstNode::Int(<>),
-    // FLOAT => AstNode::Float(<>),
-    // STRING => AstNode::String(<>),
-    // BOOLTRUE => AstNode::Bool(<>),
-    // BOOLFALSE => AstNode::Bool(<>)
     <l:@L> <i:int>     <r:@R> => AstNode::new(l..r, AstNodeType::Int(i)),
     <l:@L> <f:float>   <r:@R> => AstNode::new(l..r, AstNodeType::Float(f)),
     <l:@L> <s:string>  <r:@R> => AstNode::new(l..r, AstNodeType::String(s)),
@@ -347,240 +368,26 @@ Bool: bool = {
     bool_false => false,
 }
 
-// int: i64 = {
-//     INT => int(<>)
-//     //r"[0-9]+" => i64::from_str(<>).unwrap()
-// };
-// float: f64 = {
-//     FLOAT => float(<>)
-//     //r"[0-9]+\.[0-9]+" => f64::from_str(<>).unwrap()
-// };
-// bool_true: bool = {
-//     BOOLTRUE => true
-//     //"true" => true
-// };
-// bool_false: bool = {
-//     BOOLFALSE => false
-//     //"false" => false
-// };
-
-// string: String = {
-//     STRING => <>
-//     // https://stackoverflow.com/a/47214303
-
-// };
-
-// id: String = {
-//     ID => <>
-
-// };
 
 // Datatypes
 int: i64 = {
-    //INT => <>
     INT => i64::from_str(<>).unwrap()
 }
 float: f64 = {
-    //FLOAT => <>
     FLOAT => f64::from_str(<>).unwrap()
 }
 bool_true: bool = {
-    //BOOL => <>
     BOOLTRUE => true
 }
 bool_false: bool = {
-    //BOOL => <>
     BOOLFALSE => false
 }
 
 string: String = {
-    //STRING => <>
-    // https://stackoverflow.com/a/47214303
     <s:STRING> => apply_string_escapes(&s[1..s.len()-1]),
 }
 
 id: String = {
-    //ID => <>
     <s:ID> => s.to_owned()
 }
 
-// //Terminal Symbols
-// l_paren: () = {
-//     "(" => ()
-// };
-// r_paren: () = {
-//     ")" => ()
-// };
-// l_bracket: () = {
-//     "[" => ()
-// };
-// r_bracket: ()= {
-//     "]" => ()
-// };
-// l_brace: () = {
-//     "{" => ()
-// };
-// r_brace: ()= {
-//     "}" => ()
-// };
-// l_angle: () = {
-//     "<" => ()
-// };
-// r_angle: ()= {
-//     ">" => ()
-// };
-// plus: () = {
-//     "+" => ()
-// };
-// minus: () = {
-//     "-" => ()
-// };
-// asterisk: () = {
-//     "*" => ()
-// };
-// slash: () = {
-//     "/" => ()
-// };
-// modulo: () = {
-//     "%" => ()
-// };
-// less_equals: () = {
-//     "<=" => ()
-// };
-// greater_equals: () = {
-//     ">=" => ()
-// };
-// equals: () = {
-//     "==" => ()
-// };
-// not_equals: () = {
-//     "!=" => ()
-// };
-// assign: () = {
-//     "=" => ()
-// };
-// assign_add: () = {
-//     "+=" => ()
-// };
-// assign_sub: () = {
-//     "-=" => ()
-// };
-// assign_mul: () = {
-//     "*=" => ()
-// };
-// assign_div: () = {
-//     "/=" => ()
-// };
-// assign_mod: () = {
-//     "%=" => ()
-// };
-// declare: () = {
-//     ":=" => ()
-// };
-// slash_term: () = {
-//     "/" => ()
-// };
-// and: () = {
-//     "&&" => ()
-// }
-// or: () = {
-//     "||" => ()
-// }
-// right_arrow: () = {
-//     "->" => ()
-// };
-// fn_term: () = {
-//     "fn" => ()
-// };
-// struct_term: () = {
-//     "struct" => ()
-// }
-// let_term: () = {
-//     "let" => ()
-// };
-// while_term: () = {
-//     "while" => ()
-// };
-// for_term: () = {
-//     "for" => ()
-// };
-// in_term: () = {
-//     "in" => ()
-// }
-// if_term: () = {
-//     "if" => ()
-// };
-// else_term: () = {
-//     "else" => ()
-// };
-// return: () = {
-//     "return" => ()
-// };
-// with: () = {
-//     "with" => ()
-// };
-// default: () = {
-//     "default" => ()
-// };
-// import: () = {
-//     "import" => ()
-// };
-// native: () = {
-//     "native" => ()
-// };
-// as_term: () = {
-//     "as" => ()
-// };
-// ffi: () = {
-//     "ffi" => ()
-// };
-// arrow: () = {
-//     "->" => ()
-// };
-// semicolon: () = {
-//     ";" => ()
-// };
-// colon: () = {
-//     ":" => ()
-// };
-// dot: () = {
-//     "." => ()
-// }
-// comma: () = {
-//     "," => ()
-// }
-// exclamation_mark: () = {
-//     "!" => ()
-// }
-// weak_term: () = {
-//     "weak" => ()
-// }
-
-
-// pub Expr: Box<Expr> = {
-//     #[precedence(level="0")]
-//     Term,
-//     #[precedence(level="1")] #[assoc(side="left")]
-//     Expr FactorOp Expr => Box::new(Expr::Op(<>)),
-//     #[precedence(level="2")] #[assoc(side="left")]
-//     Expr ExprOp Expr => Box::new(Expr::Op(<>)),
-// };
-//
-// ExprOp: OpCode = {
-//     "+" => OpCode::Add,
-//     "-" => OpCode::Sub,
-// };
-//
-// FactorOp: OpCode = {
-//     "*" => OpCode::Mul,
-//     "/" => OpCode::Div,
-// };
-//
-// Term: Box<Expr> = {
-//     Num => Box::new(Expr::Number(<>)), // (4)
-//     "(" <Expr> ")"
-// };
-//
-// Num: i32 = {
-//     r"[0-9]+" => i32::from_str(<>).unwrap()
-// };

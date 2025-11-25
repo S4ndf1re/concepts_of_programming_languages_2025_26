@@ -15,6 +15,7 @@ pub enum TypeSymbolType {
     Map(Box<TypeSymbol>, Box<TypeSymbol>),
     Option(Box<TypeSymbol>),
     Result(Box<TypeSymbol>, Box<TypeSymbol>),
+    SelfType, // TODO(Jan): add self type as method parameters in struct body
 }
 
 /// The symbol that represents any existing type
@@ -141,6 +142,10 @@ pub enum AstNodeType {
     Map(Vec<(Box<AstNode>, Box<AstNode>)>),
     Option(Option<Box<AstNode>>),
     Result(Result<Box<AstNode>, Box<AstNode>>),
+    StructInitializer {
+        name: Symbol,
+        values: Vec<(Symbol, Box<AstNode>)>,
+    },
     Declaration {
         new_symbol: Symbol,
         expression: Box<AstNode>,
@@ -248,7 +253,6 @@ pub fn apply_string_escapes(s: &str) -> String {
                 result.push('\n');
                 i += 1;
             }
-
 
             result.push('\\');
         } else {
