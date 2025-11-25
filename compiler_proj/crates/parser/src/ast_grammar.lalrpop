@@ -93,7 +93,6 @@ Import: AstNode = {
 /// Any statement, meaning if, while, for, anything non returnable like function definitions, struct definitions and assignments. Additionally Returnable statements with semicolon
 Statement: AstNode = {
     NonReturnable,
-    //Returnable,
     ReturnableStatement,
     If, //Note: das if ist hier nicht zweideutig, wegen dem LR(1)-Lookup von dem Semikolon
     While,
@@ -245,7 +244,8 @@ NonReturnable: AstNode = {
     <AssignmentOrDeclaration> semicolon,
     FunctionDefinition,
     StructDefinition,
-}
+    <l:@L> return <a:Returnable> semicolon <r:@R>=> AstNode::new(l..r, AstNodeType::ReturnStatement{return_value: Box::new(a)}),
+};
 
 
 If: AstNode = {
