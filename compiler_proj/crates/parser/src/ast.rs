@@ -1,5 +1,7 @@
 use std::{fmt::Debug, ops::Range};
 
+use crate::TypeSymbol;
+
 /// Any symbol, that is not a type definition
 pub type Symbol = String;
 
@@ -8,53 +10,11 @@ pub type Header = String;
 pub type Alias = String;
 pub type DyLibName = String;
 
-#[derive(Debug, Clone)]
-pub enum TypeSymbolType {
-    Symbol(Symbol),
-    List(Box<TypeSymbol>),
-    Map(Box<TypeSymbol>, Box<TypeSymbol>),
-    Option(Box<TypeSymbol>),
-    Result(Box<TypeSymbol>, Box<TypeSymbol>),
-    SelfType, // TODO(Jan): add self type as method parameters in struct body
-}
 
-/// The symbol that represents any existing type
-#[derive(Debug, Clone)]
-pub struct TypeSymbol {
-    is_weak: bool,
-    type_of: TypeSymbolType,
-    resolved: bool,
-    inferred: bool,
-}
-
-impl TypeSymbol {
-    pub fn strong(type_of: TypeSymbolType) -> Self {
-        Self {
-            is_weak: false,
-            type_of,
-            resolved: false,
-            inferred: false,
-        }
-    }
-
-    pub fn weak(type_of: TypeSymbolType) -> Self {
-        Self {
-            is_weak: true,
-            type_of,
-            resolved: false,
-            inferred: false,
-        }
-    }
-    pub fn make_weak(mut self) -> Self {
-        self.is_weak = true;
-        self
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Query {}
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum AstTypeDefinition {
     Int,
     Float,
@@ -69,7 +29,7 @@ pub enum AstTypeDefinition {
     Result(TypeSymbol, TypeSymbol),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AssignmentOperations {
     Identity,
     Add,
@@ -79,7 +39,7 @@ pub enum AssignmentOperations {
     Modulo,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InfixOperator {
     // Computation
     Plus,
@@ -99,7 +59,7 @@ pub enum InfixOperator {
     Or,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PrefixOperator {
     Not,    // '!'
     Negate, // '-'
@@ -110,7 +70,7 @@ pub struct StructBody {
     pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MemberAccess {
     //a.c(e,f).d
     pub member: Symbol,
@@ -118,7 +78,7 @@ pub struct MemberAccess {
     pub range: Range<usize>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AstNode {
     pub range: Range<usize>,
     pub type_of: AstNodeType,
@@ -130,7 +90,7 @@ impl AstNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AstNodeType {
     Import(Module, Option<Alias>),
     ImportNative(Header, DyLibName, Option<Alias>),

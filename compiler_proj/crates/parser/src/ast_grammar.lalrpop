@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use crate::ast::*;
+use crate::typed::*;
 
 grammar;
 
@@ -151,10 +152,14 @@ Math: AstNode = {
 }
 
 
+Id: AstNode = {
+    <l:@L> <s:id> <r:@R> => AstNode::new(l..r, AstNodeType::Symbol(s)),
+}
+
 /// Anything that is returnable. Is used in all logic and math rules
 Term: AstNode = {
     Primitive,
-    <l:@L> <s:id> <r:@R> => AstNode::new(l..r, AstNodeType::Symbol(s)),
+    Id,
     l_paren <Returnable> r_paren,
     Call,
     ListCreate,
@@ -191,7 +196,7 @@ MapCreate: AstNode = {
 
 /// Creates s {a: 10, b: ""} as a struct. Nested structs are also supported
 StructCreate: AstNode = {
-    <l:@L> <sname:id> l_brace <p:StructAssignmentList> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::StructInitializer{name: sname, values: p})
+    <l:@L> <sname:id> l_brace <p:StructAssignmentList?> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::StructInitializer{name: sname, values: p.unwrap_or_default()})
 }
 
 StructAssignmentList: Vec<(Symbol, Box<AstNode>)> = {
@@ -244,7 +249,7 @@ NonReturnable: AstNode = {
     <AssignmentOrDeclaration> semicolon,
     FunctionDefinition,
     StructDefinition,
-    <l:@L> return <a:Returnable> semicolon <r:@R>=> AstNode::new(l..r, AstNodeType::ReturnStatement{return_value: Box::new(a)}),
+    <l:@L> return <a:ReturnableOrIfOrStruct> semicolon <r:@R>=> AstNode::new(l..r, AstNodeType::ReturnStatement{return_value: Box::new(a)}),
 };
 
 
@@ -266,11 +271,17 @@ While: AstNode = {
 
 For: AstNode = {
     <l:@L> for_term <s:id> in_term <iter:Returnable> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::ForEach {recipient: s, iterable: Box::new(iter), body}),
-    <l:@L> for_term <d:AssignmentOrDeclaration?> semicolon <cond:Comparison?> semicolon <a:Assignment?> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::For {declaration: d.map(|d| Box::new(d)), condition: cond.map(|cond| Box::new(cond)), assignment: a.map(|a| Box::new(a)), body}),
+    <l:@L> for_term <d:ForAssignmentOrDeclaration?> semicolon <cond:Comparison?> semicolon <a:ForAssignment?> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::For {declaration: d.map(|d| Box::new(d)), condition: cond.map(|cond| Box::new(cond)), assignment: a.map(|a| Box::new(a)), body}),
 }
 
 
 /// Special rule for any returnable or if. For assignments, if may return a value, hence it is returnable for a single rule context
+ReturnableOrIfOrStruct: AstNode = {
+    Returnable,
+    If,
+    StructCreate,
+}
+
 ReturnableOrIf: AstNode = {
     Returnable,
     If,
@@ -278,18 +289,37 @@ ReturnableOrIf: AstNode = {
 
 /// let a = b; or a := b;
 Declaration: AstNode = {
+    <l:@L> <s:id> declare <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None}),
+    <l:@L> let_term <st:TypeParamRule> assign <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)}),
+}
+
+ForDeclaration: AstNode = {
     <l:@L> <s:id> declare <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None}),
     <l:@L> let_term <st:TypeParamRule> assign <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)}),
 }
 
 /// a = b; also a += b; a -= b; etc.
 Assignment: AstNode = {
+    <l:@L> <s:id> assign     <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_add <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_sub <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_mul <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_div <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_mod <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
+}
+
+ForAssignment: AstNode = {
     <l:@L> <s:id> assign     <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)}),
     <l:@L> <s:id> assign_add <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)}),
     <l:@L> <s:id> assign_sub <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
     <l:@L> <s:id> assign_mul <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
     <l:@L> <s:id> assign_div <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)}),
     <l:@L> <s:id> assign_mod <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
+}
+
+ForAssignmentOrDeclaration = {
+    ForDeclaration,
+    ForAssignment,
 }
 
 AssignmentOrDeclaration = {
@@ -349,7 +379,7 @@ TypeParamRule: (Symbol, TypeSymbol) = {
 }
 
 StructParamRule: (Symbol, Box<AstNode>) = {
-    <n:id> colon <v:Returnable> => (n, Box::new(v))
+    <n:id> colon <v:ReturnableOrIfOrStruct> => (n, Box::new(v))
 }
 
 AliasRule: Alias = {
