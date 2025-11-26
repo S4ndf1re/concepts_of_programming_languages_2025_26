@@ -109,7 +109,6 @@ ReturnableStatement: AstNode = {
 /// Anything returnable, like function calls, symbols (return themselves) and primities
 Returnable: AstNode = {
     Logic,
-    <l:@L> weak_term <lo:Logic> <r:@R> => AstNode::new(l..r, AstNodeType::Weak(Box::new(lo))),
 };
 
 
@@ -155,6 +154,7 @@ Math: AstNode = {
 
 Id: AstNode = {
     <l:@L> <s:id> <r:@R> => AstNode::new(l..r, AstNodeType::Symbol(s)),
+    <l:@L> weak_term <s:id> <r:@R> => AstNode::new(l..r, AstNodeType::Weak(Box::new(AstNode::new(l..r, AstNodeType::Symbol(s))))),
 }
 
 /// Anything that is returnable. Is used in all logic and math rules
