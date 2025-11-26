@@ -22,7 +22,7 @@ pub enum Error {
 
 pub struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
-    values: HashMap<Symbol, ActualTypeValue>,
+    values: HashMap<Symbol, ActualTypedValue>,
     types: HashMap<Symbol, TypeSymbol>,
 }
 
@@ -43,7 +43,7 @@ impl Scope {
     pub fn declare_variable(
         &mut self,
         name: Symbol,
-        value: ActualTypeValue,
+        value: ActualTypedValue,
         type_of: TypeSymbol,
         shadow: bool,
     ) -> Result<(), Error> {
@@ -60,14 +60,14 @@ impl Scope {
         Ok(())
     }
 
-    pub fn set_value(&mut self, name: Symbol, value: ActualTypeValue) -> Result<(), Error> {
+    pub fn set_value(&mut self, name: Symbol, value: ActualTypedValue) -> Result<(), Error> {
         // TODO: do type checking here
         self.values.insert(name, value);
 
         Ok(())
     }
 
-    pub fn resolve_value(&self, name: Symbol) -> Option<ActualTypeValue> {
+    pub fn resolve_value(&self, name: Symbol) -> Option<ActualTypedValue> {
         let mut value = self.values.get(&name).cloned();
         if value.is_none()
             && let Some(parent) = &self.parent
@@ -92,21 +92,21 @@ impl Scope {
 
 /// ActualTypeValue only represents the concrete value of a type. The actual type def is defined by
 #[derive(Clone)]
-pub enum ActualTypeValue {
+pub enum ActualTypedValue {
     Int(i64),
     Float(f64),
     String(String),
     Bool(bool),
-    Struct(HashMap<Symbol, Box<ActualTypeValue>>),
-    Option(Option<Box<ActualTypeValue>>),
-    Result(Result<Box<ActualTypeValue>, Box<ActualTypeValue>>),
+    Struct(HashMap<Symbol, Box<ActualTypedValue>>),
+    Option(Option<Box<ActualTypedValue>>),
+    Result(Result<Box<ActualTypedValue>, Box<ActualTypedValue>>),
     Function(Box<AstNode>), // Function contains only an execution body,
     // Reference counted values (everything afaik)
-    Weak(Weak<ActualTypeValue>),
-    Strong(Rc<ActualTypeValue>),
+    Weak(Weak<ActualTypedValue>),
+    Strong(Rc<ActualTypedValue>),
 }
 
-impl ActualTypeValue {}
+impl ActualTypedValue {}
 
 #[derive(Debug, Clone)]
 pub struct FunctionType {
