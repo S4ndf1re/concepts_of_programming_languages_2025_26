@@ -7,9 +7,6 @@ pub use errors::*;
 pub mod interpreter;
 pub use interpreter::*;
 
-pub mod scope;
-pub use scope::*;
-
 pub mod typed;
 pub use typed::*;
 

@@ -2,6 +2,23 @@ use std::fmt::Display;
 
 use annotate_snippets::{AnnotationKind, Level, Patch, Renderer, Snippet, renderer::DecorStyle};
 use lalrpop_util::ParseError;
+use thiserror::Error;
+
+use crate::Symbol;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("variable {0} already declared")]
+    VariableAlreadyDeclared(Symbol),
+    #[error("value {0} and type {1} do not match")]
+    ValueAndTypeDoNotMatch(String, String),
+    #[error("type {0} is already registered")]
+    TypeAlreadyExists(String),
+    #[error("type {0} does not exist")]
+    TypeDoesNotExist(String),
+    #[error("stage error, expected stage {0}, got stage {1}")]
+    StageError(usize, usize),
+}
 
 pub trait BeautifyError: Display {
     fn print_error(&self, source: &str);

@@ -10,3 +10,4 @@ lalrpop = "0.22.2"
 lalrpop-util = { version = "0.22.2", features = ["lexer", "unicode"] }
 annotate-snippets = "0.12.9"
 thiserror = "2.0.17"
+derivative = "2.2.0"
