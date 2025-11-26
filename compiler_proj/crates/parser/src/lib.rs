@@ -1,11 +1,17 @@
 pub mod ast;
 pub use ast::*;
 
-pub mod lexer;
-pub use lexer::*;
-
 pub mod errors;
 pub use errors::*;
+
+pub mod interpreter;
+pub use interpreter::*;
+
+pub mod scope;
+pub use scope::*;
+
+pub mod typed;
+pub use typed::*;
 
 use lalrpop_util::lalrpop_mod;
 
@@ -496,16 +502,17 @@ mod tests {
             )
             .unwrap();
 
-        let expr = ast_grammar::ProgrammParser::new()
+        let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                 return if a == b {
                 };
                     "#,
             )
-            .is_err();
+            .unwrap();
     }
 
+    #[test]
     fn comment_test1() {
         let _expr = ast_grammar::ProgrammParser::new()
             .parse(
@@ -541,6 +548,23 @@ mod tests {
                 let a: B!D = err(10);
                 a := ok(10);
                 b := err(10);
+                    "#;
+        let expr = ast_grammar::ProgrammParser::new().parse(source);
+
+        if let Err(err) = expr {
+            err.print_error(source);
+            panic!("{}", err)
+        }
+    }
+
+    #[test]
+    fn struct_test1() {
+        let source = r#"
+                    a := B {
+                        v: 10,
+                        g: 10.0,
+                        h: C {},
+                    };
                     "#;
         let expr = ast_grammar::ProgrammParser::new().parse(source);
 
