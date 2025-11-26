@@ -11,8 +11,6 @@ pub type Alias = String;
 pub type DyLibName = String;
 
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Query {}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AstTypeDefinition {
@@ -25,7 +23,7 @@ pub enum AstTypeDefinition {
     List(TypeSymbol),
     Map(TypeSymbol, TypeSymbol),
     Function(Vec<(Symbol, TypeSymbol)>, Option<TypeSymbol>),
-    System(Vec<(Symbol, Query)>),
+    System(Vec<Symbol>),
     Option(TypeSymbol),
     Result(TypeSymbol, TypeSymbol),
 }
@@ -74,6 +72,13 @@ pub struct StructBody {
 pub struct ComponentBody {
     pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
+
+// #[derive(Debug,PartialEq, Clone)]
+// pub struct Query {
+//     pub name: String,
+//     pub attributes: Vec<(Symbol)>,
+//     pub reqs: Option<Vec<Box<AstNode>>>,
+// }
 
 #[derive(Debug, Clone)]
 pub struct MemberAccess {
@@ -126,6 +131,12 @@ pub enum AstNodeType {
         typedef: AstTypeDefinition,
         execution_body: Vec<Box<AstNode>>,
     },
+    SystemDef {
+        typename: Symbol,
+        typedef: AstTypeDefinition,
+        queries: Vec<Box<AstNode>>,
+        execution_body: Vec<Box<AstNode>>,
+    },
     FunctionCall {
         function_name: Symbol,
         params: Vec<Box<AstNode>>,
@@ -161,6 +172,10 @@ pub enum AstNodeType {
         return_value: Box<AstNode>,
     },
     Symbol(Symbol),
+    Query{
+        arguments: Vec<Symbol>,
+        reqs: Vec<Box<AstNode>>
+    }
 }
 
 pub enum Expr {

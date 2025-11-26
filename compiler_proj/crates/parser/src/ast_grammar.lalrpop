@@ -44,6 +44,7 @@ match {
     "struct" => struct_term,
     "component" => component_term,
     "system" => system_term,
+    "group" => group_term,
     "let" => let_term,
     "while" => while_term,
     "for" => for_term,
@@ -69,6 +70,10 @@ match {
     "ok" => ok_term,
     "err" => err_term,
     "self" => self_term,
+    "create" => create_term,
+    "querying" => querying_term,
+    "List" => list_term,
+    "Single" => single_term
 }
 
 /// Matches a or 1,...,n meaning any comma separated list
@@ -256,9 +261,41 @@ NonReturnable: AstNode = {
     FunctionDefinition,
     StructDefinition,
     ComponentDefinition,
+    //SystemDefinition,
     <l:@L> return <a:ReturnableOrIfOrStruct> semicolon <r:@R>=> AstNode::new(l..r, AstNodeType::ReturnStatement{return_value: Box::new(a)}),
 };
 
+SystemDefinition: AstNode = {
+    <l:@L> system_term <name:id> l_paren <args:Comma<id>> r_paren querying_term <querys:Comma<SystemQuery>> l_brace <body:Block> <r:@R> =>
+    AstNode::new(l..r,AstNodeType::SystemDef{typename: name, typedef: AstTypeDefinition::System(args), execution_body: body, queries:querys}),
+}
+
+SystemQuery: AstNode = {
+    <qname:id> as_term l_bracket r_bracket with l_brace <args:Comma<id>> r_brace modulo l_brace <requires:Comma<QueryRequirement>> r_brace 
+    => (qname, Query{arguments:args, reqs:requires})
+    // <attr:TypeParamRule> <body:FurtherComponentBlock?> => if let Some(body) = body.flatten() {
+    //     ComponentBody {attributes: body.attributes.into_iter().chain(vec![attr]).collect::<Vec<_>>()}
+    // } else {
+    //     ComponentBody {attributes: vec![attr]}
+    // },
+}
+
+QueryRequirement: AstNode = {
+    #[precedence(level="0")]
+    QueryTerm,
+    #[precedence(level="1")] #[assoc(side="left")]
+    <l:@L> <a:QueryRequirement> and <b:QueryRequirement> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::And, Box::new(b))),
+    #[precedence(level="2")] #[assoc(side="left")]
+    <l:@L> <a:QueryRequirement> or <b:QueryRequirement> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Or, Box::new(b))),
+} 
+
+QueryTerm: AstNode = {
+    Id,
+    l_paren QueryTerm r_paren,
+}
+
+
+// <l:@L> fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body}),
 
 If: AstNode = {
     <l:@L> if_term <cond:Comparison> l_brace <body:Block> r_brace <elif:ElseIf*> <el:Else?> <r:@R> => AstNode::new(l..r, AstNodeType::Branch {cond: Box::new(cond), body, else_if_branches: elif, else_branch: el}),
