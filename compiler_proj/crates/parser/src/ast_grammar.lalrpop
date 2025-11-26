@@ -216,7 +216,7 @@ FunctionDefinition: AstNode = {
 
 /// call any function or method, using chained member access, i.e. a.b().c.d()
 Call: AstNode = {
-    <l:@L> <function_name:id> l_paren <params:Comma<Returnable>> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::FunctionCall{function_name,  params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()}),
+    <l:@L> <function_name:id> l_paren <params:Comma<ReturnableOrIfOrStruct>> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::FunctionCall{function_name,  params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()}),
     <l:@L> <caller:id> <ma:MemberAccess> <r:@R> => AstNode::new(l..r, AstNodeType::MemberCall{parent: caller, calls: ma}),
     // <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
 }
@@ -230,7 +230,7 @@ MemberAccess: Vec<MemberAccess> = { //a.b.c().e
             }
             v
         },
-    <l:@L> dot <name:id> l_paren <params:Comma<Returnable>> r_paren <r:@R> <member_access:MemberAccess?> => {
+    <l:@L> dot <name:id> l_paren <params:Comma<ReturnableOrIfOrStruct>> r_paren <r:@R> <member_access:MemberAccess?> => {
             let mut v = vec![MemberAccess{member: name, params: Some(params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()), range: l..r}];
             if let Some(ma) = member_access {
                 v = v.into_iter().chain(ma).collect::<Vec<_>>();
