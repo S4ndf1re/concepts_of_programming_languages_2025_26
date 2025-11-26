@@ -291,6 +291,35 @@ mod tests {
             .unwrap();
     }
 
+        #[test]
+    fn components1() {
+        let _expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                        component A {
+                            a: float,
+                            c: String
+                        }
+                            "#,
+            )
+            .unwrap();
+    }
+
+    fn components2() {
+        let _expr = ast_grammar::ProgrammParser::new()
+            .parse(
+                r#"
+                        component A {
+                            a: float,
+                            fn my_function_name(a: int, b: string, c: MyStruct): float {
+                            }
+                            c: String,
+                        }
+                            "#,
+            );
+            assert!(_expr.is_err());
+    }
+
     #[test]
     fn math1() {
         let _expr = ast_grammar::ProgrammParser::new()

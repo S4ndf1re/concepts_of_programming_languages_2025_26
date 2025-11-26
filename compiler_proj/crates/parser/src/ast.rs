@@ -60,6 +60,7 @@ pub enum AstTypeDefinition {
     String,
     Bool,
     Struct(Vec<(Symbol, TypeSymbol)>),
+    Component(Vec<(Symbol, TypeSymbol)>),
     List(TypeSymbol),
     Map(TypeSymbol, TypeSymbol),
     Function(Vec<(Symbol, TypeSymbol)>, Option<TypeSymbol>),
@@ -106,6 +107,10 @@ pub enum PrefixOperator {
 
 pub struct StructBody {
     pub functions: Vec<Box<AstNode>>,
+    pub attributes: Vec<(Symbol, TypeSymbol)>,
+}
+
+pub struct ComponentBody {
     pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
 

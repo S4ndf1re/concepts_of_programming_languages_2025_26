@@ -41,6 +41,8 @@ match {
     "->" => right_arrow,
     "fn" => fn_term,
     "struct" => struct_term,
+    "component" => component_term,
+    "system" => system_term,
     "let" => let_term,
     "while" => while_term,
     "for" => for_term,
@@ -216,10 +218,15 @@ StructDefinition: AstNode = {
     <l:@L> struct_term <name:id> l_brace <body:StructBlock> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef{typename: name, typedef: AstTypeDefinition::Struct(body.attributes), execution_body: body.functions}),
 }
 
+ComponentDefinition: AstNode = {
+    <l:@L> component_term <name:id> l_brace <body:ComponentBlock> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef{typename: name, typedef: AstTypeDefinition::Component(body.attributes), execution_body: Vec::new()}),
+}
+
 NonReturnable: AstNode = {
     <AssignmentOrDeclaration> semicolon,
     FunctionDefinition,
     StructDefinition,
+    ComponentDefinition,
     <l:@L> return <a:Returnable> semicolon <r:@R>=> AstNode::new(l..r, AstNodeType::ReturnStatement{return_value: Box::new(a)}),
 };
 
@@ -300,6 +307,19 @@ StructBlock: StructBody = {
 
 FurtherStructBlock: Option<StructBody> = {
     comma <StructBlock> => Some(<>),
+    comma => None,
+}
+
+ComponentBlock: ComponentBody = {
+    <attr:TypeParamRule> <body:FurtherComponentBlock?> => if let Some(body) = body.flatten() {
+        ComponentBody {attributes: body.attributes.into_iter().chain(vec![attr]).collect::<Vec<_>>()}
+    } else {
+        ComponentBody {attributes: vec![attr]}
+    },
+}
+
+FurtherComponentBlock: Option<ComponentBody> = {
+    comma <ComponentBlock> => Some(<>),
     comma => None,
 }
 
