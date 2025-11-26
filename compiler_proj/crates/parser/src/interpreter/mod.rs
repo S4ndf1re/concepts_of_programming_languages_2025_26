@@ -1,6 +1,11 @@
+pub mod stage;
+pub use stage::*;
+
+pub mod preprocessor;
+pub use preprocessor::*;
+
 pub mod interpreter;
 pub use interpreter::*;
-
 
 #[cfg(test)]
 mod tests {

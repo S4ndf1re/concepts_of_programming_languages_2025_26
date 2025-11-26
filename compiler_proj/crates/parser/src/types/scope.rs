@@ -18,6 +18,14 @@ impl Scope {
             defined_types: HashMap::new(),
         }
     }
+    pub fn new_parented(parent: Rc<RefCell<Scope>>) -> Self {
+        Self {
+            parent: Some(parent),
+            values: HashMap::new(),
+            types_for_variable: HashMap::new(),
+            defined_types: HashMap::new(),
+        }
+    }
 
     pub fn declare_type(
         &mut self,
@@ -167,8 +175,8 @@ impl Scope {
     }
 
     /// resolve value of a variable
-    pub fn resolve_value(&self, name: Symbol) -> Option<InterpreterValue> {
-        let mut value = self.values.get(&name).cloned();
+    pub fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
+        let mut value = self.values.get(name).cloned();
         if value.is_none()
             && let Some(parent) = &self.parent
         {
