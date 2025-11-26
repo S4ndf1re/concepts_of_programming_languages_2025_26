@@ -1,6 +1,5 @@
 use crate::{
-    ActualTypedValue, AstNode, AstNodeType, AstTypeDefinition, Error, FunctionType, StructType,
-    TypeSymbol, TypeSymbolType, typed::Scope,
+    AstNode, AstNodeType, AstTypeDefinition, Error, FunctionType, InterpreterValue, Scope, StructType, TypeSymbol, TypeSymbolType
 };
 
 pub enum StageResult {
@@ -45,10 +44,26 @@ impl Stage for Preprocessor {
         }
 
         let scope = &mut self.global_scope;
-        scope.declare_type("int".to_owned(), TypeSymbol::strong(TypeSymbolType::Int), false)?;
-        scope.declare_type("float".to_owned(), TypeSymbol::strong(TypeSymbolType::Float), false)?;
-        scope.declare_type("bool".to_owned(), TypeSymbol::strong(TypeSymbolType::Bool), false)?;
-        scope.declare_type("string".to_owned(), TypeSymbol::strong(TypeSymbolType::String), false)?;
+        scope.declare_type(
+            "int".to_owned(),
+            TypeSymbol::strong(TypeSymbolType::Int),
+            false,
+        )?;
+        scope.declare_type(
+            "float".to_owned(),
+            TypeSymbol::strong(TypeSymbolType::Float),
+            false,
+        )?;
+        scope.declare_type(
+            "bool".to_owned(),
+            TypeSymbol::strong(TypeSymbolType::Bool),
+            false,
+        )?;
+        scope.declare_type(
+            "string".to_owned(),
+            TypeSymbol::strong(TypeSymbolType::String),
+            false,
+        )?;
 
         Ok(())
     }
@@ -65,7 +80,7 @@ impl Stage for Preprocessor {
                 } => {
                     match typedef {
                         AstTypeDefinition::Function(params, return_type) => {
-                            let fun = ActualTypedValue::Function;
+                            let fun = InterpreterValue::Function;
                             let fun_type =
                                 TypeSymbol::strong(TypeSymbolType::Function(FunctionType {
                                     name: typename.clone(),
@@ -125,32 +140,5 @@ impl Stage for Preprocessor {
             self.global_scope.check_all_types_after_pre_resolve()?,
             other_nodes,
         ))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{BeautifyError, Preprocessor, Stage, StageResult, ast_grammar};
-
-    #[test]
-    fn test_preprocessing() {
-        let source = r#"fn abc(a: B, c: int, d: float) {}
-                                struct B {
-                                    a: float,
-                                }
-                        "#;
-        let expr = ast_grammar::ProgrammParser::new().parse(source);
-
-        if let Err(expr) = expr {
-            expr.panic_error(source);
-        } else {
-            let expr = expr.unwrap();
-
-            let s0 = StageResult::Stage0(expr);
-
-            let mut processor = Preprocessor::new().unwrap();
-            processor.init(s0).unwrap();
-            processor.run().unwrap();
-        }
     }
 }

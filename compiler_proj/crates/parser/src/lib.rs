@@ -7,8 +7,8 @@ pub use errors::*;
 pub mod interpreter;
 pub use interpreter::*;
 
-pub mod typed;
-pub use typed::*;
+pub mod types;
+pub use types::*;
 
 use lalrpop_util::lalrpop_mod;
 

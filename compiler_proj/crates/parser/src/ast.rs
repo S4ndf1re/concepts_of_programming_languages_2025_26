@@ -156,6 +156,7 @@ pub enum AstNodeType {
         return_value: Box<AstNode>,
     },
     Symbol(Symbol),
+    Weak(Box<AstNode>),
 }
 
 pub enum Expr {

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use crate::ast::*;
-use crate::typed::*;
+use crate::types::type_symbol::*;
 
 grammar;
 
@@ -85,7 +85,7 @@ pub Programm: Vec<AstNode> = {
     <imports:Import*> <statements:Statement*> => imports.into_iter().chain(statements).collect::<Vec<AstNode>>()
 };
 
-/// Any import, i.e. native ffi import and normal 
+/// Any import, i.e. native ffi import and normal
 Import: AstNode = {
     <l:@L> import <module:id> <alias:AliasRule?> semicolon <r:@R> => AstNode::new(l..r, AstNodeType::Import(module, alias)),
     <l:@L> import native <header:string> <lib:string> <alias:AliasRule?> semicolon <r:@R> => AstNode::new(l..r, AstNodeType::ImportNative(header, lib, alias)),
@@ -109,6 +109,7 @@ ReturnableStatement: AstNode = {
 /// Anything returnable, like function calls, symbols (return themselves) and primities
 Returnable: AstNode = {
     Logic,
+    <l:@L> weak_term <lo:Logic> <r:@R> => AstNode::new(l..r, AstNodeType::Weak(Box::new(lo))),
 };
 
 
@@ -353,7 +354,7 @@ FurtherStructBlock: Option<StructBody> = {
 }
 
 
-/// a Type definition. Can be weak. Is only combined within the returnTypeRule. 
+/// a Type definition. Can be weak. Is only combined within the returnTypeRule.
 ReturnType: TypeSymbol = {
     #[precedence(level="0")]
     <t:id> => TypeSymbol::strong(TypeSymbolType::Symbol(t)),
@@ -420,4 +421,3 @@ string: String = {
 id: String = {
     <s:ID> => s.to_owned()
 }
-

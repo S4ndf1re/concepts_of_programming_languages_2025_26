@@ -1,21 +1,10 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    fmt::Display,
-    hash::Hash,
-    iter::zip,
-    rc::{Rc, Weak},
-};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use derivative::Derivative;
-
-use crate::{AstNode, Error, Symbol};
-
-// TODO: type lookup by symbol
+use crate::{Error, FunctionType, InterpreterValue, StructType, Symbol, TypeSymbol, TypeSymbolType};
 
 pub struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
-    values: HashMap<Symbol, ActualTypedValue>,
+    values: HashMap<Symbol, InterpreterValue>,
     types_for_variable: HashMap<Symbol, TypeSymbol>,
     defined_types: HashMap<Symbol, TypeSymbol>,
 }
@@ -136,7 +125,7 @@ impl Scope {
     pub fn declare_variable(
         &mut self,
         name: Symbol,
-        value: ActualTypedValue,
+        value: InterpreterValue,
         mut type_of: TypeSymbol,
         shadow: bool,
         pre_resolve: bool,
@@ -162,7 +151,7 @@ impl Scope {
     pub fn declare_function(
         &mut self,
         name: Symbol,
-        value: ActualTypedValue,
+        value: InterpreterValue,
         type_of: TypeSymbol,
         shadow: bool,
         pre_resolve: bool,
@@ -170,7 +159,7 @@ impl Scope {
         self.declare_variable(name, value, type_of, shadow, pre_resolve)
     }
 
-    pub fn set_value(&mut self, name: Symbol, value: ActualTypedValue) -> Result<(), Error> {
+    pub fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<(), Error> {
         // TODO: do type checking here
         self.values.insert(name, value);
 
@@ -178,7 +167,7 @@ impl Scope {
     }
 
     /// resolve value of a variable
-    pub fn resolve_value(&self, name: Symbol) -> Option<ActualTypedValue> {
+    pub fn resolve_value(&self, name: Symbol) -> Option<InterpreterValue> {
         let mut value = self.values.get(&name).cloned();
         if value.is_none()
             && let Some(parent) = &self.parent
@@ -230,230 +219,5 @@ impl Scope {
         self.defined_types = new_defined_types;
         self.types_for_variable = new_variable_types;
         Ok(self)
-    }
-}
-
-/// ActualTypeValue only represents the concrete value of a type. The actual type def is defined by
-#[derive(Clone)]
-pub enum ActualTypedValue {
-    Int(i64),
-    Float(f64),
-    String(String),
-    Bool(bool),
-    Struct(HashMap<Symbol, Box<ActualTypedValue>>),
-    Option(Option<Box<ActualTypedValue>>),
-    Result(Result<Box<ActualTypedValue>, Box<ActualTypedValue>>),
-    Function, // Functions execution body is contained in its type definition,
-    // Reference counted values (everything afaik)
-    Weak(Weak<ActualTypedValue>),
-    Strong(Rc<ActualTypedValue>),
-}
-
-impl ActualTypedValue {}
-
-#[derive(Derivative)]
-#[derivative(Debug, Clone, Hash, Eq)]
-pub struct FunctionType {
-    pub name: Symbol,
-    pub params: Vec<(Symbol, TypeSymbol)>,
-    pub return_type: Option<Box<TypeSymbol>>,
-    #[derivative(Hash = "ignore")]
-    pub execution_body: Vec<Box<AstNode>>,
-}
-
-impl PartialEq for FunctionType {
-    fn eq(&self, other: &Self) -> bool {
-        let mut equals = true;
-
-        for (p1, p2) in zip(&self.params, &other.params) {
-            equals = equals && p1.1 == p2.1;
-        }
-
-        equals = equals && self.return_type == other.return_type;
-
-        equals
-    }
-}
-
-impl Display for FunctionType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(ret) = &self.return_type {
-            write!(
-                f,
-                "fn {}({}): {}",
-                self.name,
-                self.params
-                    .iter()
-                    .map(|p| format!("{}: {}", p.0, p.1))
-                    .collect::<Vec<String>>()
-                    .join(", "),
-                ret,
-            )
-        } else {
-            write!(
-                f,
-                "fn {}({})",
-                self.name,
-                self.params
-                    .iter()
-                    .map(|p| format!("{}: {}", p.0, p.1))
-                    .collect::<Vec<String>>()
-                    .join(", "),
-            )
-        }
-    }
-}
-
-#[derive(Debug, Clone, Hash, Eq)]
-pub struct StructType {
-    pub name: Symbol,
-    pub fields: Vec<(Symbol, TypeSymbol)>,
-    // Methods are assumed to start with "self"
-    pub methods: Vec<(Symbol, FunctionType)>,
-    pub statics: Vec<(Symbol, FunctionType)>,
-}
-
-impl PartialEq for StructType {
-    fn eq(&self, other: &Self) -> bool {
-        if self.name != other.name {
-            return false;
-        }
-
-        for (p1, p2) in zip(&self.fields, &other.fields) {
-            if p1.1 != p2.1 || p1.0 != p2.0 {
-                return false;
-            }
-        }
-
-        for (p1, p2) in zip(&self.methods, &other.methods) {
-            if p1.1 != p2.1 || p1.0 != p2.0 {
-                return false;
-            }
-        }
-
-        for (p1, p2) in zip(&self.statics, &other.statics) {
-            if p1.1 != p2.1 || p1.0 != p2.0 {
-                return false;
-            }
-        }
-
-        true
-    }
-}
-
-impl Display for StructType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "struct {} {{", self.name)?;
-        for field in &self.fields {
-            write!(f, "{}: {},", field.0, field.1)?;
-        }
-
-        for function in &self.methods {
-            write!(f, "{}: {},", function.0, function.1)?;
-        }
-        for function in &self.statics {
-            write!(f, "{}: {},", function.0, function.1)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TypeSymbolType {
-    Int,
-    Float,
-    Bool,
-    String,
-    Symbol(Symbol),
-    List(Box<TypeSymbol>),
-    Map(Box<TypeSymbol>, Box<TypeSymbol>),
-    Option(Box<TypeSymbol>),
-    Result(Box<TypeSymbol>, Box<TypeSymbol>),
-    Struct(StructType),
-    Function(FunctionType),
-    SelfType,
-}
-
-impl Display for TypeSymbolType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Int => write!(f, "int"),
-            Self::Float => write!(f, "float"),
-            Self::String => write!(f, "string"),
-            Self::Bool => write!(f, "bool"),
-            Self::Symbol(s) => write!(f, "{}", s),
-            Self::List(s) => write!(f, "[{}]", s),
-            Self::Map(k, v) => write!(f, "{{{} -> {}}}", k, v),
-            Self::Option(v) => write!(f, "{}?", v),
-            Self::Result(v, e) => write!(f, "{}!{}", v, e),
-            Self::Struct(s) => write!(f, "{}", s),
-            Self::Function(v) => write!(f, "{}", v),
-            Self::SelfType => write!(f, "self"),
-        }
-    }
-}
-
-// let a: weak int = 10;
-// TypeSymbol {
-// is_weak: true,
-// type_of: TypeSymbolType::Symbol(int),
-// }
-
-/// The symbol that represents any existing type
-#[derive(Debug, Clone, Hash, Eq)]
-pub struct TypeSymbol {
-    pub is_weak: bool,
-    pub type_of: TypeSymbolType,
-    pub resolved: bool,
-    pub inferred: bool,
-}
-
-impl TypeSymbol {
-    pub fn strong(type_of: TypeSymbolType) -> Self {
-        Self {
-            is_weak: false,
-            type_of,
-            resolved: false,
-            inferred: false,
-        }
-    }
-
-    pub fn weak(type_of: TypeSymbolType) -> Self {
-        Self {
-            is_weak: true,
-            type_of,
-            resolved: false,
-            inferred: false,
-        }
-    }
-    pub fn make_weak(mut self) -> Self {
-        self.is_weak = true;
-        self
-    }
-
-    pub fn mark_as_unresolved(&mut self) {
-        self.resolved = false;
-    }
-
-    pub fn mark_as_resolved(&mut self) {
-        self.resolved = true;
-    }
-}
-
-impl PartialEq for TypeSymbol {
-    fn eq(&self, other: &Self) -> bool {
-        self.is_weak == other.is_weak && self.type_of == other.type_of
-    }
-}
-
-impl Display for TypeSymbol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.is_weak {
-            write!(f, "weak ")?;
-        }
-
-        write!(f, "{}", self.type_of)?;
-
-        Ok(())
     }
 }
