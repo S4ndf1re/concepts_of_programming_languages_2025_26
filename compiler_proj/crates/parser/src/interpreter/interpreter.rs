@@ -419,4 +419,30 @@ mod tests {
 
         let _ = run_stages(stages, state).unwrap();
     }
+
+    #[test]
+    fn function_definition_and_returning() {
+        let source = r#"
+
+           fn test(a: int): int {
+            return a + 10;
+           }
+
+           fn main() {
+            a := 10;
+            println(test(a));
+           }
+           "#;
+
+        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+
+        let stages = vec![
+            Stages::Preprocessor(Preprocessor::new().unwrap()),
+            Stages::Interpreter(Interpreter::new("main".to_string())),
+        ];
+
+        let state = StageResult::Stage0(ast);
+
+        let _ = run_stages(stages, state).unwrap();
+    }
 }
