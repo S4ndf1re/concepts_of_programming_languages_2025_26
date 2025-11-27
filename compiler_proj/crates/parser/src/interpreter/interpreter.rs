@@ -6,6 +6,24 @@ use crate::{
     TypeSymbolType,
 };
 
+macro_rules! scoped {
+    ($s:ident, $inner:block) => {{
+        $s.push_scope();
+        let ret = { $inner };
+        $s.pop_scope();
+        ret
+    }};
+}
+
+macro_rules! return_on_return {
+    ($res:expr) => {
+        match $res {
+            IsReturn::Return(_) => return Ok($res),
+            IsReturn::NoReturn(_) => (),
+        }
+    };
+}
+
 pub enum IsReturn {
     NoReturn(InterpreterValue),
     Return(InterpreterValue),
@@ -22,7 +40,7 @@ impl IsReturn {
 
 pub struct Environment {
     scope: Rc<RefCell<Scope>>,
-    fn_signature: Option<TypeSymbol>,
+    // TODO: Add is_in_loop flag for checking returns, alternatively handle this only in preprocessing
 }
 
 pub struct Interpreter {
@@ -48,6 +66,16 @@ impl Interpreter {
                 .expect("must be present, or init was not called yet")
                 .scope,
         )
+    }
+
+    pub fn push_scope(&mut self) {
+        self.environments.push(Environment {
+            scope: Rc::new(RefCell::new(Scope::new_parented(self.get_current_scope()))),
+        });
+    }
+
+    pub fn pop_scope(&mut self) {
+        self.environments.pop();
     }
 
     pub fn eval_symbol(&mut self, symbol: &Symbol) -> Result<InterpreterValue, Error> {
@@ -103,7 +131,6 @@ impl Interpreter {
         match op {
             PrefixOperator::Not => rval.negate_bool(),
             PrefixOperator::Negate => rval.negate_number(),
-            _ => Err(Error::OperationUnsupported),
         }
     }
 
@@ -180,6 +207,157 @@ impl Interpreter {
         }
     }
 
+    pub fn eval_branch(
+        &mut self,
+        cond: &AstNode,
+        body: &Vec<Box<AstNode>>,
+        else_ifs: &Vec<(Box<AstNode>, Vec<Box<AstNode>>)>,
+        else_branch: &Option<Vec<Box<AstNode>>>,
+    ) -> Result<IsReturn, Error> {
+        // NOTE: Cannot be return, hence safe to unwrap
+        let cond = self.eval_node(cond)?.unwrap();
+
+        let InterpreterValue::Bool(cond) = cond else {
+            return Err(Error::OperationUnsupported);
+        };
+
+        if cond {
+            let res = scoped!(self, { self.eval_nodes(body)? });
+
+            return_on_return!(res);
+        } else {
+            let mut executed_case = false;
+
+            for elif in else_ifs {
+                let cond = self.eval_node(elif.0.as_ref())?.unwrap();
+                let InterpreterValue::Bool(cond) = cond else {
+                    return Err(Error::OperationUnsupported);
+                };
+
+                if cond {
+                    let res = scoped!(self, { self.eval_nodes(&elif.1)? });
+
+                    return_on_return!(res);
+                    executed_case = true;
+                    break;
+                }
+            }
+
+            if !executed_case && else_branch.is_some() {
+                let else_branch = else_branch.as_ref().expect("checked");
+
+                let res = scoped!(self, { self.eval_nodes(else_branch)? });
+                return_on_return!(res);
+            }
+        }
+
+        Ok(IsReturn::NoReturn(InterpreterValue::Empty))
+    }
+
+    pub fn eval_while(
+        &mut self,
+        cond: &AstNode,
+        body: &Vec<Box<AstNode>>,
+    ) -> Result<IsReturn, Error> {
+        todo!("This is always an endless loop, because it appears that the variable is not updated correctly");
+        loop {
+            let cond = self.eval_node(cond)?.unwrap();
+
+            if !cond.as_bool()? {
+                break;
+            }
+
+            let res = scoped!(self, { self.eval_nodes(body)? });
+            return_on_return!(res);
+        }
+
+        Ok(IsReturn::NoReturn(InterpreterValue::Empty))
+    }
+
+    pub fn eval_for(
+        &mut self,
+        init: &Option<Box<AstNode>>,
+        cond: &Option<Box<AstNode>>,
+        step: &Option<Box<AstNode>>,
+        body: &Vec<Box<AstNode>>,
+    ) -> Result<IsReturn, Error> {
+        scoped!(self, {
+            // Init condition
+            if let Some(init) = init.as_ref() {
+                match &init.type_of {
+                    AstNodeType::Declaration {
+                        new_symbol: _,
+                        expression: _,
+                        assumed_type: _,
+                    } => {
+                        self.eval_node(init.as_ref())?;
+                    }
+                    _ => return Err(Error::OperationUnsupported),
+                }
+            }
+
+            loop {
+                if let Some(cond) = cond.as_ref() {
+                    let cond = self.eval_node(cond.as_ref())?.unwrap();
+
+                    if !cond.as_bool()? {
+                        break;
+                    }
+                }
+
+                let res = scoped!(self, { self.eval_nodes(body)? });
+                return_on_return!(res);
+
+                if let Some(step) = step.as_ref() {
+                    match &step.type_of {
+                        AstNodeType::AssignmentOp {
+                            recipient: _,
+                            operation: _,
+                            expression: _,
+                        } => {
+                            self.eval_node(step.as_ref())?;
+                        }
+                        _ => return Err(Error::OperationUnsupported),
+                    }
+                }
+            }
+        });
+
+        Ok(IsReturn::NoReturn(InterpreterValue::Empty))
+    }
+
+    pub fn eval_for_each(
+        &mut self,
+        recipient: &Symbol,
+        iterable: &AstNode,
+        body: &Vec<Box<AstNode>>,
+    ) -> Result<IsReturn, Error> {
+        let iterable = self.eval_node(iterable)?.unwrap();
+
+        for entry in iterable.as_list()? {
+            scoped!(self, {
+                let Some(type_of) = entry.clone().into() else {
+                    return Err(Error::OperationUnsupported);
+                };
+
+                self.get_current_scope().borrow_mut().declare_variable(
+                    recipient.clone(),
+                    entry,
+                    type_of,
+                    true,
+                    false,
+                )?;
+
+                scoped!(self, {
+                    let res = self.eval_nodes(body)?;
+                    return_on_return!(res);
+                });
+            });
+        }
+
+        Ok(IsReturn::NoReturn(InterpreterValue::Empty))
+    }
+
     pub fn eval_node(&mut self, node: &AstNode) -> Result<IsReturn, Error> {
         let evaluated = match &node.type_of {
             // Primitives
@@ -228,9 +406,9 @@ impl Interpreter {
             } => {
                 let fn_type = {
                     // Scoped to free borrowed refcell
-                    let scope = self.get_current_scope();
-                    let scope = scope.borrow();
-                    scope.resolve_type(function_name)
+                    self.get_current_scope()
+                        .borrow()
+                        .resolve_type(function_name)
                 };
 
                 if let Some(fn_type) = fn_type {
@@ -243,6 +421,24 @@ impl Interpreter {
             AstNodeType::ReturnStatement { return_value } => {
                 IsReturn::Return(self.eval_node(return_value.as_ref())?.unwrap())
             }
+            AstNodeType::Branch {
+                cond,
+                body,
+                else_if_branches,
+                else_branch,
+            } => self.eval_branch(cond.as_ref(), body, else_if_branches, else_branch)?,
+            AstNodeType::While { cond, body } => self.eval_while(cond.as_ref(), body)?,
+            AstNodeType::For {
+                declaration,
+                condition,
+                assignment,
+                body,
+            } => self.eval_for(declaration, condition, assignment, body)?,
+            AstNodeType::ForEach {
+                recipient,
+                iterable,
+                body,
+            } => self.eval_for_each(recipient, iterable, body)?,
             _ => IsReturn::NoReturn(InterpreterValue::Empty),
         };
 
@@ -254,10 +450,7 @@ impl Interpreter {
             let res = self.eval_node(node.as_ref())?;
 
             // Early exit until function call is reached
-            match res {
-                IsReturn::NoReturn(_) => (),
-                IsReturn::Return(_) => return Ok(res),
-            }
+            return_on_return!(res);
         }
 
         Ok(IsReturn::NoReturn(InterpreterValue::Empty))
@@ -278,36 +471,34 @@ impl Interpreter {
             }
 
             // Create a new stack entry with its own scope
-            self.environments.push(Environment {
-                scope: Rc::new(RefCell::new(Scope::new_parented(self.get_current_scope()))),
-                fn_signature: Some(fn_signature.clone()),
-            });
-
-            {
+            let result = scoped!(self, {
                 // scoped to free refcell borrow_mut
-                let scope = self.get_current_scope();
-                let mut scope_mut = scope.borrow_mut();
-                for (value, (param, type_of)) in zip(evaled_params, &fn_type.params) {
-                    // TODO: Type check here
-                    let value = value.unwrap();
-                    if let InterpreterValue::Empty = value {
-                        return Err(Error::ExpectedValue(param.to_owned()));
+                {
+                    let scope = self.get_current_scope();
+                    let mut scope_mut = scope.borrow_mut();
+                    for (value, (param, type_of)) in zip(evaled_params, &fn_type.params) {
+                        // TODO: Type check here
+                        let value = value.unwrap();
+                        if let InterpreterValue::Empty = value {
+                            return Err(Error::ExpectedValue(param.to_owned()));
+                        }
+
+                        scope_mut.declare_variable(
+                            param.clone(),
+                            value,
+                            type_of.clone(),
+                            true,
+                            false,
+                        )?;
                     }
-
-                    scope_mut.declare_variable(
-                        param.clone(),
-                        value,
-                        type_of.clone(),
-                        true,
-                        false,
-                    )?;
                 }
-            }
-
-            let result = match &fn_type.execution_body {
-                FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body)?,
-                FunctionExecutionStrategy::Buildin(callback) => callback(self.get_current_scope())?,
-            };
+                match &fn_type.execution_body {
+                    FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body)?,
+                    FunctionExecutionStrategy::Buildin(callback) => {
+                        callback(self.get_current_scope())?
+                    }
+                }
+            });
 
             match result {
                 IsReturn::NoReturn(InterpreterValue::Empty) => Ok(InterpreterValue::Empty),
@@ -325,10 +516,11 @@ impl Stage for Interpreter {
         match prev_stage_result {
             StageResult::Stage1(global_scope, ast) => {
                 self.ast = ast;
-                self.environments.push(Environment {
+
+                self.environments = vec![Environment {
                     scope: Rc::new(RefCell::new(global_scope)),
-                    fn_signature: None,
-                });
+                }];
+
                 Ok(())
             }
             _ => Err(Error::StageError(1, prev_stage_result.into())),
@@ -375,7 +567,7 @@ impl Stage for Interpreter {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Interpreter, Preprocessor, Stage, StageResult, Stages, ast_grammar, run_stages};
+    use crate::{Interpreter, Preprocessor, StageResult, Stages, ast_grammar, run_stages};
 
     #[test]
     fn test_basic_interpretation() {
@@ -431,6 +623,50 @@ mod tests {
            fn main() {
             a := 10;
             println(test(a));
+           }
+           "#;
+
+        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+
+        let stages = vec![
+            Stages::Preprocessor(Preprocessor::new().unwrap()),
+            Stages::Interpreter(Interpreter::new("main".to_string())),
+        ];
+
+        let state = StageResult::Stage0(ast);
+
+        let _ = run_stages(stages, state).unwrap();
+    }
+
+    #[test]
+    fn loop1() {
+        let source = r#"
+           fn main() {
+            a := 10;
+            while a > 0 {
+                a -= 1;
+            }
+           }
+           "#;
+
+        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+
+        let stages = vec![
+            Stages::Preprocessor(Preprocessor::new().unwrap()),
+            Stages::Interpreter(Interpreter::new("main".to_string())),
+        ];
+
+        let state = StageResult::Stage0(ast);
+
+        let _ = run_stages(stages, state).unwrap();
+    }
+
+    #[test]
+    fn loop2() {
+        let source = r#"
+           fn main() {
+                for a := 10; a > 0; a -= 1 {
+                }
            }
            "#;
 

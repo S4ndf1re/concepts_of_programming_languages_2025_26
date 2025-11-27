@@ -173,7 +173,15 @@ impl Scope {
 
     pub fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<(), Error> {
         // TODO: do type checking here
-        self.values.insert(name, value);
+        if let Some(_) = self.resolve_value(&name) {
+            self.values.insert(name, value);
+        } else {
+            if let Some(parent) = &self.parent {
+                parent.borrow_mut().set_value(name, value)?;
+            } else {
+                Err(Error::SymbolNotFound(name))?;
+            }
+        }
 
         Ok(())
     }

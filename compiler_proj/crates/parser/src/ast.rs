@@ -155,6 +155,7 @@ pub enum AstNodeType {
     ReturnStatement {
         return_value: Box<AstNode>,
     },
+    // TODO: Break statement in loops,
     Symbol(Symbol),
     Weak(Box<AstNode>),
 }

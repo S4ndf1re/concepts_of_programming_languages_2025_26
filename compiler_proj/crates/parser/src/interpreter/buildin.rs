@@ -1,9 +1,11 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, InterpreterValue, IsReturn, Scope, Symbol, TypeSymbol, TypeSymbolType};
+use crate::{
+    BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, InterpreterValue, IsReturn,
+    Scope, Symbol, TypeSymbol, TypeSymbolType,
+};
 
-
-pub fn println(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error>{
+pub fn println(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {
     let scope = scope.borrow();
     if let Some(val) = scope.resolve_value(&"val".to_string()) {
         println!("{val}");
@@ -11,8 +13,28 @@ pub fn println(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error>{
     } else {
         Err(Error::SymbolNotFound("val".to_string()))
     }
+}
 
-
+pub fn assert(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {
+    let scope = scope.borrow();
+    if let Some(attr) = scope.resolve_value(&"attr".to_string()) {
+        match attr {
+            InterpreterValue::Bool(b) => assert!(b),
+            _ => {
+                return Err(Error::WrongType(
+                    "attr".to_owned(),
+                    format!(
+                        "{}",
+                        Into::<Option<TypeSymbol>>::into(attr).expect("critical error")
+                    ),
+                    "bool".to_owned(),
+                ));
+            }
+        }
+        Ok(IsReturn::Return(InterpreterValue::Empty))
+    } else {
+        Err(Error::SymbolNotFound("val".to_string()))
+    }
 }
 
 pub struct BuildinFunctionDescription {
@@ -29,7 +51,7 @@ impl BuildinFunctionDescription {
             name: self.name.clone(),
             execution_body: FunctionExecutionStrategy::Buildin(self.callback),
             params: self.params,
-                return_type: self.return_type,
+            return_type: self.return_type,
         }));
 
         scope.declare_function(self.name, value, type_of, true, true)?;
@@ -38,17 +60,22 @@ impl BuildinFunctionDescription {
     }
 }
 
-
 pub fn register_buildin(scope: &mut Scope) -> Result<(), Error> {
     let println_descriptor = BuildinFunctionDescription {
-       name: "println".to_string(),
-       callback: println,
-       params: vec![("val".to_string(), TypeSymbol::strong(TypeSymbolType::Any))],
-       return_type: None,
-   };
-
+        name: "println".to_string(),
+        callback: println,
+        params: vec![("val".to_string(), TypeSymbol::strong(TypeSymbolType::Any))],
+        return_type: None,
+    };
     println_descriptor.add_to_scope(scope)?;
 
+    let assert_descriptor = BuildinFunctionDescription {
+        name: "assert".to_string(),
+        callback: assert,
+        params: vec![("attr".to_string(), TypeSymbol::strong(TypeSymbolType::Bool))],
+        return_type: None,
+    };
+    assert_descriptor.add_to_scope(scope)?;
 
     Ok(())
 }

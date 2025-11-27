@@ -13,6 +13,8 @@ pub enum InterpreterValue {
     Float(f64),
     String(String),
     Bool(bool),
+    List(Vec<InterpreterValue>),
+    Map(HashMap<InterpreterValue, InterpreterValue>),
     Struct(Symbol, HashMap<Symbol, Box<InterpreterValue>>),
     Option(Option<Box<InterpreterValue>>),
     Result(Result<Box<InterpreterValue>, Box<InterpreterValue>>),
@@ -378,6 +380,26 @@ impl InterpreterValue {
             InterpreterValue::Int(i) => Ok(InterpreterValue::Int(-i)),
             InterpreterValue::Float(f) => Ok(InterpreterValue::Float(-f)),
             _ => Err(Error::OperationUnsupported),
+        }
+    }
+
+    pub fn as_bool(&self) -> Result<bool, Error> {
+        let v = match self {
+            InterpreterValue::Bool(b) => *b,
+            InterpreterValue::Strong(s) => s.as_bool()?,
+            InterpreterValue::Weak(_) => self.upgrade()?.as_bool()?,
+            _ => false,
+        };
+
+        Ok(v)
+    }
+
+    pub fn as_list(self) -> Result<Vec<InterpreterValue>, Error> {
+        match self {
+            InterpreterValue::List(l) => Ok(l),
+            InterpreterValue::Strong(s) => Ok(s.as_ref().clone().as_list()?),
+            InterpreterValue::Weak(_) => Ok(self.upgrade()?.as_list()?),
+            _ => Err(Error::CantCastAsType("list".to_owned())),
         }
     }
 }

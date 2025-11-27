@@ -40,6 +40,8 @@ pub enum Error {
     OperationUnsupported,
     #[error("symbol could not get resolved")]
     SymbolNotFound(Symbol),
+    #[error("cant cast as type {0}")]
+    CantCastAsType(Symbol),
 }
 
 pub trait BeautifyError: Display {
