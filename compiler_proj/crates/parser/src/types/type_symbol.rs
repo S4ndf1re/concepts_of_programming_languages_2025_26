@@ -16,6 +16,7 @@ pub enum TypeSymbolType {
     Struct(StructType),
     Function(FunctionType),
     SelfType,
+    Any,
 }
 
 impl Display for TypeSymbolType {
@@ -33,6 +34,7 @@ impl Display for TypeSymbolType {
             Self::Struct(s) => write!(f, "{}", s),
             Self::Function(v) => write!(f, "{}", v),
             Self::SelfType => write!(f, "self"),
+            Self::Any => write!(f, "any"),
         }
     }
 }

@@ -1,8 +1,8 @@
 use std::{cell::RefCell, iter::zip, rc::Rc};
 
 use crate::{
-    AssignmentOperations, AstNode, AstNodeType, Error, FunctionType, InfixOperator,
-    InterpreterValue, PrefixOperator, Scope, Stage, StageResult, Symbol, TypeSymbol,
+    AssignmentOperations, AstNode, AstNodeType, Error, FunctionExecutionStrategy, FunctionType,
+    InfixOperator, InterpreterValue, PrefixOperator, Scope, Stage, StageResult, Symbol, TypeSymbol,
     TypeSymbolType,
 };
 
@@ -50,6 +50,17 @@ impl Interpreter {
         )
     }
 
+    pub fn eval_symbol(&mut self, symbol: &Symbol) -> Result<InterpreterValue, Error> {
+        let scope = self.get_current_scope();
+        let scope = scope.borrow();
+
+        if let Some(val) = scope.resolve_value(symbol) {
+            Ok(val)
+        } else {
+            Err(Error::SymbolNotFound(symbol.clone()))
+        }
+    }
+
     pub fn eval_infix_call(
         &mut self,
         left: &AstNode,
@@ -59,12 +70,26 @@ impl Interpreter {
         let lval = self.eval_node(left)?.unwrap();
         let rval = self.eval_node(right)?.unwrap();
 
-        match op {
+        let new_val = match op {
             InfixOperator::Plus => lval.add(rval),
             InfixOperator::Minus => lval.subtract(rval),
             InfixOperator::Multiply => lval.multiply(rval),
             InfixOperator::Divide => lval.divide(rval),
-            _ => Err(Error::OperationUnsupported),
+            InfixOperator::Modulo => lval.modulo(rval),
+            InfixOperator::And => lval.logical_and(rval),
+            InfixOperator::Or => lval.logical_or(rval),
+            InfixOperator::Equals => lval.equals(rval),
+            InfixOperator::NotEquals => lval.not_equals(rval),
+            InfixOperator::LessThan => lval.less_than(rval),
+            InfixOperator::LessThanEquals => lval.less_than_equals(rval),
+            InfixOperator::GreaterThan => lval.greater_than(rval),
+            InfixOperator::GreaterThanEquals => lval.greater_than_equals(rval),
+        };
+
+        if let Ok(v) = new_val {
+            Ok(v.make_reference_counted()?)
+        } else {
+            new_val
         }
     }
 
@@ -73,8 +98,13 @@ impl Interpreter {
         op: &PrefixOperator,
         right: &AstNode,
     ) -> Result<InterpreterValue, Error> {
-        // TODO: Figure out how to negate while respecting type bounds
-        todo!()
+        let rval = self.eval_node(right)?.unwrap();
+
+        match op {
+            PrefixOperator::Not => rval.negate_bool(),
+            PrefixOperator::Negate => rval.negate_number(),
+            _ => Err(Error::OperationUnsupported),
+        }
     }
 
     pub fn eval_declaration(
@@ -118,7 +148,27 @@ impl Interpreter {
         op: &AssignmentOperations,
         expression: &AstNode,
     ) -> Result<(), Error> {
-        todo!()
+        let value = self.eval_node(expression)?.unwrap();
+        if let InterpreterValue::Empty = value {
+            return Err(Error::CantBeEmpty);
+        }
+
+        let scope = self.get_current_scope();
+        let mut scope = scope.borrow_mut();
+        if let Some(old_value) = scope.resolve_value(recipient) {
+            let new_value = match op {
+                AssignmentOperations::Add => old_value.add(value)?,
+                AssignmentOperations::Subtract => old_value.subtract(value)?,
+                AssignmentOperations::Multiply => old_value.multiply(value)?,
+                AssignmentOperations::Divide => old_value.divide(value)?,
+                AssignmentOperations::Modulo => old_value.modulo(value)?,
+                AssignmentOperations::Identity => value,
+            };
+
+            scope.set_value(recipient.clone(), new_value.make_reference_counted()?)?;
+        }
+
+        Ok(())
     }
 
     pub fn eval_weak(&mut self, inner: &AstNode) -> Result<InterpreterValue, Error> {
@@ -133,18 +183,19 @@ impl Interpreter {
     pub fn eval_node(&mut self, node: &AstNode) -> Result<IsReturn, Error> {
         let evaluated = match &node.type_of {
             // Primitives
-            AstNodeType::Bool(b) => IsReturn::NoReturn(InterpreterValue::Strong(Rc::new(
-                InterpreterValue::Bool(*b),
-            ))),
-            AstNodeType::Int(i) => {
-                IsReturn::NoReturn(InterpreterValue::Strong(Rc::new(InterpreterValue::Int(*i))))
+            AstNodeType::Bool(b) => {
+                IsReturn::NoReturn(InterpreterValue::new_strong(InterpreterValue::Bool(*b)))
             }
-            AstNodeType::Float(f) => IsReturn::NoReturn(InterpreterValue::Strong(Rc::new(
-                InterpreterValue::Float(*f),
-            ))),
-            AstNodeType::String(s) => IsReturn::NoReturn(InterpreterValue::Strong(Rc::new(
+            AstNodeType::Int(i) => {
+                IsReturn::NoReturn(InterpreterValue::new_strong(InterpreterValue::Int(*i)))
+            }
+            AstNodeType::Float(f) => {
+                IsReturn::NoReturn(InterpreterValue::new_strong(InterpreterValue::Float(*f)))
+            }
+            AstNodeType::String(s) => IsReturn::NoReturn(InterpreterValue::new_strong(
                 InterpreterValue::String(s.clone()),
-            ))),
+            )),
+            AstNodeType::Symbol(s) => IsReturn::NoReturn(self.eval_symbol(s)?),
             AstNodeType::Weak(inner) => IsReturn::NoReturn(self.eval_weak(inner.as_ref())?),
             // Infix call and prefix calls
             AstNodeType::InfixCall(left, op, right) => {
@@ -171,6 +222,27 @@ impl Interpreter {
                 self.eval_assignment_op(recipient, operation, expression.as_ref())?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
+            AstNodeType::FunctionCall {
+                function_name,
+                params,
+            } => {
+                let fn_type = {
+                    // Scoped to free borrowed refcell
+                    let scope = self.get_current_scope();
+                    let scope = scope.borrow();
+                    scope.resolve_type(function_name)
+                };
+
+                if let Some(fn_type) = fn_type {
+                    let res = self.call_function(function_name, params, fn_type)?;
+                    IsReturn::NoReturn(res)
+                } else {
+                    Err(Error::SymbolNotFound(function_name.clone()))?
+                }
+            }
+            AstNodeType::ReturnStatement { return_value } => {
+                IsReturn::Return(self.eval_node(return_value.as_ref())?.unwrap())
+            }
             _ => IsReturn::NoReturn(InterpreterValue::Empty),
         };
 
@@ -193,7 +265,7 @@ impl Interpreter {
 
     pub fn call_function(
         &mut self,
-        fn_name: Symbol,
+        fn_name: &Symbol,
         params: &Vec<Box<AstNode>>,
         fn_signature: TypeSymbol,
     ) -> Result<InterpreterValue, Error> {
@@ -211,23 +283,36 @@ impl Interpreter {
                 fn_signature: Some(fn_signature.clone()),
             });
 
-            let scope = self.get_current_scope();
-            let mut scope_mut = scope.borrow_mut();
-            for (value, (param, type_of)) in zip(evaled_params, &fn_type.params) {
-                // TODO: Type check here
-                let value = value.unwrap();
-                if let InterpreterValue::Empty = value {
-                    return Err(Error::ExpectedValue(param.to_owned()));
-                }
+            {
+                // scoped to free refcell borrow_mut
+                let scope = self.get_current_scope();
+                let mut scope_mut = scope.borrow_mut();
+                for (value, (param, type_of)) in zip(evaled_params, &fn_type.params) {
+                    // TODO: Type check here
+                    let value = value.unwrap();
+                    if let InterpreterValue::Empty = value {
+                        return Err(Error::ExpectedValue(param.to_owned()));
+                    }
 
-                scope_mut.declare_variable(param.clone(), value, type_of.clone(), true, false)?;
+                    scope_mut.declare_variable(
+                        param.clone(),
+                        value,
+                        type_of.clone(),
+                        true,
+                        false,
+                    )?;
+                }
             }
 
-            let result = self.eval_nodes(&fn_type.execution_body)?;
+            let result = match &fn_type.execution_body {
+                FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body)?,
+                FunctionExecutionStrategy::Buildin(callback) => callback(self.get_current_scope())?,
+            };
+
             match result {
                 IsReturn::NoReturn(InterpreterValue::Empty) => Ok(InterpreterValue::Empty),
                 IsReturn::Return(v) => Ok(v),
-                _ => Err(Error::MissingReturn(fn_name)),
+                _ => Err(Error::MissingReturn(fn_name.clone())),
             }
         } else {
             unimplemented!("error here")
@@ -262,7 +347,7 @@ impl Stage for Interpreter {
                     .borrow()
                     .resolve_type(&self.entrypoint_fn)
                     .expect("must be present if value is present");
-                self.call_function(self.entrypoint_fn.clone(), &vec![], main_fn)?;
+                self.call_function(&self.entrypoint_fn.clone(), &vec![], main_fn)?;
             } else {
                 return Err(Error::WrongType(
                     self.entrypoint_fn.clone(),
@@ -270,7 +355,7 @@ impl Stage for Interpreter {
                         name: "main".to_string(),
                         params: vec![],
                         return_type: None,
-                        execution_body: vec![],
+                        execution_body: FunctionExecutionStrategy::Interpreted(vec![]),
                     })
                     .to_string(),
                     self.get_current_scope()
@@ -285,5 +370,53 @@ impl Stage for Interpreter {
         }
 
         Ok(StageResult::Stage2)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Interpreter, Preprocessor, Stage, StageResult, Stages, ast_grammar, run_stages};
+
+    #[test]
+    fn test_basic_interpretation() {
+        let source = r#"
+           fn main() {
+            a := 10;
+            a += 20;
+           }
+           "#;
+
+        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+
+        let stages = vec![
+            Stages::Preprocessor(Preprocessor::new().unwrap()),
+            Stages::Interpreter(Interpreter::new("main".to_string())),
+        ];
+
+        let state = StageResult::Stage0(ast);
+
+        let _ = run_stages(stages, state).unwrap();
+    }
+
+    #[test]
+    fn test_basic_interpretation2() {
+        let source = r#"
+           fn main() {
+            a := 10;
+            a += 20;
+            println(a);
+           }
+           "#;
+
+        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+
+        let stages = vec![
+            Stages::Preprocessor(Preprocessor::new().unwrap()),
+            Stages::Interpreter(Interpreter::new("main".to_string())),
+        ];
+
+        let state = StageResult::Stage0(ast);
+
+        let _ = run_stages(stages, state).unwrap();
     }
 }

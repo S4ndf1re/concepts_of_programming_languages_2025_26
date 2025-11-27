@@ -1,5 +1,5 @@
 use crate::{
-    AstNode, AstNodeType, AstTypeDefinition, Error, FunctionType, InterpreterValue, Scope, Stage, StageResult, StructType, TypeSymbol, TypeSymbolType
+    AstNode, AstNodeType, AstTypeDefinition, Error, FunctionType, InterpreterValue, Scope, Stage, StageResult, StructType, TypeSymbol, TypeSymbolType, register_buildin
 };
 
 
@@ -47,6 +47,8 @@ impl Stage for Preprocessor {
             false,
         )?;
 
+        register_buildin(scope)?;
+
         Ok(())
     }
 
@@ -68,7 +70,7 @@ impl Stage for Preprocessor {
                                     name: typename.clone(),
                                     params,
                                     return_type: return_type.map(|r| Box::new(r)),
-                                    execution_body,
+                                    execution_body: crate::FunctionExecutionStrategy::Interpreted(execution_body),
                                 }));
                             // SAFETY: Is always initialized
                             self.global_scope
@@ -91,7 +93,7 @@ impl Stage for Preprocessor {
                                         name: methodname.clone(),
                                         params,
                                         return_type: return_type.map(|r| Box::new(r)),
-                                        execution_body,
+                                        execution_body: crate::FunctionExecutionStrategy::Interpreted(execution_body),
                                     };
 
                                     if is_method {

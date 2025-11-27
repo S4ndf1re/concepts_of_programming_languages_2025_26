@@ -4,7 +4,7 @@ use annotate_snippets::{AnnotationKind, Level, Patch, Renderer, Snippet, rendere
 use lalrpop_util::ParseError;
 use thiserror::Error;
 
-use crate::{Symbol, TypeSymbol};
+use crate::Symbol;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -38,6 +38,8 @@ pub enum Error {
     CantBeEmpty,
     #[error("Operation not supported for applied types")]
     OperationUnsupported,
+    #[error("symbol could not get resolved")]
+    SymbolNotFound(Symbol),
 }
 
 pub trait BeautifyError: Display {

@@ -1,5 +1,9 @@
-use crate::{AstNode, Error, Scope};
+use crate::{AstNode, Error, Interpreter, Preprocessor, Scope};
 
+pub enum Stages {
+    Preprocessor(Preprocessor),
+    Interpreter(Interpreter),
+}
 
 pub enum StageResult {
     Stage0(Vec<AstNode>),
@@ -20,4 +24,21 @@ impl From<StageResult> for usize {
 pub trait Stage {
     fn init(&mut self, prev_stage_result: StageResult) -> Result<(), Error>;
     fn run(self) -> Result<StageResult, Error>;
+}
+
+pub fn run_stages(stages: Vec<Stages>, mut state: StageResult) -> Result<StageResult, Error> {
+    for stage in stages {
+        match stage {
+            Stages::Preprocessor(mut p) => {
+                p.init(state)?;
+                state = p.run()?;
+            }
+            Stages::Interpreter(mut i) => {
+                i.init(state)?;
+                state = i.run()?;
+            }
+        }
+    }
+
+    Ok(state)
 }

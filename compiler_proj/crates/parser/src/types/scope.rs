@@ -1,6 +1,8 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{Error, FunctionType, InterpreterValue, StructType, Symbol, TypeSymbol, TypeSymbolType};
+use crate::{
+    Error, FunctionType, InterpreterValue, StructType, Symbol, TypeSymbol, TypeSymbolType,
+};
 
 pub struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
@@ -45,6 +47,8 @@ impl Scope {
 
     fn check_variable_type_helper(&self, type_of: &mut TypeSymbolType) -> Result<(), Error> {
         match type_of {
+            TypeSymbolType::SelfType => Ok(()),
+            TypeSymbolType::Any => Ok(()),
             TypeSymbolType::Symbol(s) => {
                 if self.resolve_defined_type(s).is_some() {
                     Ok(())

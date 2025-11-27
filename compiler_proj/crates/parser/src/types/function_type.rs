@@ -1,9 +1,16 @@
-use std::{fmt::Display, iter::zip};
+use std::{cell::RefCell, fmt::Display, iter::zip, rc::Rc};
 
 use derivative::Derivative;
 
-use crate::{AstNode, Symbol, TypeSymbol};
+use crate::{AstNode, Error, IsReturn, Scope, Symbol, TypeSymbol};
 
+pub type BuildinCallback = fn(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error>;
+
+#[derive(Debug, Clone)]
+pub enum FunctionExecutionStrategy {
+    Buildin(BuildinCallback),
+    Interpreted(Vec<Box<AstNode>>),
+}
 
 #[derive(Derivative)]
 #[derivative(Debug, Clone, Hash, Eq)]
@@ -12,7 +19,7 @@ pub struct FunctionType {
     pub params: Vec<(Symbol, TypeSymbol)>,
     pub return_type: Option<Box<TypeSymbol>>,
     #[derivative(Hash = "ignore")]
-    pub execution_body: Vec<Box<AstNode>>,
+    pub execution_body: FunctionExecutionStrategy,
 }
 
 impl PartialEq for FunctionType {
