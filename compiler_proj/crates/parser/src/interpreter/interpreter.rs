@@ -1,9 +1,9 @@
-use std::{cell::RefCell, iter::zip, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, iter::zip, rc::Rc};
 
 use crate::{
     AssignmentOperations, AstNode, AstNodeType, Error, FunctionExecutionStrategy, FunctionType,
-    InfixOperator, InterpreterValue, PrefixOperator, Scope, Stage, StageResult, Symbol, TypeSymbol,
-    TypeSymbolType,
+    InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator, Scope, Stage,
+    StageResult, Symbol, TypeSymbol, TypeSymbolType,
 };
 
 macro_rules! scoped {
@@ -360,15 +360,57 @@ impl Interpreter {
     }
 
     pub fn eval_list(&mut self, values: &Vec<Box<AstNode>>) -> Result<InterpreterValue, Error> {
-
         let mut list_elems = Vec::new();
 
         for value in values {
             list_elems.push(self.eval_node(value.as_ref())?.unwrap());
         }
 
-
         Ok(InterpreterValue::List(list_elems))
+    }
+
+    pub fn eval_map(
+        &mut self,
+        values: &Vec<(Box<AstNode>, Box<AstNode>)>,
+    ) -> Result<InterpreterValue, Error> {
+        let mut map = HashMap::new();
+
+        for value in values {
+            todo!(
+                "Implement hashable interpreter value, consisting of only primitives like bool, string and int (float will be unsupported)"
+            );
+            // map.insert(self.eval_node(value.0.as_ref())?.unwrap(), self.eval_node(value.1.as_ref())?.unwrap());
+        }
+
+        Ok(InterpreterValue::Map(map))
+    }
+
+    /// Member call represents any type of member call, a, a.b, a.b().c, a.b(a()).c, etc
+    pub fn eval_member_call(&mut self, calls: &Vec<MemberAccess>) -> Result<IsReturn, Error> {
+        assert!(calls.len() == 1, "currently, only one call is supported");
+
+        let call = &calls[0];
+        println!("{:?}", &call.type_of);
+
+        let res = match &call.type_of {
+            MemberAccessType::Function(params) => {
+                let fn_type = {
+                    // Scoped to free borrowed refcell
+                    self.get_current_scope().borrow().resolve_type(&call.member)
+                };
+
+                if let Some(fn_type) = fn_type {
+                    let res = self.call_function(&call.member, params, fn_type)?;
+                    IsReturn::NoReturn(res)
+                } else {
+                    Err(Error::SymbolNotFound(call.member.clone()))?
+                }
+            },
+            MemberAccessType::Symbol => IsReturn::NoReturn(self.eval_symbol(&call.member)?),
+            _ => Err(Error::OperationUnsupported)?,
+        };
+
+        Ok(res)
     }
 
     pub fn eval_node(&mut self, node: &AstNode) -> Result<IsReturn, Error> {
@@ -387,6 +429,7 @@ impl Interpreter {
                 InterpreterValue::String(s.clone()),
             )),
             AstNodeType::List(values) => IsReturn::NoReturn(self.eval_list(values)?),
+            AstNodeType::Map(values) => IsReturn::NoReturn(self.eval_map(values)?),
             AstNodeType::Symbol(s) => IsReturn::NoReturn(self.eval_symbol(s)?),
             AstNodeType::Weak(inner) => IsReturn::NoReturn(self.eval_weak(inner.as_ref())?),
             // Infix call and prefix calls
@@ -414,24 +457,8 @@ impl Interpreter {
                 self.eval_assignment_op(recipient, operation, expression.as_ref())?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
-            AstNodeType::FunctionCall {
-                function_name,
-                params,
-            } => {
-                let fn_type = {
-                    // Scoped to free borrowed refcell
-                    self.get_current_scope()
-                        .borrow()
-                        .resolve_type(function_name)
-                };
-
-                if let Some(fn_type) = fn_type {
-                    let res = self.call_function(function_name, params, fn_type)?;
-                    IsReturn::NoReturn(res)
-                } else {
-                    Err(Error::SymbolNotFound(function_name.clone()))?
-                }
-            }
+            // Member call can be anything that is of the form a.b.c.d(a,b).c etc.
+            AstNodeType::MemberCall { calls } => self.eval_member_call(calls)?,
             AstNodeType::ReturnStatement { return_value } => {
                 IsReturn::Return(self.eval_node(return_value.as_ref())?.unwrap())
             }
@@ -657,7 +684,7 @@ mod tests {
         let source = r#"
            fn main() {
             a := 10;
-            while a > 0 {
+            while (a > 0) {
                 a -= 1;
             }
            }
@@ -679,7 +706,7 @@ mod tests {
     fn loop2() {
         let source = r#"
            fn main() {
-                for a := 10; a > 0; a -= 1 {
+                for (a := 10; a > 0; a -= 1) {
                 }
            }
            "#;
@@ -701,7 +728,7 @@ mod tests {
         let source = r#"
            fn main() {
                 res := 0;
-                for a in [10, 20, 30, 40] {
+                for (a in [10, 20, 30, 40]) {
                     res += a;
                 }
                 assert(res == 100);

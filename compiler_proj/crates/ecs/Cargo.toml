@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-typed-generational-arena = "0.2"
+typed-generational-arena = {workspace = true}
 pi_proc_macros = "0.1.0"

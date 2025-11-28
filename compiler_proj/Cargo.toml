@@ -1,8 +1,15 @@
+[workspace]
+members = ["crates/ecs", "crates/parser"]
+
 [package]
 name = "compiler_proj"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ecs = { path = "./crates/ecs" }
 parser = { path = "./crates/parser" }
+ecs = { workspace = true }
+
+[workspace.dependencies]
+typed-generational-arena = "0.2"
+ecs = { path = "./crates/ecs" }

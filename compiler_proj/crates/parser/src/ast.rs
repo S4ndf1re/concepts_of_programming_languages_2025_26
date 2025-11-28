@@ -11,6 +11,7 @@ pub type Alias = String;
 pub type DyLibName = String;
 
 
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Query {}
 
@@ -21,6 +22,7 @@ pub enum AstTypeDefinition {
     String,
     Bool,
     Struct(Vec<(Symbol, TypeSymbol)>),
+    Component(Vec<(Symbol, TypeSymbol)>),
     List(TypeSymbol),
     Map(TypeSymbol, TypeSymbol),
     Function(Vec<(Symbol, TypeSymbol)>, Option<TypeSymbol>),
@@ -70,11 +72,22 @@ pub struct StructBody {
     pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
 
+pub struct ComponentBody {
+    pub attributes: Vec<(Symbol, TypeSymbol)>,
+}
+
+#[derive(Debug, Clone)]
+pub enum MemberAccessType {
+    Symbol,
+    Function(Vec<Box<AstNode>>),
+    Struct(Vec<(Symbol, Box<AstNode>)>),
+}
+
 #[derive(Debug, Clone)]
 pub struct MemberAccess {
     //a.c(e,f).d
     pub member: Symbol,
-    pub params: Option<Vec<Box<AstNode>>>,
+    pub type_of: MemberAccessType,
     pub range: Range<usize>,
 }
 
@@ -102,14 +115,13 @@ pub enum AstNodeType {
     Map(Vec<(Box<AstNode>, Box<AstNode>)>),
     Option(Option<Box<AstNode>>),
     Result(Result<Box<AstNode>, Box<AstNode>>),
-    StructInitializer {
-        name: Symbol,
-        values: Vec<(Symbol, Box<AstNode>)>,
-    },
     Declaration {
         new_symbol: Symbol,
         expression: Box<AstNode>,
         assumed_type: Option<TypeSymbol>,
+    },
+    EntityDeclaration {
+        new_symbol: Symbol,
     },
     AssignmentOp {
         recipient: Symbol,
@@ -121,14 +133,9 @@ pub enum AstNodeType {
         typedef: AstTypeDefinition,
         execution_body: Vec<Box<AstNode>>,
     },
-    FunctionCall {
-        function_name: Symbol,
-        params: Vec<Box<AstNode>>,
-    },
     InfixCall(Box<AstNode>, InfixOperator, Box<AstNode>),
     PrefixCall(PrefixOperator, Box<AstNode>),
     MemberCall {
-        parent: Symbol,
         calls: Vec<MemberAccess>,
     },
     Branch {

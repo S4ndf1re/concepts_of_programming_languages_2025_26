@@ -42,6 +42,7 @@ match {
     "->" => right_arrow,
     "fn" => fn_term,
     "struct" => struct_term,
+    "component" => component_term,
     "let" => let_term,
     "while" => while_term,
     "for" => for_term,
@@ -53,6 +54,7 @@ match {
     "default" => default,
     "import" => import,
     "native" => native,
+    "spawn" => spawn_term,
     "as" => as_term,
     "ffi" => ffi,
     ";" => semicolon,
@@ -77,6 +79,14 @@ Comma<T>: Vec<T> = { // (0)
             v.push(e);
             v
         }
+    }
+};
+
+/// Matches a or 1,...,n meaning any comma separated list
+Dot<T>: Vec<T> = { // (0)
+    <mut v:(<T> dot)*> <e:T> =>  { // (1)
+        v.push(e);
+        v
     }
 };
 
@@ -153,8 +163,8 @@ Math: AstNode = {
 
 
 Id: AstNode = {
-    <l:@L> <s:id> <r:@R> => AstNode::new(l..r, AstNodeType::Symbol(s)),
-    <l:@L> weak_term <s:id> <r:@R> => AstNode::new(l..r, AstNodeType::Weak(Box::new(AstNode::new(l..r, AstNodeType::Symbol(s))))),
+    <l:@L> <ma:MemberAccess> <r:@R> => AstNode::new(l..r, AstNodeType::MemberCall{calls: ma}),
+    <l:@L> weak_term <ma:MemberAccess> <r:@R> => AstNode::new(l..r, AstNodeType::Weak(Box::new(AstNode::new(l..r, AstNodeType::MemberCall{calls: ma})))),
 }
 
 /// Anything that is returnable. Is used in all logic and math rules
@@ -162,7 +172,6 @@ Term: AstNode = {
     Primitive,
     Id,
     l_paren <Returnable> r_paren,
-    Call,
     ListCreate,
     MapCreate,
     OptionCreate,
@@ -195,11 +204,8 @@ MapCreate: AstNode = {
     <l:@L> l_brace <mapped:Comma<MapElem>> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::Map(mapped)),
 }
 
-/// Creates s {a: 10, b: ""} as a struct. Nested structs are also supported
-StructCreate: AstNode = {
-    <l:@L> <sname:id> l_brace <p:StructAssignmentList?> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::StructInitializer{name: sname, values: p.unwrap_or_default()})
-}
 
+/// Is used in member call
 StructAssignmentList: Vec<(Symbol, Box<AstNode>)> = {
     <p:StructParamRule> <n:FurtherStructAssignment> => vec![p].into_iter().chain(n).collect::<Vec<_>>(),
 }
@@ -215,24 +221,24 @@ FunctionDefinition: AstNode = {
     <l:@L> fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body}),
 }
 
-/// call any function or method, using chained member access, i.e. a.b().c.d()
-Call: AstNode = {
-    <l:@L> <function_name:id> l_paren <params:Comma<ReturnableOrIfOrStruct>> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::FunctionCall{function_name,  params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()}),
-    <l:@L> <caller:id> <ma:MemberAccess> <r:@R> => AstNode::new(l..r, AstNodeType::MemberCall{parent: caller, calls: ma}),
-    // <caller:id> dot <method:id> l_paren <params:Comma<Returnable>> r_paren => AstNode::MethodCall{caller, method, params: params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()},
-}
-
 MemberAccess: Vec<MemberAccess> = { //a.b.c().e
     //<name:id> (l_paren <params:Dot<id>> r_paren
-    <l:@L> dot <name:id> <r:@R> <member_access:MemberAccess?> => {
-            let mut v = vec![MemberAccess{member: name, params: None, range: l..r}];
+    <l:@L> <name:id> <r:@R> <member_access:(dot <MemberAccess>)?> => {
+            let mut v = vec![MemberAccess{member: name, type_of: MemberAccessType::Symbol, range: l..r}];
             if let Some(ma) = member_access {
                 v = v.into_iter().chain(ma).collect::<Vec<_>>();
             }
             v
         },
-    <l:@L> dot <name:id> l_paren <params:Comma<ReturnableOrIfOrStruct>> r_paren <r:@R> <member_access:MemberAccess?> => {
-            let mut v = vec![MemberAccess{member: name, params: Some(params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()), range: l..r}];
+    <l:@L> <name:id> l_paren <params:Comma<ReturnableOrIf>> r_paren <r:@R> <member_access:(dot <MemberAccess>)?> => {
+            let mut v = vec![MemberAccess{member: name, type_of: MemberAccessType::Function(params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()), range: l..r}];
+            if let Some(ma) = member_access {
+                v = v.into_iter().chain(ma).collect::<Vec<_>>();
+            }
+            v
+        },
+    <l:@L> <name:id> l_brace <params:StructAssignmentList?> r_brace <r:@R> <member_access:(dot <MemberAccess>)?> => {
+            let mut v = vec![MemberAccess{member: name, type_of: MemberAccessType::Struct(params.unwrap_or_default()), range: l..r}];
             if let Some(ma) = member_access {
                 v = v.into_iter().chain(ma).collect::<Vec<_>>();
             }
@@ -245,21 +251,26 @@ StructDefinition: AstNode = {
     <l:@L> struct_term <name:id> l_brace <body:StructBlock> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef{typename: name, typedef: AstTypeDefinition::Struct(body.attributes), execution_body: body.functions}),
 }
 
+/// Any component definition s {a: float, b: int }, note, that member functions are NOT allowed!!
+ComponentDefinition: AstNode = {
+    <l:@L> component_term <name:id> l_brace <body:ComponentBlock> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef{typename: name, typedef: AstTypeDefinition::Component(body.attributes), execution_body: vec![]}),
+}
+
 /// Anything that may not return, i.e. struct and function definitions, inclusive assignments
 NonReturnable: AstNode = {
     <AssignmentOrDeclaration> semicolon,
     FunctionDefinition,
     StructDefinition,
-    <l:@L> return <a:ReturnableOrIfOrStruct> semicolon <r:@R>=> AstNode::new(l..r, AstNodeType::ReturnStatement{return_value: Box::new(a)}),
+    <l:@L> return <a:ReturnableOrIf> semicolon <r:@R>=> AstNode::new(l..r, AstNodeType::ReturnStatement{return_value: Box::new(a)}),
 };
 
 
 If: AstNode = {
-    <l:@L> if_term <cond:Comparison> l_brace <body:Block> r_brace <elif:ElseIf*> <el:Else?> <r:@R> => AstNode::new(l..r, AstNodeType::Branch {cond: Box::new(cond), body, else_if_branches: elif, else_branch: el}),
+    <l:@L> if_term l_paren <cond:Comparison> r_paren l_brace <body:Block> r_brace <elif:ElseIf*> <el:Else?> <r:@R> => AstNode::new(l..r, AstNodeType::Branch {cond: Box::new(cond), body, else_if_branches: elif, else_branch: el}),
 }
 
 ElseIf: (Box<AstNode>, Vec<Box<AstNode>>) = {
-    else_term if_term <cond:Comparison> l_brace <body:Block> r_brace => (Box::new(cond), body),
+    else_term if_term l_paren <cond:Comparison> r_paren l_brace <body:Block> r_brace => (Box::new(cond), body),
 }
 
 Else: Vec<Box<AstNode>> = {
@@ -267,21 +278,14 @@ Else: Vec<Box<AstNode>> = {
 }
 
 While: AstNode = {
-    <l:@L> while_term <cond:Comparison> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::While {cond: Box::new(cond), body}),
+    <l:@L> while_term l_paren <cond:Comparison> r_paren l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::While {cond: Box::new(cond), body}),
 }
 
 For: AstNode = {
-    <l:@L> for_term <s:id> in_term <iter:Returnable> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::ForEach {recipient: s, iterable: Box::new(iter), body}),
-    <l:@L> for_term <d:ForAssignmentOrDeclaration?> semicolon <cond:Comparison?> semicolon <a:ForAssignment?> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::For {declaration: d.map(|d| Box::new(d)), condition: cond.map(|cond| Box::new(cond)), assignment: a.map(|a| Box::new(a)), body}),
+    <l:@L> for_term l_paren <s:id> in_term <iter:Returnable> r_paren l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::ForEach {recipient: s, iterable: Box::new(iter), body}),
+    <l:@L> for_term l_paren <d:ForAssignmentOrDeclaration?> semicolon <cond:Comparison?> semicolon <a:ForAssignment?> r_paren l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::For {declaration: d.map(|d| Box::new(d)), condition: cond.map(|cond| Box::new(cond)), assignment: a.map(|a| Box::new(a)), body}),
 }
 
-
-/// Special rule for any returnable or if. For assignments, if may return a value, hence it is returnable for a single rule context
-ReturnableOrIfOrStruct: AstNode = {
-    Returnable,
-    If,
-    StructCreate,
-}
 
 ReturnableOrIf: AstNode = {
     Returnable,
@@ -290,8 +294,9 @@ ReturnableOrIf: AstNode = {
 
 /// let a = b; or a := b;
 Declaration: AstNode = {
-    <l:@L> <s:id> declare <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None}),
-    <l:@L> let_term <st:TypeParamRule> assign <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)}),
+    <l:@L> <s:id> declare <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None}),
+    <l:@L> let_term <st:TypeParamRule> assign <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)}),
+    <l:@L> spawn_term <s:id> <r:@R> => AstNode::new(l..r, AstNodeType::EntityDeclaration{new_symbol: s}),
 }
 
 ForDeclaration: AstNode = {
@@ -301,12 +306,12 @@ ForDeclaration: AstNode = {
 
 /// a = b; also a += b; a -= b; etc.
 Assignment: AstNode = {
-    <l:@L> <s:id> assign     <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)}),
-    <l:@L> <s:id> assign_add <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)}),
-    <l:@L> <s:id> assign_sub <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
-    <l:@L> <s:id> assign_mul <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
-    <l:@L> <s:id> assign_div <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)}),
-    <l:@L> <s:id> assign_mod <e:ReturnableOrIfOrStruct> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
+    <l:@L> <s:id> assign     <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_add <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_sub <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_mul <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_div <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_mod <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
 }
 
 ForAssignment: AstNode = {
@@ -348,8 +353,22 @@ StructBlock: StructBody = {
     },
 }
 
+/// A block specifically for struct definitions
+ComponentBlock: ComponentBody = {
+    <attr:TypeParamRule> <body:FurtherComponentBlock?> => if let Some(body) = body.flatten() {
+        ComponentBody {attributes: body.attributes.into_iter().chain(vec![attr]).collect::<Vec<_>>()}
+    } else {
+        ComponentBody {attributes: vec![attr]}
+    },
+}
+
 FurtherStructBlock: Option<StructBody> = {
     comma <StructBlock> => Some(<>),
+    comma => None,
+}
+
+FurtherComponentBlock: Option<ComponentBody> = {
+    comma <ComponentBlock> => Some(<>),
     comma => None,
 }
 
@@ -357,7 +376,7 @@ FurtherStructBlock: Option<StructBody> = {
 /// a Type definition. Can be weak. Is only combined within the returnTypeRule.
 ReturnType: TypeSymbol = {
     #[precedence(level="0")]
-    <t:id> => TypeSymbol::strong(TypeSymbolType::Symbol(t)),
+    <t:Dot<id>> => TypeSymbol::strong(TypeSymbolType::Symbol(t.join("."))),
     l_bracket <r:ReturnType> r_bracket => TypeSymbol::strong(TypeSymbolType::List(Box::new(r))),
     l_brace <a:ReturnType> right_arrow <b:ReturnType> r_brace => TypeSymbol::strong(TypeSymbolType::Map(Box::new(a), Box::new(b))),
     weak_term <t:ReturnType> => TypeSymbol::make_weak(t),
@@ -380,7 +399,7 @@ TypeParamRule: (Symbol, TypeSymbol) = {
 }
 
 StructParamRule: (Symbol, Box<AstNode>) = {
-    <n:id> colon <v:ReturnableOrIfOrStruct> => (n, Box::new(v))
+    <n:id> colon <v:ReturnableOrIf> => (n, Box::new(v))
 }
 
 AliasRule: Alias = {

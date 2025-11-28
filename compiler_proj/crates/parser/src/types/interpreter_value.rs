@@ -4,6 +4,9 @@ use std::{
     rc::{Rc, Weak},
 };
 
+use ecs::Entity;
+use typed_generational_arena::Index;
+
 use crate::{Error, StructType, Symbol, TypeSymbol, TypeSymbolType};
 
 /// ActualTypeValue only represents the concrete value of a type. The actual type def is defined by
@@ -22,6 +25,10 @@ pub enum InterpreterValue {
     // Reference counted values (everything afaik)
     Weak(Weak<InterpreterValue>),
     Strong(Rc<InterpreterValue>),
+
+    // ECS Intergration
+    Entity(Index<Entity>),
+    Component(Symbol, HashMap<Symbol, Box<InterpreterValue>>),
 
     // Represents nothing, i.e. no value is returned
     Empty,

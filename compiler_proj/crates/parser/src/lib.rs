@@ -125,7 +125,7 @@ mod tests {
     fn branch_test1() {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
-                r#"if a == b {
+                r#"if (a == b) {
             }"#,
             )
             .unwrap();
@@ -147,7 +147,7 @@ mod tests {
     fn branch_test2() {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
-                r#"c := if a == b {
+                r#"c := if (a == b) {
             };"#,
             )
             .unwrap();
@@ -168,7 +168,7 @@ mod tests {
     fn branch_test3() {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
-                r#"if a == b {
+                r#"if (a == b) {
             } else {
                 c := a;
             }"#,
@@ -192,9 +192,9 @@ mod tests {
     fn branch_test4() {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
-                r#"if a != b {
-            } else if a <= c {
-            } else if c > d {
+                r#"if (a != b) {
+            } else if (a <= c) {
+            } else if (c > d) {
             } else {
                 c := a;
             }"#,
@@ -219,7 +219,7 @@ mod tests {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
-                if a {};
+                if (a) {};
                 "#,
             )
             .is_err();
@@ -229,7 +229,7 @@ mod tests {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
-                if if a {} else {} {}
+                if if (a) {} else {} {}
                 "#,
             )
             .is_err();
@@ -264,15 +264,15 @@ mod tests {
         let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
-                        for ;; {}
+                        for (;;) {}
 
-                        for i := 6; i < 8; i+=2 {}
+                        for (i := 6; i < 8; i+=2) {}
 
-                        for i = 3 ; i == 9;  {}
+                        for (i = 3 ; i == 9;)  {}
 
-                        for a in list {}
+                        for (a in list) {}
 
-                        while 1 == 2 {}
+                        while (1 == 2) {}
                         "#,
             )
             .unwrap();
@@ -388,7 +388,7 @@ mod tests {
         let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
-                a := if b == c { d; } else { d.f.g(a,b,c).c.d().h; };
+                a := if (b == c) { d; } else { d.f.g(a,b,c).c.d().h; };
                     "#,
             )
             .unwrap();
@@ -474,7 +474,7 @@ mod tests {
         let _expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
-                return if a == b {
+                return if (a == b) {
                 };
                     "#,
             )

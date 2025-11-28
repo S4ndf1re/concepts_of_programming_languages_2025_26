@@ -49,6 +49,7 @@ impl Scope {
         match type_of {
             TypeSymbolType::SelfType => Ok(()),
             TypeSymbolType::Any => Ok(()),
+            TypeSymbolType::Entity => Ok(()),
             TypeSymbolType::Symbol(s) => {
                 if self.resolve_defined_type(s).is_some() {
                     Ok(())
