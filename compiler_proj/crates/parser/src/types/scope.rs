@@ -171,7 +171,7 @@ impl Scope {
         self.declare_variable(name, value, type_of, shadow, pre_resolve)
     }
 
-    pub fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<(), Error> {
+    pub fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<bool, Error> {
         // TODO: do type checking here
         if let Some(_) = self.values.get(&name) { // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
             self.values.insert(name, value);
