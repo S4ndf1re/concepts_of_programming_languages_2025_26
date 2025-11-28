@@ -173,7 +173,7 @@ impl Scope {
 
     pub fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<(), Error> {
         // TODO: do type checking here
-        if let Some(_) = self.resolve_value(&name) {
+        if let Some(_) = self.values.get(&name) {
             self.values.insert(name, value);
         } else {
             if let Some(parent) = &self.parent {

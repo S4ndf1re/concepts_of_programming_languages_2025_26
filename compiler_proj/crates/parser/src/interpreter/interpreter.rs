@@ -193,6 +193,8 @@ impl Interpreter {
             };
 
             scope.set_value(recipient.clone(), new_value.make_reference_counted()?)?;
+        } else {
+            Err(Error::SymbolNotFound(recipient.clone()))?
         }
 
         Ok(())
@@ -259,7 +261,6 @@ impl Interpreter {
         cond: &AstNode,
         body: &Vec<Box<AstNode>>,
     ) -> Result<IsReturn, Error> {
-        todo!("This is always an endless loop, because it appears that the variable is not updated correctly");
         loop {
             let cond = self.eval_node(cond)?.unwrap();
 
