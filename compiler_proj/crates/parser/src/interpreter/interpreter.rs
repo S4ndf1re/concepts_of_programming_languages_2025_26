@@ -359,6 +359,18 @@ impl Interpreter {
         Ok(IsReturn::NoReturn(InterpreterValue::Empty))
     }
 
+    pub fn eval_list(&mut self, values: &Vec<Box<AstNode>>) -> Result<InterpreterValue, Error> {
+
+        let mut list_elems = Vec::new();
+
+        for value in values {
+            list_elems.push(self.eval_node(value.as_ref())?.unwrap());
+        }
+
+
+        Ok(InterpreterValue::List(list_elems))
+    }
+
     pub fn eval_node(&mut self, node: &AstNode) -> Result<IsReturn, Error> {
         let evaluated = match &node.type_of {
             // Primitives
@@ -374,6 +386,7 @@ impl Interpreter {
             AstNodeType::String(s) => IsReturn::NoReturn(InterpreterValue::new_strong(
                 InterpreterValue::String(s.clone()),
             )),
+            AstNodeType::List(values) => IsReturn::NoReturn(self.eval_list(values)?),
             AstNodeType::Symbol(s) => IsReturn::NoReturn(self.eval_symbol(s)?),
             AstNodeType::Weak(inner) => IsReturn::NoReturn(self.eval_weak(inner.as_ref())?),
             // Infix call and prefix calls
@@ -668,6 +681,30 @@ mod tests {
            fn main() {
                 for a := 10; a > 0; a -= 1 {
                 }
+           }
+           "#;
+
+        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+
+        let stages = vec![
+            Stages::Preprocessor(Preprocessor::new().unwrap()),
+            Stages::Interpreter(Interpreter::new("main".to_string())),
+        ];
+
+        let state = StageResult::Stage0(ast);
+
+        let _ = run_stages(stages, state).unwrap();
+    }
+
+    #[test]
+    fn loop3() {
+        let source = r#"
+           fn main() {
+                res := 0;
+                for a in [10, 20, 30, 40] {
+                    res += a;
+                }
+                assert(res == 100);
            }
            "#;
 

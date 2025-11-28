@@ -18,22 +18,10 @@ pub fn println(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {
 pub fn assert(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {
     let scope = scope.borrow();
     if let Some(attr) = scope.resolve_value(&"attr".to_string()) {
-        match attr {
-            InterpreterValue::Bool(b) => assert!(b),
-            _ => {
-                return Err(Error::WrongType(
-                    "attr".to_owned(),
-                    format!(
-                        "{}",
-                        Into::<Option<TypeSymbol>>::into(attr).expect("critical error")
-                    ),
-                    "bool".to_owned(),
-                ));
-            }
-        }
+        assert!(attr.as_bool()?);
         Ok(IsReturn::Return(InterpreterValue::Empty))
     } else {
-        Err(Error::SymbolNotFound("val".to_string()))
+        Err(Error::SymbolNotFound("attr".to_string()))
     }
 }
 
