@@ -173,7 +173,7 @@ impl Scope {
 
     pub fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<(), Error> {
         // TODO: do type checking here
-        if let Some(_) = self.values.get(&name) {
+        if let Some(_) = self.values.get(&name) { // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
             self.values.insert(name, value);
         } else {
             if let Some(parent) = &self.parent {
