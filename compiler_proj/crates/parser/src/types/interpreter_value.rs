@@ -1,13 +1,11 @@
 use std::{
-    collections::HashMap,
-    fmt::Display,
-    rc::{Rc, Weak},
+    cell::RefCell, collections::HashMap, fmt::Display, rc::{Rc, Weak}
 };
 
 use ecs::Entity;
 use typed_generational_arena::Index;
 
-use crate::{Error, StructType, Symbol, TypeSymbol, TypeSymbolType};
+use crate::{Error, Scope, StructType, Symbol, TypeSymbol, TypeSymbolType};
 
 /// ActualTypeValue only represents the concrete value of a type. The actual type def is defined by
 #[derive(Clone, Debug)]
@@ -29,6 +27,9 @@ pub enum InterpreterValue {
     // ECS Intergration
     Entity(Index<Entity>),
     Component(Symbol, HashMap<Symbol, Box<InterpreterValue>>),
+
+    // This can be any scope
+    Module(Rc<RefCell<Scope>>),
 
     // Represents nothing, i.e. no value is returned
     Empty,

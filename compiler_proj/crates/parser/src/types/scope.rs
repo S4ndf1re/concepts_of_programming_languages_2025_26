@@ -4,6 +4,7 @@ use crate::{
     Error, FunctionType, InterpreterValue, StructType, Symbol, TypeSymbol, TypeSymbolType,
 };
 
+#[derive(Debug)]
 pub struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
     values: HashMap<Symbol, InterpreterValue>,
