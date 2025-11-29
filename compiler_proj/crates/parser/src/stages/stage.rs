@@ -10,7 +10,7 @@ pub enum StageResult {
     PreParse(String),
     Parsing(Vec<AstNode>),
     Stage0(Scope, Vec<AstNode>),
-    Stage1,
+    Interpretation,
 }
 
 impl From<StageResult> for usize {
@@ -19,7 +19,7 @@ impl From<StageResult> for usize {
             StageResult::PreParse(_) => 0,
             StageResult::Parsing(_) => 1,
             StageResult::Stage0(_, _) => 2,
-            StageResult::Stage1 => 3,
+            StageResult::Interpretation => 3,
         }
     }
 }

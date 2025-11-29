@@ -602,7 +602,7 @@ impl Stage for Interpreter {
             return Err(Error::MainNotFound);
         }
 
-        Ok(StageResult::Stage1)
+        Ok(StageResult::Interpretation)
     }
 }
 
