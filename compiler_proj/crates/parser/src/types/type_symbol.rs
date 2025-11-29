@@ -48,7 +48,7 @@ impl Display for TypeSymbolType {
 // }
 
 /// The symbol that represents any existing type
-#[derive(Debug, Clone, Hash, Eq)]
+#[derive(Debug, Clone, Eq)]
 pub struct TypeSymbol {
     pub is_weak: bool,
     pub type_of: TypeSymbolType,
@@ -91,6 +91,13 @@ impl TypeSymbol {
 impl PartialEq for TypeSymbol {
     fn eq(&self, other: &Self) -> bool {
         self.is_weak == other.is_weak && self.type_of == other.type_of
+    }
+}
+
+impl Hash for TypeSymbol {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.type_of.hash(state);
+        self.is_weak.hash(state);
     }
 }
 

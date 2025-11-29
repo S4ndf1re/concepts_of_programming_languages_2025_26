@@ -216,10 +216,10 @@ pub fn apply_string_escapes(s: &str) -> String {
                 result.push('\n');
                 i += 1;
             } else if s[i + 1] == 'r' {
-                result.push('\n');
+                result.push('\r');
                 i += 1;
             } else if s[i + 1] == 't' {
-                result.push('\n');
+                result.push('\t');
                 i += 1;
             }
 

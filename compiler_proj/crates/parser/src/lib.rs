@@ -4,8 +4,8 @@ pub use ast::*;
 pub mod errors;
 pub use errors::*;
 
-pub mod interpreter;
-pub use interpreter::*;
+pub mod stages;
+pub use stages::*;
 
 pub mod types;
 pub use types::*;

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, iter::zip, rc::Rc};
+use std::{cell::RefCell, iter::zip, rc::Rc};
 
 use crate::{
     AssignmentOperations, AstNode, AstNodeType, Error, FunctionExecutionStrategy, FunctionType,
@@ -99,11 +99,11 @@ impl Interpreter {
         let rval = self.eval_node(right)?.unwrap();
 
         let new_val = match op {
-            InfixOperator::Plus => lval.add(rval),
-            InfixOperator::Minus => lval.subtract(rval),
-            InfixOperator::Multiply => lval.multiply(rval),
-            InfixOperator::Divide => lval.divide(rval),
-            InfixOperator::Modulo => lval.modulo(rval),
+            InfixOperator::Plus => lval + rval,
+            InfixOperator::Minus => lval - rval,
+            InfixOperator::Multiply => lval * rval,
+            InfixOperator::Divide => lval / rval,
+            InfixOperator::Modulo => lval % rval,
             InfixOperator::And => lval.logical_and(rval),
             InfixOperator::Or => lval.logical_or(rval),
             InfixOperator::Equals => lval.equals(rval),
@@ -184,11 +184,11 @@ impl Interpreter {
         let mut scope = scope.borrow_mut();
         if let Some(old_value) = scope.resolve_value(recipient) {
             let new_value = match op {
-                AssignmentOperations::Add => old_value.add(value)?,
-                AssignmentOperations::Subtract => old_value.subtract(value)?,
-                AssignmentOperations::Multiply => old_value.multiply(value)?,
-                AssignmentOperations::Divide => old_value.divide(value)?,
-                AssignmentOperations::Modulo => old_value.modulo(value)?,
+                AssignmentOperations::Add => (old_value + value)?,
+                AssignmentOperations::Subtract => (old_value - value)?,
+                AssignmentOperations::Multiply => (old_value * value)?,
+                AssignmentOperations::Divide => (old_value / value)?,
+                AssignmentOperations::Modulo => (old_value % value)?,
                 AssignmentOperations::Identity => value,
             };
 
@@ -371,22 +371,22 @@ impl Interpreter {
 
     pub fn eval_map(
         &mut self,
-        values: &Vec<(Box<AstNode>, Box<AstNode>)>,
+        _values: &Vec<(Box<AstNode>, Box<AstNode>)>,
     ) -> Result<InterpreterValue, Error> {
-        let mut map = HashMap::new();
+        todo!()
+        // let mut map = HashMap::new();
 
-        for value in values {
-            todo!(
-                "Implement hashable interpreter value, consisting of only primitives like bool, string and int (float will be unsupported)"
-            );
-            // map.insert(self.eval_node(value.0.as_ref())?.unwrap(), self.eval_node(value.1.as_ref())?.unwrap());
-        }
+        // for value in values {
+        //         "Implement hashable interpreter value, consisting of only primitives like bool, string and int (float will be unsupported)"
+        //     );
+        //     // map.insert(self.eval_node(value.0.as_ref())?.unwrap(), self.eval_node(value.1.as_ref())?.unwrap());
+        // }
 
-        Ok(InterpreterValue::Map(map))
+        // Ok(InterpreterValue::Map(map))
     }
 
     /// Member call represents any type of member call, a, a.b, a.b().c, a.b(a()).c, etc
-    pub fn eval_member_call(&mut self, calls: &Vec<MemberAccess>) -> Result<IsReturn, Error> {
+    pub fn eval_member_call(&mut self, calls: &[MemberAccess]) -> Result<IsReturn, Error> {
         assert!(calls.len() == 1, "currently, only one call is supported");
 
         let call = &calls[0];
@@ -405,7 +405,7 @@ impl Interpreter {
                 } else {
                     Err(Error::SymbolNotFound(call.member.clone()))?
                 }
-            },
+            }
             MemberAccessType::Symbol => IsReturn::NoReturn(self.eval_symbol(&call.member)?),
             _ => Err(Error::OperationUnsupported)?,
         };

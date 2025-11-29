@@ -1,5 +1,9 @@
 use std::{
-    cell::RefCell, collections::HashMap, fmt::Display, rc::{Rc, Weak}
+    cell::RefCell,
+    collections::HashMap,
+    fmt::Display,
+    ops::{Add, Div, Mul, Rem, Sub},
+    rc::{Rc, Weak},
 };
 
 use ecs::Entity;
@@ -67,19 +71,11 @@ impl InterpreterValue {
     }
 
     pub fn is_reference_counted(&self) -> bool {
-        match self {
-            InterpreterValue::Weak(_) => true,
-            InterpreterValue::Strong(_) => true,
-            _ => false,
-        }
+        matches!(self, InterpreterValue::Weak(_)) || matches!(self, InterpreterValue::Strong(_))
     }
 
     pub fn must_upgrade_before_deref(&self) -> bool {
-        if let InterpreterValue::Weak(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, InterpreterValue::Weak(_))
     }
 
     pub fn deref(&self) -> Result<&InterpreterValue, Error> {
@@ -116,104 +112,6 @@ impl InterpreterValue {
 
         // TODO: Performance optimization
         Ok((lval.clone(), rval.clone()))
-    }
-
-    pub fn add(self, other: Self) -> Result<InterpreterValue, Error> {
-        let (lval, rval) = Self::preprocess_for_operation(self, other)?;
-
-        match lval {
-            InterpreterValue::Int(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l + r)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 + r)),
-                InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
-                _ => Err(Error::OperationUnsupported),
-            },
-            InterpreterValue::Float(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l + r as f64)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l + r)),
-                InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
-                _ => Err(Error::OperationUnsupported),
-            },
-            InterpreterValue::String(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
-                InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
-                _ => Err(Error::CantBeEmpty),
-            },
-            _ => Err(Error::OperationUnsupported),
-        }
-    }
-
-    pub fn subtract(self, other: Self) -> Result<InterpreterValue, Error> {
-        let (lval, rval) = Self::preprocess_for_operation(self, other)?;
-
-        match lval {
-            InterpreterValue::Int(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l - r)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 - r)),
-                _ => Err(Error::OperationUnsupported),
-            },
-            InterpreterValue::Float(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l - r as f64)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l - r)),
-                _ => Err(Error::OperationUnsupported),
-            },
-            _ => Err(Error::OperationUnsupported),
-        }
-    }
-
-    pub fn multiply(self, other: Self) -> Result<InterpreterValue, Error> {
-        let (lval, rval) = Self::preprocess_for_operation(self, other)?;
-
-        match lval {
-            InterpreterValue::Int(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l * r)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 * r)),
-                _ => Err(Error::OperationUnsupported),
-            },
-            InterpreterValue::Float(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l * r as f64)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l * r)),
-                _ => Err(Error::OperationUnsupported),
-            },
-            _ => Err(Error::OperationUnsupported),
-        }
-    }
-
-    pub fn divide(self, other: Self) -> Result<InterpreterValue, Error> {
-        let (lval, rval) = Self::preprocess_for_operation(self, other)?;
-
-        match lval {
-            InterpreterValue::Int(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l / r)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 / r)),
-                _ => Err(Error::OperationUnsupported),
-            },
-            InterpreterValue::Float(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l / r as f64)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l / r)),
-                _ => Err(Error::OperationUnsupported),
-            },
-            _ => Err(Error::OperationUnsupported),
-        }
-    }
-
-    pub fn modulo(self, other: Self) -> Result<InterpreterValue, Error> {
-        let (lval, rval) = Self::preprocess_for_operation(self, other)?;
-
-        match lval {
-            InterpreterValue::Int(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l % r)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 % r)),
-                _ => Err(Error::OperationUnsupported),
-            },
-            InterpreterValue::Float(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l % r as f64)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l % r)),
-                _ => Err(Error::OperationUnsupported),
-            },
-            _ => Err(Error::OperationUnsupported),
-        }
     }
 
     pub fn logical_and(self, other: Self) -> Result<InterpreterValue, Error> {
@@ -412,9 +310,126 @@ impl InterpreterValue {
     }
 }
 
+impl Add for InterpreterValue {
+    type Output = Result<InterpreterValue, Error>;
+
+    fn add(self, other: Self) -> Self::Output {
+        let (lval, rval) = Self::preprocess_for_operation(self, other)?;
+
+        match lval {
+            InterpreterValue::Int(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l + r)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 + r)),
+                InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
+                _ => Err(Error::OperationUnsupported),
+            },
+            InterpreterValue::Float(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l + r as f64)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l + r)),
+                InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
+                _ => Err(Error::OperationUnsupported),
+            },
+            InterpreterValue::String(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
+                InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
+                _ => Err(Error::CantBeEmpty),
+            },
+            _ => Err(Error::OperationUnsupported),
+        }
+    }
+}
+
+impl Sub for InterpreterValue {
+    type Output = Result<InterpreterValue, Error>;
+    fn sub(self, other: Self) -> Self::Output {
+        let (lval, rval) = Self::preprocess_for_operation(self, other)?;
+
+        match lval {
+            InterpreterValue::Int(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l - r)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 - r)),
+                _ => Err(Error::OperationUnsupported),
+            },
+            InterpreterValue::Float(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l - r as f64)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l - r)),
+                _ => Err(Error::OperationUnsupported),
+            },
+            _ => Err(Error::OperationUnsupported),
+        }
+    }
+}
+
+impl Mul for InterpreterValue {
+    type Output = Result<InterpreterValue, Error>;
+
+    fn mul(self, other: Self) -> Self::Output {
+        let (lval, rval) = Self::preprocess_for_operation(self, other)?;
+
+        match lval {
+            InterpreterValue::Int(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l * r)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 * r)),
+                _ => Err(Error::OperationUnsupported),
+            },
+            InterpreterValue::Float(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l * r as f64)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l * r)),
+                _ => Err(Error::OperationUnsupported),
+            },
+            _ => Err(Error::OperationUnsupported),
+        }
+    }
+}
+
+impl Div for InterpreterValue {
+    type Output = Result<InterpreterValue, Error>;
+
+    fn div(self, other: Self) -> Self::Output {
+        let (lval, rval) = Self::preprocess_for_operation(self, other)?;
+
+        match lval {
+            InterpreterValue::Int(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l / r)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 / r)),
+                _ => Err(Error::OperationUnsupported),
+            },
+            InterpreterValue::Float(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l / r as f64)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l / r)),
+                _ => Err(Error::OperationUnsupported),
+            },
+            _ => Err(Error::OperationUnsupported),
+        }
+    }
+}
+
+impl Rem for InterpreterValue {
+    type Output = Result<InterpreterValue, Error>;
+
+    fn rem(self, other: Self) -> Self::Output {
+        let (lval, rval) = Self::preprocess_for_operation(self, other)?;
+
+        match lval {
+            InterpreterValue::Int(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l % r)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 % r)),
+                _ => Err(Error::OperationUnsupported),
+            },
+            InterpreterValue::Float(l) => match rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l % r as f64)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l % r)),
+                _ => Err(Error::OperationUnsupported),
+            },
+            _ => Err(Error::OperationUnsupported),
+        }
+    }
+}
+
 impl From<InterpreterValue> for Option<TypeSymbol> {
     fn from(value: InterpreterValue) -> Self {
-        let ts = match value {
+        match value {
             InterpreterValue::Int(_) => Some(TypeSymbol::strong(TypeSymbolType::Int)),
             InterpreterValue::Float(_) => Some(TypeSymbol::strong(TypeSymbolType::Float)),
             InterpreterValue::Bool(_) => Some(TypeSymbol::strong(TypeSymbolType::Bool)),
@@ -445,9 +460,7 @@ impl From<InterpreterValue> for Option<TypeSymbol> {
                 Into::<Option<TypeSymbol>>::into(inner).map(|v| v.make_weak())
             }
             _ => None,
-        };
-
-        ts
+        }
     }
 }
 

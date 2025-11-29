@@ -1,9 +1,9 @@
-use std::{fmt::Display, iter::zip};
+use std::{fmt::Display, hash::Hash, iter::zip};
 
 use crate::{FunctionType, Symbol, TypeSymbol};
 
 
-#[derive(Debug, Clone, Hash, Eq)]
+#[derive(Debug, Clone, Eq)]
 pub struct StructType {
     pub name: Symbol,
     pub fields: Vec<(Symbol, TypeSymbol)>,
@@ -37,6 +37,13 @@ impl PartialEq for StructType {
         }
 
         true
+    }
+}
+
+impl Hash for StructType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // NOTE: It should be enough to assume that a scope may only contain a type once, hence this hash is enough!
+        self.name.hash(state);
     }
 }
 

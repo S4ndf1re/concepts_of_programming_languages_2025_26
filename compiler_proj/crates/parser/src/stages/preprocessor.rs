@@ -69,7 +69,7 @@ impl Stage for Preprocessor {
                                 TypeSymbol::strong(TypeSymbolType::Function(FunctionType {
                                     name: typename.clone(),
                                     params,
-                                    return_type: return_type.map(|r| Box::new(r)),
+                                    return_type: return_type.map(Box::new),
                                     execution_body: crate::FunctionExecutionStrategy::Interpreted(execution_body),
                                 }));
                             // SAFETY: Is always initialized
@@ -92,7 +92,7 @@ impl Stage for Preprocessor {
                                     let fun_type = FunctionType {
                                         name: methodname.clone(),
                                         params,
-                                        return_type: return_type.map(|r| Box::new(r)),
+                                        return_type: return_type.map(Box::new),
                                         execution_body: crate::FunctionExecutionStrategy::Interpreted(execution_body),
                                     };
 
