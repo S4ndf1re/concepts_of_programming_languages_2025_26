@@ -1,6 +1,9 @@
 pub mod stage;
 pub use stage::*;
 
+pub mod parser;
+pub use parser::*;
+
 pub mod preprocessor;
 pub use preprocessor::*;
 
@@ -28,7 +31,7 @@ mod tests {
         } else {
             let expr = expr.unwrap();
 
-            let s0 = StageResult::Stage0(expr);
+            let s0 = StageResult::Parsing(expr);
 
             let mut processor = Preprocessor::new().unwrap();
             processor.init(s0).unwrap();

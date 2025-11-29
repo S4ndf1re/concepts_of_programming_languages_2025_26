@@ -19,7 +19,7 @@ impl Preprocessor {
 
 impl Stage for Preprocessor {
     fn init(&mut self, old_output: StageResult) -> Result<(), Error> {
-        if let StageResult::Stage0(ast) = old_output {
+        if let StageResult::Parsing(ast) = old_output {
             self.ast = ast;
         } else {
             return Err(Error::StageError(0, old_output.into()));
@@ -120,7 +120,7 @@ impl Stage for Preprocessor {
                 _ => other_nodes.push(node),
             }
         }
-        Ok(StageResult::Stage1(
+        Ok(StageResult::Stage0(
             self.global_scope.check_all_types_after_pre_resolve()?,
             other_nodes,
         ))

@@ -555,7 +555,7 @@ impl Interpreter {
 impl Stage for Interpreter {
     fn init(&mut self, prev_stage_result: StageResult) -> Result<(), crate::Error> {
         match prev_stage_result {
-            StageResult::Stage1(global_scope, ast) => {
+            StageResult::Stage0(global_scope, ast) => {
                 self.ast = ast;
 
                 self.environments = vec![Environment {
@@ -602,13 +602,13 @@ impl Stage for Interpreter {
             return Err(Error::MainNotFound);
         }
 
-        Ok(StageResult::Stage2)
+        Ok(StageResult::Stage1)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Interpreter, Preprocessor, StageResult, Stages, ast_grammar, run_stages};
+    use crate::{Interpreter, Parser, Preprocessor, StageResult, Stages, ast_grammar, run_stages};
 
     #[test]
     fn test_basic_interpretation() {
@@ -626,7 +626,7 @@ mod tests {
             Stages::Interpreter(Interpreter::new("main".to_string())),
         ];
 
-        let state = StageResult::Stage0(ast);
+        let state = StageResult::Parsing(ast);
 
         let _ = run_stages(stages, state).unwrap();
     }
@@ -648,7 +648,7 @@ mod tests {
             Stages::Interpreter(Interpreter::new("main".to_string())),
         ];
 
-        let state = StageResult::Stage0(ast);
+        let state = StageResult::Parsing(ast);
 
         let _ = run_stages(stages, state).unwrap();
     }
@@ -665,16 +665,15 @@ mod tests {
             a := 10;
             println(test(a));
            }
-           "#;
-
-        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+           "#.to_owned();
 
         let stages = vec![
+            Stages::Parser(Parser::default()),
             Stages::Preprocessor(Preprocessor::new().unwrap()),
             Stages::Interpreter(Interpreter::new("main".to_string())),
         ];
 
-        let state = StageResult::Stage0(ast);
+        let state = StageResult::PreParse(source);
 
         let _ = run_stages(stages, state).unwrap();
     }
@@ -688,16 +687,15 @@ mod tests {
                 a -= 1;
             }
            }
-           "#;
-
-        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+           "#.to_owned();
 
         let stages = vec![
+            Stages::Parser(Parser::default()),
             Stages::Preprocessor(Preprocessor::new().unwrap()),
             Stages::Interpreter(Interpreter::new("main".to_string())),
         ];
 
-        let state = StageResult::Stage0(ast);
+        let state = StageResult::PreParse(source);
 
         let _ = run_stages(stages, state).unwrap();
     }
@@ -709,16 +707,15 @@ mod tests {
                 for (a := 10; a > 0; a -= 1) {
                 }
            }
-           "#;
-
-        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+           "#.to_owned();
 
         let stages = vec![
+            Stages::Parser(Parser::default()),
             Stages::Preprocessor(Preprocessor::new().unwrap()),
             Stages::Interpreter(Interpreter::new("main".to_string())),
         ];
 
-        let state = StageResult::Stage0(ast);
+        let state = StageResult::PreParse(source);
 
         let _ = run_stages(stages, state).unwrap();
     }
@@ -733,16 +730,15 @@ mod tests {
                 }
                 assert(res == 100);
            }
-           "#;
-
-        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+           "#.to_owned();
 
         let stages = vec![
+            Stages::Parser(Parser::default()),
             Stages::Preprocessor(Preprocessor::new().unwrap()),
             Stages::Interpreter(Interpreter::new("main".to_string())),
         ];
 
-        let state = StageResult::Stage0(ast);
+        let state = StageResult::PreParse(source);
 
         let _ = run_stages(stages, state).unwrap();
     }
