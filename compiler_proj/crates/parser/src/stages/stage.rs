@@ -9,7 +9,7 @@ pub enum Stages {
 pub enum StageResult {
     PreParse(String),
     Parsing(Vec<AstNode>),
-    Stage0(Scope, Vec<AstNode>),
+    Preprocessor(Scope, Vec<AstNode>),
     Interpretation,
 }
 
@@ -18,7 +18,7 @@ impl From<StageResult> for usize {
         match value {
             StageResult::PreParse(_) => 0,
             StageResult::Parsing(_) => 1,
-            StageResult::Stage0(_, _) => 2,
+            StageResult::Preprocessor(_, _) => 2,
             StageResult::Interpretation => 3,
         }
     }

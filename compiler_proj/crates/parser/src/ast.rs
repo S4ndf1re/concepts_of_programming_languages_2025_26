@@ -1,5 +1,8 @@
 use std::{fmt::Debug, ops::Range};
 
+
+use graphviz_rust::dot_structures::Graph;
+
 use crate::TypeSymbol;
 
 /// Any symbol, that is not a type definition
@@ -11,6 +14,9 @@ pub type Alias = String;
 pub type DyLibName = String;
 
 
+pub trait ToGraphviz {
+    fn to_graphviz(&self, graph: &mut Graph);
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Query {}
@@ -167,35 +173,10 @@ pub enum AstNodeType {
     Weak(Box<AstNode>),
 }
 
-pub enum Expr {
-    Number(i32),
-    Op(Box<Expr>, OpCode, Box<Expr>),
-}
 
-impl Debug for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Expr::Number(i) => write!(f, "{i}"),
-            Expr::Op(l, op, r) => write!(f, "({:?} {:?} {:?})", l, op, r),
-        }
-    }
-}
-
-pub enum OpCode {
-    Mul,
-    Div,
-    Add,
-    Sub,
-}
-
-impl Debug for OpCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            OpCode::Mul => write!(f, "*"),
-            OpCode::Div => write!(f, "/"),
-            OpCode::Add => write!(f, "+"),
-            OpCode::Sub => write!(f, "-"),
-        }
+impl ToGraphviz  for AstNode {
+    fn to_graphviz(&self, graph: &mut Graph) {
+        todo!("implement converter here")
     }
 }
 

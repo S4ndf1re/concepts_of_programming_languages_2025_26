@@ -457,7 +457,7 @@ impl Interpreter {
                 self.eval_assignment_op(recipient, operation, expression.as_ref())?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
-            // Member call can be anything that is of the form a.b.c.d(a,b).c etc.
+            // Member call can be anything that is of the form a.b.c.d(a,b).c etc. a() and a are also member calls with length 1
             AstNodeType::MemberCall { calls } => self.eval_member_call(calls)?,
             AstNodeType::ReturnStatement { return_value } => {
                 IsReturn::Return(self.eval_node(return_value.as_ref())?.unwrap())
@@ -555,7 +555,7 @@ impl Interpreter {
 impl Stage for Interpreter {
     fn init(&mut self, prev_stage_result: StageResult) -> Result<(), crate::Error> {
         match prev_stage_result {
-            StageResult::Stage0(global_scope, ast) => {
+            StageResult::Preprocessor(global_scope, ast) => {
                 self.ast = ast;
 
                 self.environments = vec![Environment {

@@ -13,3 +13,4 @@ thiserror = "2.0.17"
 derivative = "2.2.0"
 typed-generational-arena = {workspace = true}
 ecs = {workspace = true}
+graphviz-rust = {workspace = true}

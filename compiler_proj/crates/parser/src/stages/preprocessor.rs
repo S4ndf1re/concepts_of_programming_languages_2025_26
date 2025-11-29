@@ -120,7 +120,7 @@ impl Stage for Preprocessor {
                 _ => other_nodes.push(node),
             }
         }
-        Ok(StageResult::Stage0(
+        Ok(StageResult::Preprocessor(
             self.global_scope.check_all_types_after_pre_resolve()?,
             other_nodes,
         ))
