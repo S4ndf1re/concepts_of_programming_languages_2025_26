@@ -31,6 +31,7 @@ pub enum InterpreterValue {
     // ECS Intergration
     Entity(Index<Entity>),
     Component(Symbol, HashMap<Symbol, Box<InterpreterValue>>),
+    System(Symbol), // System execution body is contained in its type definition,
 
     // This can be any scope
     Module(Rc<RefCell<Scope>>),

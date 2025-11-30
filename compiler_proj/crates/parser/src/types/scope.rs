@@ -5,6 +5,7 @@ use crate::{
 };
 
 #[derive(Debug)]
+#[derive(Default)]
 pub struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
     values: HashMap<Symbol, InterpreterValue>,
@@ -13,14 +14,6 @@ pub struct Scope {
 }
 
 impl Scope {
-    pub fn new() -> Self {
-        Self {
-            parent: None,
-            values: HashMap::new(),
-            types_for_variable: HashMap::new(),
-            defined_types: HashMap::new(),
-        }
-    }
     pub fn new_parented(parent: Rc<RefCell<Scope>>) -> Self {
         Self {
             parent: Some(parent),
@@ -144,10 +137,8 @@ impl Scope {
         shadow: bool,
         pre_resolve: bool,
     ) -> Result<(), Error> {
-        if !shadow {
-            if self.types_for_variable.contains_key(&name) {
+        if !shadow && self.types_for_variable.contains_key(&name){
                 return Err(Error::VariableAlreadyDeclared(name));
-            }
         }
 
         if !pre_resolve {
@@ -175,13 +166,19 @@ impl Scope {
 
     pub fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<(), Error> {
         // TODO: do type checking here
-        if let Some(_) = self.values.get(&name) { // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
-            self.values.insert(name, value);
-        } else {
-            if let Some(parent) = &self.parent {
-                parent.borrow_mut().set_value(name, value)?;
-            } else {
-                Err(Error::SymbolNotFound(name))?;
+        match self.values.get(&name) {
+            Some(_) => { // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
+                self.values.insert(name, value);
+            }
+            None => {
+                match &self.parent {
+                    Some(parent) => {
+                        parent.borrow_mut().set_value(name, value)?;
+                    }
+                    _ => {
+                        Err(Error::SymbolNotFound(name))?;
+                    }
+                }
             }
         }
 

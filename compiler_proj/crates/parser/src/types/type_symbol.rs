@@ -2,10 +2,10 @@ use std::{fmt::Display, hash::Hash};
 
 use graphviz_rust::{
     dot_generator::{attr, edge, id, node},
-    dot_structures::{Attribute, Edge, EdgeTy, Graph, Id, Node, NodeId, Stmt, Vertex},
+    dot_structures::{Attribute, Graph, Id, Node, NodeId, Stmt},
 };
 
-use crate::{FunctionType, StructType, Symbol, ToGraphviz};
+use crate::{FunctionType, StructType, Symbol, SystemType, ToGraphviz};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeSymbolType {
@@ -20,6 +20,7 @@ pub enum TypeSymbolType {
     Result(Box<TypeSymbol>, Box<TypeSymbol>),
     Struct(StructType),
     Function(FunctionType),
+    System(SystemType),
     SelfType,
     Any,
     Entity,
@@ -39,6 +40,7 @@ impl Display for TypeSymbolType {
             Self::Result(v, e) => write!(f, "{}!{}", v, e),
             Self::Struct(s) => write!(f, "{}", s),
             Self::Function(v) => write!(f, "{}", v),
+            Self::System(v) => write!(f, "{}", v),
             Self::SelfType => write!(f, "self"),
             Self::Any => write!(f, "any"),
             Self::Entity => write!(f, "entity"),

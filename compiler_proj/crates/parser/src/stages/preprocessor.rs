@@ -11,7 +11,7 @@ pub struct Preprocessor {
 impl Preprocessor {
     pub fn new() -> Result<Self, Error> {
         Ok(Self {
-            global_scope: Scope::new(),
+            global_scope: Scope::default(),
             ast: vec![],
         })
     }
