@@ -1,7 +1,7 @@
 use std::{fmt::Display, hash::Hash};
 
 use graphviz_rust::{
-    dot_generator::{attr, edge, id, node},
+    dot_generator::{attr, id, node},
     dot_structures::{Attribute, Graph, Id, Node, NodeId, Stmt},
 };
 
