@@ -1,6 +1,11 @@
 use std::{fmt::Display, hash::Hash};
 
-use crate::{FunctionType, StructType, Symbol};
+use graphviz_rust::{
+    dot_generator::{attr, edge, id, node},
+    dot_structures::{Attribute, Edge, EdgeTy, Graph, Id, Node, NodeId, Stmt, Vertex},
+};
+
+use crate::{FunctionType, StructType, Symbol, ToGraphviz};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeSymbolType {
@@ -110,5 +115,14 @@ impl Display for TypeSymbol {
         write!(f, "{}", self.type_of)?;
 
         Ok(())
+    }
+}
+
+impl ToGraphviz for TypeSymbol {
+    fn to_graphviz(&self, graph: &mut Graph) -> Node {
+        let n = node!(self.new_id(); attr!("label", self.to_string()));
+
+        graph.add_stmt(Stmt::Node(n.clone()));
+        n
     }
 }

@@ -430,7 +430,6 @@ impl Interpreter {
             )),
             AstNodeType::List(values) => IsReturn::NoReturn(self.eval_list(values)?),
             AstNodeType::Map(values) => IsReturn::NoReturn(self.eval_map(values)?),
-            AstNodeType::Symbol(s) => IsReturn::NoReturn(self.eval_symbol(s)?),
             AstNodeType::Weak(inner) => IsReturn::NoReturn(self.eval_weak(inner.as_ref())?),
             // Infix call and prefix calls
             AstNodeType::InfixCall(left, op, right) => {
@@ -665,7 +664,8 @@ mod tests {
             a := 10;
             println(test(a));
            }
-           "#.to_owned();
+           "#
+        .to_owned();
 
         let stages = vec![
             Stages::Parser(Parser::default()),
@@ -687,7 +687,8 @@ mod tests {
                 a -= 1;
             }
            }
-           "#.to_owned();
+           "#
+        .to_owned();
 
         let stages = vec![
             Stages::Parser(Parser::default()),
@@ -707,7 +708,8 @@ mod tests {
                 for (a := 10; a > 0; a -= 1) {
                 }
            }
-           "#.to_owned();
+           "#
+        .to_owned();
 
         let stages = vec![
             Stages::Parser(Parser::default()),
@@ -730,7 +732,8 @@ mod tests {
                 }
                 assert(res == 100);
            }
-           "#.to_owned();
+           "#
+        .to_owned();
 
         let stages = vec![
             Stages::Parser(Parser::default()),

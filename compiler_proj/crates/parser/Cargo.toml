@@ -11,6 +11,7 @@ lalrpop-util = { version = "0.22.2", features = ["lexer", "unicode"] }
 annotate-snippets = "0.12.9"
 thiserror = "2.0.17"
 derivative = "2.2.0"
-typed-generational-arena = {workspace = true}
-ecs = {workspace = true}
-graphviz-rust = {workspace = true}
+typed-generational-arena = { workspace = true }
+ecs = { workspace = true }
+graphviz-rust = { workspace = true }
+rand = "0.10.0-rc.5"

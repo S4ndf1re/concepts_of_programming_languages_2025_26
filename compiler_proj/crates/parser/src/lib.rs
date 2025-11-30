@@ -16,7 +16,17 @@ lalrpop_mod!(pub ast_grammar);
 
 #[cfg(test)]
 mod tests {
-    use crate::{AstNodeType, BeautifyError, ast_grammar};
+    use std::{fs::File, io::Write};
+
+    use graphviz_rust::{
+        cmd::Format,
+        dot_generator::{graph, id},
+        dot_structures::{Graph, Id},
+        exec_dot,
+        printer::{DotPrinter, PrinterContext},
+    };
+
+    use crate::{AstNodeType, BeautifyError, ToGraphviz, ast_grammar};
 
     #[test]
     fn import_test1() {
@@ -192,11 +202,11 @@ mod tests {
     fn branch_test4() {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
-                r#"if (a != b) {
-            } else if (a <= c) {
-            } else if (c > d) {
+                r#"if (1 != 2) {
+            } else if (1 <= 2) {
+            } else if (1 > 2) {
             } else {
-                c := a;
+                c := 1;
             }"#,
             )
             .unwrap();
@@ -212,6 +222,17 @@ mod tests {
                 else_branch: Some(_),
             }
         ));
+
+        let format = Format::Png;
+
+        let mut g = graph!(strict di id!());
+        expr.to_graphviz(&mut g);
+
+        let dot = g.print(&mut PrinterContext::default());
+        let graph_svg = exec_dot(dot.clone(), vec![format.into()]).unwrap();
+
+        let mut file = File::create("parsed_trees/branch.png").unwrap();
+        file.write_all(&graph_svg).unwrap();
     }
 
     #[test]
@@ -261,7 +282,7 @@ mod tests {
 
     #[test]
     fn loops1() {
-        let _expr = ast_grammar::ProgrammParser::new()
+        let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                         for (;;) {}
@@ -276,11 +297,22 @@ mod tests {
                         "#,
             )
             .unwrap();
+
+        let format = Format::Png;
+
+        let mut g = graph!(strict di id!());
+        expr.to_graphviz(&mut g);
+
+        let dot = g.print(&mut PrinterContext::default());
+        let graph_svg = exec_dot(dot.clone(), vec![format.into()]).unwrap();
+
+        let mut file = File::create("parsed_trees/loops.png").unwrap();
+        file.write_all(&graph_svg).unwrap();
     }
 
     #[test]
     fn structs1() {
-        let _expr = ast_grammar::ProgrammParser::new()
+        let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                         struct A {
@@ -292,6 +324,17 @@ mod tests {
                             "#,
             )
             .unwrap();
+
+        let format = Format::Png;
+
+        let mut g = graph!(strict di id!());
+        expr.to_graphviz(&mut g);
+
+        let dot = g.print(&mut PrinterContext::default());
+        let graph_svg = exec_dot(dot.clone(), vec![format.into()]).unwrap();
+
+        let mut file = File::create("parsed_trees/struct.png").unwrap();
+        file.write_all(&graph_svg).unwrap();
     }
 
     #[test]
@@ -327,7 +370,7 @@ mod tests {
 
     #[test]
     fn logic2() {
-        let _expr = ast_grammar::ProgrammParser::new()
+        let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                     a:= a < 5 && (b || c);
@@ -335,11 +378,22 @@ mod tests {
                             "#,
             )
             .unwrap();
+
+        let format = Format::Png;
+
+        let mut g = graph!(strict di id!());
+        expr.to_graphviz(&mut g);
+
+        let dot = g.print(&mut PrinterContext::default());
+        let graph_svg = exec_dot(dot.clone(), vec![format.into()]).unwrap();
+
+        let mut file = File::create("parsed_trees/condition.png").unwrap();
+        file.write_all(&graph_svg).unwrap();
     }
 
     #[test]
     fn function_call() {
-        let _expr = ast_grammar::ProgrammParser::new()
+        let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"
                         a();
@@ -352,6 +406,17 @@ mod tests {
                     "#,
             )
             .unwrap();
+
+        let format = Format::Png;
+
+        let mut g = graph!(strict di id!());
+        expr.to_graphviz(&mut g);
+
+        let dot = g.print(&mut PrinterContext::default());
+        let graph_svg = exec_dot(dot.clone(), vec![format.into()]).unwrap();
+
+        let mut file = File::create("parsed_trees/member_access.png").unwrap();
+        file.write_all(&graph_svg).unwrap();
 
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
