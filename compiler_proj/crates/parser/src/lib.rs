@@ -203,7 +203,7 @@ mod tests {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"if (1 != 2) {
-            } else if (1 <= 2) {
+            } else if (1 <= 2 && 1 == 2) {
             } else if (1 > 2) {
             } else {
                 c := 1;
