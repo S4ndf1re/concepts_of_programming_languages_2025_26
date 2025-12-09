@@ -18,6 +18,30 @@ pub enum Error {
     TypeDoesNotExist(String),
     #[error("stage error, expected stage {0}, got stage {1}")]
     StageError(usize, usize),
+    #[error("main function not found, can't start execution")]
+    MainNotFound,
+    #[error("expected {0} to be of type {1}, but received {2}")]
+    WrongType(Symbol, String, String),
+    #[error("Type cannot be deducted, missing type")]
+    TypeDeductionError,
+    #[error("missing return in {0}")]
+    MissingReturn(Symbol),
+    #[error("expected value for parameter {0}")]
+    ExpectedValue(Symbol),
+    #[error("cannot downcast to weak as reference value is not strong")]
+    CantDowncastToWeak,
+    #[error("cannot upgrade value to strong reference counted value")]
+    CantUpgradeToStrong,
+    #[error("cannot deref a weak reference. convert to strong first")]
+    CantDerefWeak,
+    #[error("Interpreter value cannot be empty for assignment or decleration")]
+    CantBeEmpty,
+    #[error("Operation not supported for applied types")]
+    OperationUnsupported,
+    #[error("symbol could not get resolved")]
+    SymbolNotFound(Symbol),
+    #[error("cant cast as type {0}")]
+    CantCastAsType(Symbol),
 }
 
 pub trait BeautifyError: Display {
