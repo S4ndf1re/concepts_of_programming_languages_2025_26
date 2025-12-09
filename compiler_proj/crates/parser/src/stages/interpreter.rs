@@ -1,10 +1,30 @@
 use std::{cell::RefCell, iter::zip, rc::Rc};
 
 use crate::{
-    AssignmentOperations, AstNode, AstNodeType, Error, FunctionExecutionStrategy, FunctionType,
-    InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator, Scope, Stage,
-    StageResult, Symbol, TypeSymbol, TypeSymbolType,
+    AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy, FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator, Scope, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType
 };
+
+fn type_of_i_value(a:InterpreterValue) -> &'static str {
+    match a{
+        InterpreterValue::Int(_) => "int",
+        InterpreterValue::Float(_) => "float",
+        InterpreterValue::String(_) => "String",
+        InterpreterValue::Bool(_) => "bool",
+        InterpreterValue::List(interpreter_values) => todo!(),
+        InterpreterValue::Map(hash_map) => todo!(),
+        InterpreterValue::Struct(_, hash_map) => todo!(),
+        InterpreterValue::Option(interpreter_value) => todo!(),
+        InterpreterValue::Result(interpreter_value) => todo!(),
+        InterpreterValue::Function(_) => todo!(),
+        InterpreterValue::Weak(weak) => todo!(),
+        InterpreterValue::Strong(interpreter_value) => todo!(),
+        InterpreterValue::Entity(index) => todo!(),
+        InterpreterValue::Component(_, hash_map) => todo!(),
+        InterpreterValue::System(_) => todo!(),
+        InterpreterValue::Module(ref_cell) => todo!(),
+        InterpreterValue::Empty => todo!(),
+    }
+}
 
 macro_rules! scoped {
     ($s:ident, $inner:block) => {{
@@ -94,7 +114,7 @@ impl Interpreter {
         left: &AstNode,
         op: &InfixOperator,
         right: &AstNode,
-    ) -> Result<InterpreterValue, Error> {
+    ) -> Result<InterpreterValue, ErrorWithRange> {
         let lval = self.eval_node(left)?.unwrap();
         let rval = self.eval_node(right)?.unwrap();
 
@@ -117,7 +137,9 @@ impl Interpreter {
         if let Ok(v) = new_val {
             Ok(v.make_reference_counted()?)
         } else {
-            new_val
+            if let Err(err) = new_val{
+                new_val.
+            }  
         }
     }
 
@@ -220,7 +242,7 @@ impl Interpreter {
         let cond = self.eval_node(cond)?.unwrap();
 
         let InterpreterValue::Bool(cond) = cond else {
-            return Err(Error::OperationUnsupported);
+            return Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()});
         };
 
         if cond {
@@ -233,7 +255,7 @@ impl Interpreter {
             for elif in else_ifs {
                 let cond = self.eval_node(elif.0.as_ref())?.unwrap();
                 let InterpreterValue::Bool(cond) = cond else {
-                    return Err(Error::OperationUnsupported);
+                    return Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()});
                 };
 
                 if cond {
@@ -293,7 +315,7 @@ impl Interpreter {
                     } => {
                         self.eval_node(init.as_ref())?;
                     }
-                    _ => return Err(Error::OperationUnsupported),
+                    _ => return Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()}),
                 }
             }
 
@@ -318,7 +340,7 @@ impl Interpreter {
                         } => {
                             self.eval_node(step.as_ref())?;
                         }
-                        _ => return Err(Error::OperationUnsupported),
+                        _ => return Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()}),
                     }
                 }
             }
@@ -338,7 +360,7 @@ impl Interpreter {
         for entry in iterable.as_list()? {
             scoped!(self, {
                 let Some(type_of) = entry.clone().into() else {
-                    return Err(Error::OperationUnsupported);
+                    return Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()});
                 };
 
                 self.get_current_scope().borrow_mut().declare_variable(
@@ -407,13 +429,13 @@ impl Interpreter {
                 }
             }
             MemberAccessType::Symbol => IsReturn::NoReturn(self.eval_symbol(&call.member)?),
-            _ => Err(Error::OperationUnsupported)?,
+            _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()})?,
         };
 
         Ok(res)
     }
 
-    pub fn eval_node(&mut self, node: &AstNode) -> Result<IsReturn, Error> {
+    pub fn eval_node(&mut self, node: &AstNode) -> Result<IsReturn, ErrorWithRange> {
         let evaluated = match &node.type_of {
             // Primitives
             AstNodeType::Bool(b) => {
@@ -607,7 +629,7 @@ impl Stage for Interpreter {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Interpreter, Parser, Preprocessor, StageResult, Stages, ast_grammar, run_stages};
+    use crate::{BeautifyError, Interpreter, Parser, Preprocessor, StageResult, Stages, ast_grammar, run_stages};
 
     #[test]
     fn test_basic_interpretation() {
@@ -730,10 +752,12 @@ mod tests {
                 for (a in [10, 20, 30, 40]) {
                     res += a;
                 }
-                assert(res == 100);
+                assert(res == true);
            }
            "#
         .to_owned();
+
+        let source_safe = source.clone();
 
         let stages = vec![
             Stages::Parser(Parser::default()),
@@ -743,6 +767,10 @@ mod tests {
 
         let state = StageResult::PreParse(source);
 
-        let _ = run_stages(stages, state).unwrap();
+        let result = run_stages(stages, state);
+        if let Err(occured_error) = result {
+            occured_error.print_error(&source_safe);
+                        panic!("{}", occured_error)
+        }
     }
 }

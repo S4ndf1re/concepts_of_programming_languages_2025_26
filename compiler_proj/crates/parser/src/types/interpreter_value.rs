@@ -11,6 +11,32 @@ use typed_generational_arena::Index;
 
 use crate::{Error, Scope, StructType, Symbol, TypeSymbol, TypeSymbolType};
 
+fn type_of<T>(_: &T) -> &'static str {
+    std::any::type_name::<T>()
+}
+
+fn type_of_i_value(a:InterpreterValue) -> &'static str {
+    match a{
+        InterpreterValue::Int(i) => "int",
+        InterpreterValue::Float(_) => "float",
+        InterpreterValue::String(_) => "String",
+        InterpreterValue::Bool(_) => "bool",
+        InterpreterValue::List(interpreter_values) => todo!(),
+        InterpreterValue::Map(hash_map) => todo!(),
+        InterpreterValue::Struct(_, hash_map) => todo!(),
+        InterpreterValue::Option(interpreter_value) => todo!(),
+        InterpreterValue::Result(interpreter_value) => todo!(),
+        InterpreterValue::Function(_) => todo!(),
+        InterpreterValue::Weak(weak) => todo!(),
+        InterpreterValue::Strong(interpreter_value) => todo!(),
+        InterpreterValue::Entity(index) => todo!(),
+        InterpreterValue::Component(_, hash_map) => todo!(),
+        InterpreterValue::System(_) => todo!(),
+        InterpreterValue::Module(ref_cell) => todo!(),
+        InterpreterValue::Empty => todo!(),
+    }
+}
+
 /// ActualTypeValue only represents the concrete value of a type. The actual type def is defined by
 #[derive(Clone, Debug)]
 pub enum InterpreterValue {
@@ -121,9 +147,9 @@ impl InterpreterValue {
         match lval {
             InterpreterValue::Bool(l) => match rval {
                 InterpreterValue::Bool(r) => Ok(InterpreterValue::Bool(l && r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
         }
     }
 
@@ -133,31 +159,31 @@ impl InterpreterValue {
         match lval {
             InterpreterValue::Bool(l) => match rval {
                 InterpreterValue::Bool(r) => Ok(InterpreterValue::Bool(l || r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
         }
     }
 
     pub fn equals(self, other: Self) -> Result<InterpreterValue, Error> {
         let (lval, rval) = Self::preprocess_for_operation(self, other)?;
 
-        match lval {
+        match &lval {
             InterpreterValue::Bool(l) => match rval {
-                InterpreterValue::Bool(r) => Ok(InterpreterValue::Bool(l == r)),
-                _ => Err(Error::OperationUnsupported),
+                InterpreterValue::Bool(r) => Ok(InterpreterValue::Bool(*l == r)),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Int(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Bool(l == r)),
-                _ => Err(Error::OperationUnsupported),
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Bool(*l == r)),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Float(l) => match rval {
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Bool(l == r)),
-                _ => Err(Error::OperationUnsupported),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Bool(*l == r)),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::String(l) => match rval {
-                InterpreterValue::String(r) => Ok(InterpreterValue::Bool(l == r)),
-                _ => Err(Error::OperationUnsupported),
+                InterpreterValue::String(r) => Ok(InterpreterValue::Bool(*l == r)),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:"String".to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Option(l) => match rval {
                 InterpreterValue::Option(r) => {
@@ -174,7 +200,7 @@ impl InterpreterValue {
                         Ok(InterpreterValue::Bool(false))
                     }
                 }
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Result(l) => match rval {
                 InterpreterValue::Result(r) => {
@@ -186,20 +212,20 @@ impl InterpreterValue {
                     } else if let Err(l) = l
                         && let Err(r) = r
                     {
-                        l.equals(*r)
+                        l.clone().equals(*r)
                     } else {
                         Ok(InterpreterValue::Bool(false))
                     }
                 }
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Struct(l, lfields) => match rval {
                 InterpreterValue::Struct(r, rfields) => {
                     // TODO: Optimize clone away
                     let mut eqls = true;
-                    eqls = eqls && l == r;
+                    eqls = eqls && *l == r;
 
-                    for (l, lfield) in &lfields {
+                    for (l, lfield) in lfields {
                         if let Some(rfield) = rfields.get(l)
                             // Must clone here, otherwise its a moved value in the next comparison
                             && let InterpreterValue::Bool(b) = lfield.clone().equals(*rfield.clone())?
@@ -218,9 +244,9 @@ impl InterpreterValue {
 
                     Ok(InterpreterValue::Bool(eqls))
                 }
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
         }
     }
 
@@ -235,14 +261,14 @@ impl InterpreterValue {
             InterpreterValue::Int(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Bool(l < r)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Bool((l as f64) < r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Float(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Bool(l < r as f64)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Bool(l < r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
         }
     }
 
@@ -259,14 +285,14 @@ impl InterpreterValue {
             InterpreterValue::Int(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Bool(l > r)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Bool((l as f64) > r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Float(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Bool(l > r as f64)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Bool(l > r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
         }
     }
 
@@ -279,14 +305,14 @@ impl InterpreterValue {
     pub fn negate_bool(self) -> Result<InterpreterValue, Error> {
         match self {
             InterpreterValue::Bool(b) => Ok(InterpreterValue::Bool(!b)),
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"!".to_string(), b:type_of_i_value(self).to_string(), c: "".to_string()}),
         }
     }
     pub fn negate_number(self) -> Result<InterpreterValue, Error> {
         match self {
             InterpreterValue::Int(i) => Ok(InterpreterValue::Int(-i)),
             InterpreterValue::Float(f) => Ok(InterpreterValue::Float(-f)),
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"!".to_string(), b:type_of_i_value(self).to_string(), c: "".to_string()}),
         }
     }
 
@@ -322,13 +348,13 @@ impl Add for InterpreterValue {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l + r)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 + r)),
                 InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"+".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Float(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l + r as f64)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l + r)),
                 InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"+".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::String(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
@@ -336,7 +362,7 @@ impl Add for InterpreterValue {
                 InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
                 _ => Err(Error::CantBeEmpty),
             },
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"+".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
         }
     }
 }
@@ -350,14 +376,14 @@ impl Sub for InterpreterValue {
             InterpreterValue::Int(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l - r)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 - r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"-".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Float(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l - r as f64)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l - r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"-".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"-".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
         }
     }
 }
@@ -372,14 +398,14 @@ impl Mul for InterpreterValue {
             InterpreterValue::Int(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l * r)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 * r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"*".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Float(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l * r as f64)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l * r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"*".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"*".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
         }
     }
 }
@@ -394,14 +420,14 @@ impl Div for InterpreterValue {
             InterpreterValue::Int(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l / r)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 / r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"/".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Float(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l / r as f64)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l / r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"/".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"/".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
         }
     }
 }
@@ -416,14 +442,14 @@ impl Rem for InterpreterValue {
             InterpreterValue::Int(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l % r)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 % r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"%".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
             InterpreterValue::Float(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l % r as f64)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l % r)),
-                _ => Err(Error::OperationUnsupported),
+                _ => Err(Error::OperationUnsupported{a:"%".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
             },
-            _ => Err(Error::OperationUnsupported),
+            _ => Err(Error::OperationUnsupported{a:"%".to_string(), b:type_of_i_value(lval).to_string(), c:type_of_i_value(rval).to_string()}),
         }
     }
 }
