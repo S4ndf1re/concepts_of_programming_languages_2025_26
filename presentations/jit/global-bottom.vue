@@ -7,7 +7,7 @@
       16.12.2025 | Jan Kleinmann, Marius Braun
     </div>
     <div class="opacity-50">
-      <SlideCurrentNo /> / <SlidesTotal />
+      <!-- <SlideCurrentNo /> / <SlidesTotal /> -->
     </div>
   </footer>
 </template>
