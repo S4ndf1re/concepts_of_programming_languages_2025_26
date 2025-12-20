@@ -135,11 +135,16 @@ impl Interpreter {
         };
 
         if let Ok(v) = new_val {
-            Ok(v.make_reference_counted()?)
+            Ok(v.make_reference_counted().map_err(|e| ErrorWithRange{
+                err:e,
+                range: left.range.clone()
+            })?)
         } else {
-            if let Err(err) = new_val{
-                new_val.
-            }  
+            let e = new_val.unwrap_err(); 
+            Err(ErrorWithRange {
+                err: e,
+                range: left.range.clone(),
+            })
         }
     }
 
@@ -147,12 +152,25 @@ impl Interpreter {
         &mut self,
         op: &PrefixOperator,
         right: &AstNode,
-    ) -> Result<InterpreterValue, Error> {
+    ) -> Result<InterpreterValue, ErrorWithRange> {
         let rval = self.eval_node(right)?.unwrap();
 
-        match op {
+        let new_val = match op {
             PrefixOperator::Not => rval.negate_bool(),
             PrefixOperator::Negate => rval.negate_number(),
+        };
+
+        if let Ok(v) = new_val {
+            Ok(v.make_reference_counted().map_err(|e| ErrorWithRange{
+                err:e,
+                range: right.range.clone()
+            })?)
+        } else {
+            let e = new_val.unwrap_err(); 
+            Err(ErrorWithRange {
+                err: e,
+                range: right.range.clone(),
+            })
         }
     }
 
@@ -161,10 +179,13 @@ impl Interpreter {
         new_symbol: &Symbol,
         expression: &AstNode,
         assumed_type: &Option<TypeSymbol>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ErrorWithRange> {
         let value = self.eval_node(expression)?.unwrap();
         if let InterpreterValue::Empty = value {
-            return Err(Error::CantBeEmpty);
+            return Err(ErrorWithRange{
+                err :Error::CantBeEmpty,
+                range: expression.range.clone()
+        });
         }
 
         let scope = self.get_current_scope();
@@ -172,19 +193,34 @@ impl Interpreter {
 
         if let Some(type_of) = assumed_type {
             // TODO: Type checking
-            scope.declare_variable(new_symbol.clone(), value, type_of.clone(), false, false)?;
+            let decl_var = scope.declare_variable(new_symbol.clone(), value, type_of.clone(), false, false);
+            if let Err(e) = decl_var{
+                return Err(ErrorWithRange{
+                    err :e,
+                    range: expression.range.clone()
+                });
+            }
         } else {
             let type_of: Option<TypeSymbol> = value.clone().into();
             if type_of.is_some() {
-                scope.declare_variable(
+                let decl_var = scope.declare_variable(
                     new_symbol.clone(),
                     value,
                     type_of.expect("already checked"),
                     false,
                     false,
-                )?;
+                );
+                if let Err(e) = decl_var{
+                return Err(ErrorWithRange{
+                    err :e,
+                    range: expression.range.clone()
+                });
+            }
             } else {
-                return Err(Error::TypeDeductionError);
+                return Err(ErrorWithRange{
+                    err :Error::TypeDeductionError,
+                    range: expression.range.clone()
+                });
             }
         }
 
@@ -196,38 +232,58 @@ impl Interpreter {
         recipient: &Symbol,
         op: &AssignmentOperations,
         expression: &AstNode,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ErrorWithRange> {
         let value = self.eval_node(expression)?.unwrap();
         if let InterpreterValue::Empty = value {
-            return Err(Error::CantBeEmpty);
+            return Err(ErrorWithRange{
+                err: Error::CantBeEmpty,
+                range: expression.range.clone()
+            });
         }
 
         let scope = self.get_current_scope();
         let mut scope = scope.borrow_mut();
         if let Some(old_value) = scope.resolve_value(recipient) {
             let new_value = match op {
-                AssignmentOperations::Add => (old_value + value)?,
-                AssignmentOperations::Subtract => (old_value - value)?,
-                AssignmentOperations::Multiply => (old_value * value)?,
-                AssignmentOperations::Divide => (old_value / value)?,
-                AssignmentOperations::Modulo => (old_value % value)?,
-                AssignmentOperations::Identity => value,
-            };
+                AssignmentOperations::Add => old_value + value,
+                AssignmentOperations::Subtract => old_value - value,
+                AssignmentOperations::Multiply => old_value * value,
+                AssignmentOperations::Divide => old_value / value,
+                AssignmentOperations::Modulo => old_value % value,
+                AssignmentOperations::Identity => Ok(value),
+            }
+            .map_err(|e| ErrorWithRange{
+                err: e,
+                range:expression.range.clone()
+            })?;
 
-            scope.set_value(recipient.clone(), new_value.make_reference_counted()?)?;
+            scope.set_value(recipient.clone(), new_value.make_reference_counted()
+            .map_err(|e| ErrorWithRange{
+                err: e,
+                range:expression.range.clone()
+            })?).map_err(|e| ErrorWithRange{
+                err: e,
+                range:expression.range.clone()
+            })?;
         } else {
-            Err(Error::SymbolNotFound(recipient.clone()))?
+            return Err(ErrorWithRange{
+                err: Error::SymbolNotFound(recipient.clone()),
+                range:expression.range.clone()
+                });
         }
 
         Ok(())
     }
 
-    pub fn eval_weak(&mut self, inner: &AstNode) -> Result<InterpreterValue, Error> {
+    pub fn eval_weak(&mut self, inner: &AstNode) -> Result<InterpreterValue, ErrorWithRange> {
         let val = self.eval_node(inner)?.unwrap();
         if let InterpreterValue::Strong(rc) = val {
             Ok(InterpreterValue::Weak(Rc::downgrade(&rc)))
         } else {
-            Err(Error::MainNotFound)
+            return Err(ErrorWithRange { 
+                err: Error::MainNotFound, 
+                range: inner.range.clone() 
+            });
         }
     }
 
@@ -237,15 +293,18 @@ impl Interpreter {
         body: &Vec<Box<AstNode>>,
         else_ifs: &Vec<(Box<AstNode>, Vec<Box<AstNode>>)>,
         else_branch: &Option<Vec<Box<AstNode>>>,
-    ) -> Result<IsReturn, Error> {
+    ) -> Result<IsReturn, ErrorWithRange> {
         // NOTE: Cannot be return, hence safe to unwrap
-        let cond = self.eval_node(cond)?.unwrap();
+        let cond1 = self.eval_node(cond)?.unwrap();
 
-        let InterpreterValue::Bool(cond) = cond else {
-            return Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()});
+        let InterpreterValue::Bool(cond1) = cond1 else {
+            return Err(ErrorWithRange { 
+                err: Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()}, 
+                range: cond.range.clone() 
+            });
         };
 
-        if cond {
+        if cond1 {
             let res = scoped!(self, { self.eval_nodes(body)? });
 
             return_on_return!(res);
@@ -255,7 +314,9 @@ impl Interpreter {
             for elif in else_ifs {
                 let cond = self.eval_node(elif.0.as_ref())?.unwrap();
                 let InterpreterValue::Bool(cond) = cond else {
-                    return Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()});
+                    return Err(ErrorWithRange{ 
+                        err: Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()}, 
+                        range: elif.0.range.clone()});
                 };
 
                 if cond {
@@ -282,11 +343,13 @@ impl Interpreter {
         &mut self,
         cond: &AstNode,
         body: &Vec<Box<AstNode>>,
-    ) -> Result<IsReturn, Error> {
+    ) -> Result<IsReturn, ErrorWithRange> {
         loop {
-            let cond = self.eval_node(cond)?.unwrap();
+            let cond1 = self.eval_node(cond)?.unwrap();
 
-            if !cond.as_bool()? {
+            if !cond1.as_bool().map_err(|e| ErrorWithRange{
+                err: e,
+                range:cond.range.clone()})? {
                 break;
             }
 
@@ -303,7 +366,7 @@ impl Interpreter {
         cond: &Option<Box<AstNode>>,
         step: &Option<Box<AstNode>>,
         body: &Vec<Box<AstNode>>,
-    ) -> Result<IsReturn, Error> {
+    ) -> Result<IsReturn, ErrorWithRange> {
         scoped!(self, {
             // Init condition
             if let Some(init) = init.as_ref() {
@@ -315,15 +378,19 @@ impl Interpreter {
                     } => {
                         self.eval_node(init.as_ref())?;
                     }
-                    _ => return Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()}),
+                    _ => return Err(ErrorWithRange{
+                        err: Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()},
+                        range: init.range.clone()}),
                 }
             }
 
             loop {
                 if let Some(cond) = cond.as_ref() {
-                    let cond = self.eval_node(cond.as_ref())?.unwrap();
+                    let cond1 = self.eval_node(cond.as_ref())?.unwrap();
 
-                    if !cond.as_bool()? {
+                    if !cond1.as_bool().map_err(|e| ErrorWithRange{
+                        err: e,
+                        range:cond.range.clone()})? {
                         break;
                     }
                 }
@@ -340,7 +407,9 @@ impl Interpreter {
                         } => {
                             self.eval_node(step.as_ref())?;
                         }
-                        _ => return Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()}),
+                        _ => return Err(ErrorWithRange{
+                        err: Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()},
+                        range: step.range.clone()}),
                     }
                 }
             }
@@ -354,13 +423,17 @@ impl Interpreter {
         recipient: &Symbol,
         iterable: &AstNode,
         body: &Vec<Box<AstNode>>,
-    ) -> Result<IsReturn, Error> {
-        let iterable = self.eval_node(iterable)?.unwrap();
+    ) -> Result<IsReturn, ErrorWithRange> {
+        let iterable1 = self.eval_node(iterable)?.unwrap();
 
-        for entry in iterable.as_list()? {
+        for entry in iterable1.as_list().map_err(|e| ErrorWithRange{
+                        err: e,
+                        range:iterable.range.clone()})? {
             scoped!(self, {
                 let Some(type_of) = entry.clone().into() else {
-                    return Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()});
+                    return Err(ErrorWithRange{
+                        err: Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()},
+                        range: iterable.range.clone()});
                 };
 
                 self.get_current_scope().borrow_mut().declare_variable(
@@ -369,7 +442,9 @@ impl Interpreter {
                     type_of,
                     true,
                     false,
-                )?;
+                ).map_err(|e| ErrorWithRange{
+                        err: e,
+                        range:iterable.range.clone()})?;
 
                 scoped!(self, {
                     let res = self.eval_nodes(body)?;
@@ -381,7 +456,7 @@ impl Interpreter {
         Ok(IsReturn::NoReturn(InterpreterValue::Empty))
     }
 
-    pub fn eval_list(&mut self, values: &Vec<Box<AstNode>>) -> Result<InterpreterValue, Error> {
+    pub fn eval_list(&mut self, values: &Vec<Box<AstNode>>) -> Result<InterpreterValue, ErrorWithRange> {
         let mut list_elems = Vec::new();
 
         for value in values {
@@ -408,7 +483,7 @@ impl Interpreter {
     }
 
     /// Member call represents any type of member call, a, a.b, a.b().c, a.b(a()).c, etc
-    pub fn eval_member_call(&mut self, calls: &[MemberAccess]) -> Result<IsReturn, Error> {
+    pub fn eval_member_call(&mut self, calls: &[MemberAccess]) -> Result<IsReturn, ErrorWithRange> {
         assert!(calls.len() == 1, "currently, only one call is supported");
 
         let call = &calls[0];
@@ -425,11 +500,21 @@ impl Interpreter {
                     let res = self.call_function(&call.member, params, fn_type)?;
                     IsReturn::NoReturn(res)
                 } else {
-                    Err(Error::SymbolNotFound(call.member.clone()))?
+                    Err(ErrorWithRange{
+                        err: Error::SymbolNotFound(call.member.clone()),
+                        range: call.range.clone()
+                    })?
                 }
             }
-            MemberAccessType::Symbol => IsReturn::NoReturn(self.eval_symbol(&call.member)?),
-            _ => Err(Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()})?,
+            MemberAccessType::Symbol => IsReturn::NoReturn(self.eval_symbol(&call.member).map_err(
+                |e|ErrorWithRange{
+                    err: e,
+                    range: call.range.clone()
+                })?),
+            _ => Err(ErrorWithRange{
+                    err: Error::OperationUnsupported{a:"==".to_string(), b:"==".to_string(), c:"==".to_string()},
+                    range: call.range.clone()
+                })?,
         };
 
         Ok(res)
@@ -451,7 +536,11 @@ impl Interpreter {
                 InterpreterValue::String(s.clone()),
             )),
             AstNodeType::List(values) => IsReturn::NoReturn(self.eval_list(values)?),
-            AstNodeType::Map(values) => IsReturn::NoReturn(self.eval_map(values)?),
+            AstNodeType::Map(values) => IsReturn::NoReturn(self.eval_map(values).map_err(
+                |e|ErrorWithRange{
+                    err: e,
+                    range: node.range.clone()
+                })?),
             AstNodeType::Weak(inner) => IsReturn::NoReturn(self.eval_weak(inner.as_ref())?),
             // Infix call and prefix calls
             AstNodeType::InfixCall(left, op, right) => {
@@ -480,6 +569,11 @@ impl Interpreter {
             }
             // Member call can be anything that is of the form a.b.c.d(a,b).c etc. a() and a are also member calls with length 1
             AstNodeType::MemberCall { calls } => self.eval_member_call(calls)?,
+            // AstNodeType::MemberCall { calls } => self.eval_member_call(calls).map_err(
+            //     |e|ErrorWithRange{
+            //         err: e,
+            //         range: node.range.clone()
+            //     })?,
             AstNodeType::ReturnStatement { return_value } => {
                 IsReturn::Return(self.eval_node(return_value.as_ref())?.unwrap())
             }
@@ -507,7 +601,7 @@ impl Interpreter {
         Ok(evaluated)
     }
 
-    pub fn eval_nodes(&mut self, nodes: &Vec<Box<AstNode>>) -> Result<IsReturn, Error> {
+    pub fn eval_nodes(&mut self, nodes: &Vec<Box<AstNode>>) -> Result<IsReturn, ErrorWithRange> {
         for node in nodes {
             let res = self.eval_node(node.as_ref())?;
 
@@ -523,7 +617,7 @@ impl Interpreter {
         fn_name: &Symbol,
         params: &Vec<Box<AstNode>>,
         fn_signature: TypeSymbol,
-    ) -> Result<InterpreterValue, Error> {
+    ) -> Result<InterpreterValue, ErrorWithRange> {
         if let TypeSymbolType::Function(fn_type) = &fn_signature.type_of {
             // TODO: add error handling
             let mut evaled_params = Vec::new();
@@ -542,7 +636,10 @@ impl Interpreter {
                         // TODO: Type check here
                         let value = value.unwrap();
                         if let InterpreterValue::Empty = value {
-                            return Err(Error::ExpectedValue(param.to_owned()));
+                            return Err(ErrorWithRange{
+                                err: Error::ExpectedValue(param.to_owned()),
+                                range: 1..2
+                        });
                         }
 
                         scope_mut.declare_variable(
@@ -551,13 +648,19 @@ impl Interpreter {
                             type_of.clone(),
                             true,
                             false,
-                        )?;
+                        ).map_err(|e|ErrorWithRange{
+                            err: e,
+                            range: 1..2
+                        })?;
                     }
                 }
                 match &fn_type.execution_body {
                     FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body)?,
                     FunctionExecutionStrategy::Buildin(callback) => {
-                        callback(self.get_current_scope())?
+                        callback(self.get_current_scope()).map_err(|e|ErrorWithRange{
+                            err: e,
+                            range: 1..2
+                        })?
                     }
                 }
             });
@@ -565,7 +668,10 @@ impl Interpreter {
             match result {
                 IsReturn::NoReturn(InterpreterValue::Empty) => Ok(InterpreterValue::Empty),
                 IsReturn::Return(v) => Ok(v),
-                _ => Err(Error::MissingReturn(fn_name.clone())),
+                _ => Err(ErrorWithRange{
+                    err: Error::MissingReturn(fn_name.clone()),
+                    range: 1..2
+                }),
             }
         } else {
             unimplemented!("error here")
@@ -589,7 +695,7 @@ impl Stage for Interpreter {
         }
     }
 
-    fn run(mut self) -> Result<StageResult, Error> {
+    fn run(mut self) -> Result<StageResult, ErrorWithRange> {
         let main_fn = self
             .get_current_scope()
             .borrow()
@@ -603,24 +709,30 @@ impl Stage for Interpreter {
                     .expect("must be present if value is present");
                 self.call_function(&self.entrypoint_fn.clone(), &vec![], main_fn)?;
             } else {
-                return Err(Error::WrongType(
-                    self.entrypoint_fn.clone(),
-                    TypeSymbolType::Function(FunctionType {
-                        name: "main".to_string(),
-                        params: vec![],
-                        return_type: None,
-                        execution_body: FunctionExecutionStrategy::Interpreted(vec![]),
-                    })
-                    .to_string(),
-                    self.get_current_scope()
-                        .borrow()
-                        .resolve_type(&self.entrypoint_fn)
-                        .expect("must be present if value is presen")
+                return Err(ErrorWithRange{
+                    err: Error::WrongType(
+                        self.entrypoint_fn.clone(),
+                        TypeSymbolType::Function(FunctionType {
+                            name: "main".to_string(),
+                            params: vec![],
+                            return_type: None,
+                            execution_body: FunctionExecutionStrategy::Interpreted(vec![]),
+                        })
                         .to_string(),
-                ));
+                        self.get_current_scope()
+                            .borrow()
+                            .resolve_type(&self.entrypoint_fn)
+                            .expect("must be present if value is presen")
+                            .to_string(),
+                    ),
+                    range: 1..1
+                });
             }
         } else {
-            return Err(Error::MainNotFound);
+            return Err(ErrorWithRange{
+                err: Error::MainNotFound,
+                range: 1..1
+            });
         }
 
         Ok(StageResult::Interpretation)

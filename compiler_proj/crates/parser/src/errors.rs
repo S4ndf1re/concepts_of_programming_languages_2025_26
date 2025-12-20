@@ -7,9 +7,10 @@ use thiserror::Error;
 use crate::Symbol;
 
 pub struct ErrorWithRange{
-    err: Error,
-    range: std::ops::Range<usize>
+    pub(crate) err: Error,
+    pub(crate) range: std::ops::Range<usize>
 }
+
 
 #[derive(Error, Debug)]
 pub enum Error {
