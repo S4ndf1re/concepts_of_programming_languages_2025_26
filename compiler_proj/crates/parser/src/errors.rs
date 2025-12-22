@@ -11,6 +11,11 @@ pub struct ErrorWithRange{
     pub(crate) range: std::ops::Range<usize>
 }
 
+impl std::fmt::Display for ErrorWithRange{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}{}", self.err, self.range.start, self.range.end)
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -190,5 +195,36 @@ impl BeautifyError for Error{
             }
             _ => ()
         }
+    }
+}
+
+
+impl BeautifyError for ErrorWithRange{
+    fn print_error(&self, source: &str) {
+        match self{
+            ErrorWithRange{err: Error::OperationUnsupported{a,b,c}, range}=> {
+                                let report = &[
+                    Level::ERROR
+                        .primary_title(format!("Operation {a} not supported for applied types: {b} and {c}"))
+                        .element(
+                            Snippet::source(source).annotation(
+                                AnnotationKind::Primary
+                                    .span(range.clone())
+                                    .label(format!("expected, {}", b)),
+                            ),
+                        ),
+
+                ];
+
+                let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
+                println!("{}", renderer.render(report));
+            }
+            _ => ()
+        }
+    }
+
+    fn panic_error(&self, source: &str) {
+        self.print_error(source);
+        panic!("{}", self.err)
     }
 }

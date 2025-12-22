@@ -1,7 +1,7 @@
 use std::{cell::RefCell, iter::zip, rc::Rc};
 
 use crate::{
-    AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy, FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator, Scope, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType
+    AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, BeautifyError, FunctionExecutionStrategy, FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator, Scope, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType
 };
 
 fn type_of_i_value(a:InterpreterValue) -> &'static str {
@@ -729,10 +729,7 @@ impl Stage for Interpreter {
                 });
             }
         } else {
-            return Err(ErrorWithRange{
-                err: Error::MainNotFound,
-                range: 1..1
-            });
+            return Err(ErrorWithRange{err: Error::MainNotFound, range: 1..1});
         }
 
         Ok(StageResult::Interpretation)
@@ -768,7 +765,7 @@ mod tests {
     fn test_basic_interpretation2() {
         let source = r#"
            fn main() {
-            a := 10;
+            a = 10;
             a += 20;
             println(a);
            }
