@@ -5,6 +5,13 @@ use crate::{
     TypeSymbolType,
 };
 
+
+pub trait ScopeLike {
+    fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue>;
+    fn resolve_type(&self, name: &Symbol) -> Option<TypeSymbol>;
+    fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<(), Error>;
+}
+
 #[derive(Debug, Default)]
 pub struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
@@ -201,49 +208,6 @@ impl Scope {
         self.declare_variable(name, value, type_of, shadow, pre_resolve, location)
     }
 
-    pub fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<(), Error> {
-        // TODO: do type checking here
-        match self.values.get(&name) {
-            Some(_) => {
-                // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
-                self.values.insert(name, value);
-            }
-            None => match &self.parent {
-                Some(parent) => {
-                    parent.borrow_mut().set_value(name, value)?;
-                }
-                _ => {
-                    Err(Error::SymbolNotFound(name))?;
-                }
-            },
-        }
-
-        Ok(())
-    }
-
-    /// resolve value of a variable
-    pub fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
-        let mut value = self.values.get(name).cloned();
-        if value.is_none()
-            && let Some(parent) = &self.parent
-        {
-            value = parent.borrow().resolve_value(name);
-        }
-
-        value
-    }
-
-    /// Resolve type of a variable
-    pub fn resolve_type(&self, name: &Symbol) -> Option<TypeSymbol> {
-        let mut type_of = self.types_for_variable.get(name).cloned();
-        if type_of.is_none()
-            && let Some(parent) = &self.parent
-        {
-            type_of = parent.borrow().resolve_type(name);
-        }
-
-        type_of
-    }
 
     /// Resolve a defined type (not for a variable)
     pub fn resolve_defined_type(&self, name: &Symbol) -> Option<TypeSymbol> {
@@ -274,5 +238,52 @@ impl Scope {
         self.defined_types = new_defined_types;
         self.types_for_variable = new_variable_types;
         Ok(self)
+    }
+}
+
+
+impl ScopeLike for Scope {
+    /// resolve value of a variable
+    fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
+        let mut value = self.values.get(name).cloned();
+        if value.is_none()
+            && let Some(parent) = &self.parent
+        {
+            value = parent.borrow().resolve_value(name);
+        }
+
+        value
+    }
+
+    /// Resolve type of a variable
+    fn resolve_type(&self, name: &Symbol) -> Option<TypeSymbol> {
+        let mut type_of = self.types_for_variable.get(name).cloned();
+        if type_of.is_none()
+            && let Some(parent) = &self.parent
+        {
+            type_of = parent.borrow().resolve_type(name);
+        }
+
+        type_of
+    }
+
+    fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<(), Error> {
+        // TODO: do type checking here
+        match self.values.get(&name) {
+            Some(_) => {
+                // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
+                self.values.insert(name, value);
+            }
+            None => match &self.parent {
+                Some(parent) => {
+                    parent.borrow_mut().set_value(name, value)?;
+                }
+                _ => {
+                    Err(Error::SymbolNotFound(name))?;
+                }
+            },
+        }
+
+        Ok(())
     }
 }

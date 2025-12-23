@@ -1,10 +1,7 @@
 use std::{cell::RefCell, iter::zip, rc::Rc};
 
 use crate::{
-    AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange,
-    FunctionExecutionStrategy, FunctionType, InfixOperator, InterpreterValue, MemberAccess,
-    MemberAccessType, PrefixOperator, Scope, Stage, StageResult, Symbol, TypeSymbol,
-    TypeSymbolType,
+    AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy, FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator, Scope, ScopeLike, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType
 };
 
 macro_rules! scoped {
