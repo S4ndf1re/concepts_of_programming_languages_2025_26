@@ -1,7 +1,9 @@
 use std::{cell::RefCell, iter::zip, rc::Rc};
 
 use crate::{
-    AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy, FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator, Scope, ScopeLike, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType
+    AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy,
+    FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator,
+    Scope, ScopeLike, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType,
 };
 
 macro_rules! scoped {
@@ -273,7 +275,7 @@ impl Interpreter {
                 let new_value = new_value?;
                 scope
                     .set_value(
-                        recipient.clone(),
+                        recipient,
                         new_value
                             .make_reference_counted()
                             .map_err(|err| ErrorWithRange {
@@ -486,7 +488,14 @@ impl Interpreter {
 
                 self.get_current_scope()
                     .borrow_mut()
-                    .declare_variable(recipient.clone(), entry, type_of, true, false, node.range.clone())
+                    .declare_variable(
+                        recipient.clone(),
+                        entry,
+                        type_of,
+                        true,
+                        false,
+                        node.range.clone(),
+                    )
                     .map_err(|e| ErrorWithRange {
                         err: e,
                         range: iterable.range.clone(),

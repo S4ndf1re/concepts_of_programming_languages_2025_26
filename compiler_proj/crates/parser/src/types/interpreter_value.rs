@@ -9,7 +9,7 @@ use std::{
 use ecs::Entity;
 use typed_generational_arena::Index;
 
-use crate::{Error, Scope, StructType, Symbol, TypeSymbol, TypeSymbolType};
+use crate::{Error, Scope, ScopeLike, StructType, Symbol, TypeSymbol, TypeSymbolType};
 
 fn type_of_i_value(a: InterpreterValue) -> &'static str {
     match a {
@@ -783,5 +783,48 @@ impl Display for InterpreterValue {
             }
             _ => std::fmt::Result::Err(std::fmt::Error),
         }
+    }
+}
+
+/// Same as InterpreterValue, but a little bit more specific
+pub enum InterpreterScopeLikeValue {
+    Struct(Symbol, HashMap<Symbol, Box<InterpreterValue>>),
+    Component(Symbol, HashMap<Symbol, Box<InterpreterValue>>),
+    Module(Rc<RefCell<Scope>>),
+}
+
+impl ScopeLike for InterpreterScopeLikeValue {
+    fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
+        Some(match self {
+            InterpreterScopeLikeValue::Struct(_, fields) => fields.get(name)?.as_ref().clone(),
+            InterpreterScopeLikeValue::Component(_, fields) => fields.get(name)?.as_ref().clone(),
+            InterpreterScopeLikeValue::Module(inner_scope) => {
+                inner_scope.borrow().resolve_value(name)?
+            }
+        })
+    }
+
+    fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error> {
+        Ok(match self {
+            InterpreterScopeLikeValue::Struct(_, fields) => {
+                let field = fields.get_mut(name);
+                if let Some(field) = field {
+                    *field = Box::new(value);
+                } else {
+                    Err(Error::SymbolNotFound(name.to_owned()))?;
+                }
+            }
+            InterpreterScopeLikeValue::Component(_, fields) => {
+                let field = fields.get_mut(name);
+                if let Some(field) = field {
+                    *field = Box::new(value);
+                } else {
+                    Err(Error::SymbolNotFound(name.to_owned()))?;
+                }
+            }
+            InterpreterScopeLikeValue::Module(inner_scope) => {
+                inner_scope.borrow_mut().set_value(name, value)?;
+            }
+        })
     }
 }
