@@ -1,4 +1,4 @@
-use crate::{AstNode, Error, Interpreter, Parser, Preprocessor, Scope};
+use crate::{AstNode, Error, ErrorWithRange, Interpreter, Parser, Preprocessor, Scope};
 
 pub enum Stages {
     Parser(Parser),
@@ -25,16 +25,19 @@ impl From<StageResult> for usize {
 }
 
 pub trait Stage {
-    fn init(&mut self, prev_stage_result: StageResult) -> Result<(), Error>;
-    fn run(self) -> Result<StageResult, Error>;
+    fn init(&mut self, prev_stage_result: StageResult) -> Result<(), ErrorWithRange>;
+    fn run(self) -> Result<StageResult, ErrorWithRange>;
 }
 
-pub fn run_stages(stages: Vec<Stages>, mut state: StageResult) -> Result<StageResult, Error> {
+pub fn run_stages(
+    stages: Vec<Stages>,
+    mut state: StageResult,
+) -> Result<StageResult, ErrorWithRange> {
     for stage in stages {
         match stage {
-            Stages::Parser(mut p) =>{
-               p.init(state)?;
-               state = p.run()?;
+            Stages::Parser(mut p) => {
+                p.init(state)?;
+                state = p.run()?;
             }
             Stages::Preprocessor(mut p) => {
                 p.init(state)?;

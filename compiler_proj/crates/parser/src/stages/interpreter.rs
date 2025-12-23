@@ -1,10 +1,33 @@
 use std::{cell::RefCell, iter::zip, rc::Rc};
 
 use crate::{
-    AssignmentOperations, AstNode, AstNodeType, Error, FunctionExecutionStrategy, FunctionType,
-    InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator, Scope, Stage,
-    StageResult, Symbol, TypeSymbol, TypeSymbolType,
+    AssignmentOperations, AstNode, AstNodeType, BeautifyError, Error, ErrorWithRange,
+    FunctionExecutionStrategy, FunctionType, InfixOperator, InterpreterValue, MemberAccess,
+    MemberAccessType, PrefixOperator, Scope, Stage, StageResult, Symbol, TypeSymbol,
+    TypeSymbolType,
 };
+
+fn type_of_i_value(a: InterpreterValue) -> &'static str {
+    match a {
+        InterpreterValue::Int(_) => "int",
+        InterpreterValue::Float(_) => "float",
+        InterpreterValue::String(_) => "String",
+        InterpreterValue::Bool(_) => "bool",
+        InterpreterValue::List(interpreter_values) => todo!(),
+        InterpreterValue::Map(hash_map) => todo!(),
+        InterpreterValue::Struct(_, hash_map) => todo!(),
+        InterpreterValue::Option(interpreter_value) => todo!(),
+        InterpreterValue::Result(interpreter_value) => todo!(),
+        InterpreterValue::Function(_) => todo!(),
+        InterpreterValue::Weak(weak) => todo!(),
+        InterpreterValue::Strong(interpreter_value) => todo!(),
+        InterpreterValue::Entity(index) => todo!(),
+        InterpreterValue::Component(_, hash_map) => todo!(),
+        InterpreterValue::System(_) => todo!(),
+        InterpreterValue::Module(ref_cell) => todo!(),
+        InterpreterValue::Empty => todo!(),
+    }
+}
 
 macro_rules! scoped {
     ($s:ident, $inner:block) => {{
@@ -93,7 +116,7 @@ impl Interpreter {
         left: &AstNode,
         op: &InfixOperator,
         right: &AstNode,
-    ) -> Result<InterpreterValue, Error> {
+    ) -> Result<InterpreterValue, ErrorWithRange> {
         let lval = self.eval_node(left)?.unwrap();
         let rval = self.eval_node(right)?.unwrap();
 
@@ -114,9 +137,16 @@ impl Interpreter {
         };
 
         if let Ok(v) = new_val {
-            Ok(v.make_reference_counted()?)
+            Ok(v.make_reference_counted().map_err(|e| ErrorWithRange {
+                err: e,
+                range: left.range.clone(),
+            })?)
         } else {
-            new_val
+            let e = new_val.unwrap_err();
+            Err(ErrorWithRange {
+                err: e,
+                range: left.range.clone(),
+            })
         }
     }
 
@@ -124,44 +154,86 @@ impl Interpreter {
         &mut self,
         op: &PrefixOperator,
         right: &AstNode,
-    ) -> Result<InterpreterValue, Error> {
+    ) -> Result<InterpreterValue, ErrorWithRange> {
         let rval = self.eval_node(right)?.unwrap();
 
-        match op {
+        let new_val = match op {
             PrefixOperator::Not => rval.negate_bool(),
             PrefixOperator::Negate => rval.negate_number(),
+        };
+
+        if let Ok(v) = new_val {
+            Ok(v.make_reference_counted().map_err(|e| ErrorWithRange {
+                err: e,
+                range: right.range.clone(),
+            })?)
+        } else {
+            let e = new_val.unwrap_err();
+            Err(ErrorWithRange {
+                err: e,
+                range: right.range.clone(),
+            })
         }
     }
 
     pub fn eval_declaration(
         &mut self,
+        node: &AstNode,
         new_symbol: &Symbol,
         expression: &AstNode,
         assumed_type: &Option<TypeSymbol>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ErrorWithRange> {
         let value = self.eval_node(expression)?.unwrap();
         if let InterpreterValue::Empty = value {
-            return Err(Error::CantBeEmpty);
+            return Err(ErrorWithRange {
+                err: Error::CantBeEmpty,
+                range: expression.range.clone(),
+            });
         }
 
         let scope = self.get_current_scope();
         let mut scope = scope.borrow_mut();
 
         if let Some(type_of) = assumed_type {
+            // The user provided a type. Check if the types align. if yes, everything is ok, else throw error
             // TODO: Type checking
-            scope.declare_variable(new_symbol.clone(), value, type_of.clone(), false, false)?;
+            let decl_var = scope.declare_variable(
+                new_symbol.clone(),
+                value,
+                type_of.clone(),
+                false,
+                false,
+                node.range.clone(),
+            );
+            if let Err(e) = decl_var {
+                return Err(ErrorWithRange {
+                    err: e,
+                    range: expression.range.clone(),
+                });
+            }
         } else {
+            // Here, the type is not actually provided by the developer, hence, automatic type coercion must occur
             let type_of: Option<TypeSymbol> = value.clone().into();
-            if type_of.is_some() {
-                scope.declare_variable(
+            if let Some(type_of) = type_of {
+                let decl_var = scope.declare_variable(
                     new_symbol.clone(),
                     value,
-                    type_of.expect("already checked"),
+                    type_of,
                     false,
                     false,
-                )?;
+                    node.range.clone(),
+                );
+                if let Err(e) = decl_var {
+                    return Err(ErrorWithRange {
+                        err: e,
+                        range: expression.range.clone(),
+                    });
+                }
             } else {
-                return Err(Error::TypeDeductionError);
+                return Err(ErrorWithRange {
+                    err: Error::TypeDeductionError,
+                    range: expression.range.clone(),
+                });
             }
         }
 
@@ -170,48 +242,94 @@ impl Interpreter {
 
     pub fn eval_assignment_op(
         &mut self,
+        node: &AstNode,
         recipient: &Symbol,
         op: &AssignmentOperations,
         expression: &AstNode,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ErrorWithRange> {
         let value = self.eval_node(expression)?.unwrap();
         if let InterpreterValue::Empty = value {
-            return Err(Error::CantBeEmpty);
+            return Err(ErrorWithRange {
+                err: Error::CantBeEmpty,
+                range: expression.range.clone(),
+            });
         }
 
         let scope = self.get_current_scope();
         let mut scope = scope.borrow_mut();
         if let Some(old_value) = scope.resolve_value(recipient) {
-            if let InterpreterValue::Entity(_e) = old_value.deref()? {
-                if let InterpreterValue::Component(_, _) = value.deref()? {
+            if let InterpreterValue::Entity(_e) =
+                old_value.deref().map_err(|err| ErrorWithRange {
+                    err,
+                    range: expression.range.clone(),
+                })?
+            {
+                if let InterpreterValue::Component(_, _) =
+                    value.deref().map_err(|err| ErrorWithRange {
+                        err,
+                        range: expression.range.clone(),
+                    })?
+                {
                     // TODO: manipulate entity here, using value as a component
+                    // TODO: split logic up only in the case of assignment add operation
                 } else {
-                    Err(Error::OperationUnsupported)?;
+                    Err(ErrorWithRange {
+                        err: Error::OperationUnsupported {
+                            operation: "assignment operation".to_owned(),
+                            type_of: "must assign component to entity".to_owned(),
+                        },
+                        range: expression.range.clone(),
+                    })?;
                 }
             } else {
                 let new_value = match op {
-                    AssignmentOperations::Add => (old_value + value)?,
-                    AssignmentOperations::Subtract => (old_value - value)?,
-                    AssignmentOperations::Multiply => (old_value * value)?,
-                    AssignmentOperations::Divide => (old_value / value)?,
-                    AssignmentOperations::Modulo => (old_value % value)?,
-                    AssignmentOperations::Identity => value,
-                };
-                scope.set_value(recipient.clone(), new_value.make_reference_counted()?)?;
+                    AssignmentOperations::Add => old_value + value,
+                    AssignmentOperations::Subtract => old_value - value,
+                    AssignmentOperations::Multiply => old_value * value,
+                    AssignmentOperations::Divide => old_value / value,
+                    AssignmentOperations::Modulo => old_value % value,
+                    AssignmentOperations::Identity => Ok(value),
+                }
+                .map_err(|err| ErrorWithRange {
+                    err,
+                    range: expression.range.clone(),
+                });
+
+                let new_value = new_value?;
+                scope
+                    .set_value(
+                        recipient.clone(),
+                        new_value
+                            .make_reference_counted()
+                            .map_err(|err| ErrorWithRange {
+                                err,
+                                range: expression.range.clone(),
+                            })?,
+                    )
+                    .map_err(|err| ErrorWithRange {
+                        err,
+                        range: expression.range.clone(),
+                    })?;
             }
         } else {
-            Err(Error::SymbolNotFound(recipient.clone()))?
+            return Err(ErrorWithRange {
+                err: Error::SymbolNotFound(recipient.clone()),
+                range: node.range.clone(),
+            });
         }
 
         Ok(())
     }
 
-    pub fn eval_weak(&mut self, inner: &AstNode) -> Result<InterpreterValue, Error> {
+    pub fn eval_weak(&mut self, inner: &AstNode) -> Result<InterpreterValue, ErrorWithRange> {
         let val = self.eval_node(inner)?.unwrap();
         if let InterpreterValue::Strong(rc) = val {
             Ok(InterpreterValue::Weak(Rc::downgrade(&rc)))
         } else {
-            Err(Error::MainNotFound)
+            Err(ErrorWithRange {
+                err: Error::MainNotFound,
+                range: inner.range.clone(),
+            })
         }
     }
 
@@ -221,15 +339,21 @@ impl Interpreter {
         body: &Vec<Box<AstNode>>,
         else_ifs: &Vec<(Box<AstNode>, Vec<Box<AstNode>>)>,
         else_branch: &Option<Vec<Box<AstNode>>>,
-    ) -> Result<IsReturn, Error> {
+    ) -> Result<IsReturn, ErrorWithRange> {
         // NOTE: Cannot be return, hence safe to unwrap
-        let cond = self.eval_node(cond)?.unwrap();
+        let cond1 = self.eval_node(cond)?.unwrap();
 
-        let InterpreterValue::Bool(cond) = cond else {
-            return Err(Error::OperationUnsupported);
+        let InterpreterValue::Bool(cond1) = cond1 else {
+            return Err(ErrorWithRange {
+                err: Error::OperationUnsupported {
+                    operation: "if condition".to_owned(),
+                    type_of: "must be bool".to_owned(),
+                },
+                range: cond.range.clone(),
+            });
         };
 
-        if cond {
+        if cond1 {
             let res = scoped!(self, { self.eval_nodes(body)? });
 
             return_on_return!(res);
@@ -239,7 +363,13 @@ impl Interpreter {
             for elif in else_ifs {
                 let cond = self.eval_node(elif.0.as_ref())?.unwrap();
                 let InterpreterValue::Bool(cond) = cond else {
-                    return Err(Error::OperationUnsupported);
+                    return Err(ErrorWithRange {
+                        err: Error::OperationUnsupported {
+                            operation: "elseif condition".to_owned(),
+                            type_of: "must be bool".to_owned(),
+                        },
+                        range: elif.0.range.clone(),
+                    });
                 };
 
                 if cond {
@@ -266,11 +396,14 @@ impl Interpreter {
         &mut self,
         cond: &AstNode,
         body: &Vec<Box<AstNode>>,
-    ) -> Result<IsReturn, Error> {
+    ) -> Result<IsReturn, ErrorWithRange> {
         loop {
-            let cond = self.eval_node(cond)?.unwrap();
+            let cond1 = self.eval_node(cond)?.unwrap();
 
-            if !cond.as_bool()? {
+            if !cond1.as_bool().map_err(|e| ErrorWithRange {
+                err: e,
+                range: cond.range.clone(),
+            })? {
                 break;
             }
 
@@ -287,7 +420,7 @@ impl Interpreter {
         cond: &Option<Box<AstNode>>,
         step: &Option<Box<AstNode>>,
         body: &Vec<Box<AstNode>>,
-    ) -> Result<IsReturn, Error> {
+    ) -> Result<IsReturn, ErrorWithRange> {
         scoped!(self, {
             // Init condition
             if let Some(init) = init.as_ref() {
@@ -299,15 +432,26 @@ impl Interpreter {
                     } => {
                         self.eval_node(init.as_ref())?;
                     }
-                    _ => return Err(Error::OperationUnsupported),
+                    _ => {
+                        return Err(ErrorWithRange {
+                            err: Error::OperationUnsupported {
+                                operation: "for loop declaration".to_owned(),
+                                type_of: "must be declaration".to_owned(),
+                            },
+                            range: init.range.clone(),
+                        });
+                    }
                 }
             }
 
             loop {
                 if let Some(cond) = cond.as_ref() {
-                    let cond = self.eval_node(cond.as_ref())?.unwrap();
+                    let cond1 = self.eval_node(cond.as_ref())?.unwrap();
 
-                    if !cond.as_bool()? {
+                    if !cond1.as_bool().map_err(|e| ErrorWithRange {
+                        err: e,
+                        range: cond.range.clone(),
+                    })? {
                         break;
                     }
                 }
@@ -324,7 +468,15 @@ impl Interpreter {
                         } => {
                             self.eval_node(step.as_ref())?;
                         }
-                        _ => return Err(Error::OperationUnsupported),
+                        _ => {
+                            return Err(ErrorWithRange {
+                                err: Error::OperationUnsupported {
+                                    operation: "for loop assignment".to_owned(),
+                                    type_of: "must be assignment".to_owned(),
+                                },
+                                range: step.range.clone(),
+                            });
+                        }
                     }
                 }
             }
@@ -335,25 +487,35 @@ impl Interpreter {
 
     pub fn eval_for_each(
         &mut self,
+        node: &AstNode,
         recipient: &Symbol,
         iterable: &AstNode,
         body: &Vec<Box<AstNode>>,
-    ) -> Result<IsReturn, Error> {
-        let iterable = self.eval_node(iterable)?.unwrap();
+    ) -> Result<IsReturn, ErrorWithRange> {
+        let iterable1 = self.eval_node(iterable)?.unwrap();
 
-        for entry in iterable.as_list()? {
+        for entry in iterable1.as_list().map_err(|e| ErrorWithRange {
+            err: e,
+            range: iterable.range.clone(),
+        })? {
             scoped!(self, {
                 let Some(type_of) = entry.clone().into() else {
-                    return Err(Error::OperationUnsupported);
+                    return Err(ErrorWithRange {
+                        err: Error::OperationUnsupported {
+                            operation: "foreach".to_owned(),
+                            type_of: "non list type".to_owned(),
+                        },
+                        range: iterable.range.clone(),
+                    });
                 };
 
-                self.get_current_scope().borrow_mut().declare_variable(
-                    recipient.clone(),
-                    entry,
-                    type_of,
-                    true,
-                    false,
-                )?;
+                self.get_current_scope()
+                    .borrow_mut()
+                    .declare_variable(recipient.clone(), entry, type_of, true, false, node.range.clone())
+                    .map_err(|e| ErrorWithRange {
+                        err: e,
+                        range: iterable.range.clone(),
+                    })?;
 
                 scoped!(self, {
                     let res = self.eval_nodes(body)?;
@@ -365,7 +527,10 @@ impl Interpreter {
         Ok(IsReturn::NoReturn(InterpreterValue::Empty))
     }
 
-    pub fn eval_list(&mut self, values: &Vec<Box<AstNode>>) -> Result<InterpreterValue, Error> {
+    pub fn eval_list(
+        &mut self,
+        values: &Vec<Box<AstNode>>,
+    ) -> Result<InterpreterValue, ErrorWithRange> {
         let mut list_elems = Vec::new();
 
         for value in values {
@@ -394,11 +559,10 @@ impl Interpreter {
     }
 
     /// Member call represents any type of member call, a, a.b, a.b().c, a.b(a()).c, etc
-    pub fn eval_member_call(&mut self, calls: &[MemberAccess]) -> Result<IsReturn, Error> {
+    pub fn eval_member_call(&mut self, calls: &[MemberAccess]) -> Result<IsReturn, ErrorWithRange> {
         assert!(calls.len() == 1, "currently, only one call is supported");
 
         let call = &calls[0];
-        println!("{:?}", &call.type_of);
 
         let res = match &call.type_of {
             MemberAccessType::Function(params) => {
@@ -411,17 +575,31 @@ impl Interpreter {
                     let res = self.call_function(&call.member, params, fn_type)?;
                     IsReturn::NoReturn(res)
                 } else {
-                    Err(Error::SymbolNotFound(call.member.clone()))?
+                    Err(ErrorWithRange {
+                        err: Error::SymbolNotFound(call.member.clone()),
+                        range: call.range.clone(),
+                    })?
                 }
             }
-            MemberAccessType::Symbol => IsReturn::NoReturn(self.eval_symbol(&call.member)?),
-            _ => Err(Error::OperationUnsupported)?,
+            MemberAccessType::Symbol => {
+                IsReturn::NoReturn(self.eval_symbol(&call.member).map_err(|e| ErrorWithRange {
+                    err: e,
+                    range: call.range.clone(),
+                })?)
+            }
+            _ => Err(ErrorWithRange {
+                err: Error::OperationUnsupported {
+                    operation: "Struct creation".to_owned(),
+                    type_of: "struct".to_owned(),
+                },
+                range: call.range.clone(),
+            })?,
         };
 
         Ok(res)
     }
 
-    pub fn eval_node(&mut self, node: &AstNode) -> Result<IsReturn, Error> {
+    pub fn eval_node(&mut self, node: &AstNode) -> Result<IsReturn, ErrorWithRange> {
         let evaluated = match &node.type_of {
             // Primitives
             AstNodeType::Bool(b) => {
@@ -437,7 +615,12 @@ impl Interpreter {
                 InterpreterValue::String(s.clone()),
             )),
             AstNodeType::List(values) => IsReturn::NoReturn(self.eval_list(values)?),
-            AstNodeType::Map(values) => IsReturn::NoReturn(self.eval_map(values)?),
+            AstNodeType::Map(values) => {
+                IsReturn::NoReturn(self.eval_map(values).map_err(|e| ErrorWithRange {
+                    err: e,
+                    range: node.range.clone(),
+                })?)
+            }
             AstNodeType::Weak(inner) => IsReturn::NoReturn(self.eval_weak(inner.as_ref())?),
             // Infix call and prefix calls
             AstNodeType::InfixCall(left, op, right) => {
@@ -453,7 +636,7 @@ impl Interpreter {
                 expression,
                 assumed_type,
             } => {
-                self.eval_declaration(new_symbol, expression.as_ref(), assumed_type)?;
+                self.eval_declaration(node, new_symbol, expression.as_ref(), assumed_type)?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             AstNodeType::AssignmentOp {
@@ -461,11 +644,16 @@ impl Interpreter {
                 operation,
                 expression,
             } => {
-                self.eval_assignment_op(recipient, operation, expression.as_ref())?;
+                self.eval_assignment_op(node, recipient, operation, expression.as_ref())?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             // Member call can be anything that is of the form a.b.c.d(a,b).c etc. a() and a are also member calls with length 1
             AstNodeType::MemberCall { calls } => self.eval_member_call(calls)?,
+            // AstNodeType::MemberCall { calls } => self.eval_member_call(calls).map_err(
+            //     |e|ErrorWithRange{
+            //         err: e,
+            //         range: node.range.clone()
+            //     })?,
             AstNodeType::ReturnStatement { return_value } => {
                 IsReturn::Return(self.eval_node(return_value.as_ref())?.unwrap())
             }
@@ -486,14 +674,21 @@ impl Interpreter {
                 recipient,
                 iterable,
                 body,
-            } => self.eval_for_each(recipient, iterable, body)?,
-            _ => Err(Error::OperationUnsupported)?,
+            } => self.eval_for_each(node, recipient, iterable, body)?,
+            _ => Err(Error::OperationUnsupported {
+                operation: format!("{:?}", &node.type_of),
+                type_of: "".to_owned(),
+            })
+            .map_err(|err| ErrorWithRange {
+                err,
+                range: node.range.clone(),
+            })?,
         };
 
         Ok(evaluated)
     }
 
-    pub fn eval_nodes(&mut self, nodes: &Vec<Box<AstNode>>) -> Result<IsReturn, Error> {
+    pub fn eval_nodes(&mut self, nodes: &Vec<Box<AstNode>>) -> Result<IsReturn, ErrorWithRange> {
         for node in nodes {
             let res = self.eval_node(node.as_ref())?;
 
@@ -509,13 +704,13 @@ impl Interpreter {
         fn_name: &Symbol,
         params: &Vec<Box<AstNode>>,
         fn_signature: TypeSymbol,
-    ) -> Result<InterpreterValue, Error> {
+    ) -> Result<InterpreterValue, ErrorWithRange> {
         if let TypeSymbolType::Function(fn_type) = &fn_signature.type_of {
             // TODO: add error handling
             let mut evaled_params = Vec::new();
 
             for param in params {
-                evaled_params.push(self.eval_node(param.as_ref())?);
+                evaled_params.push((param, self.eval_node(param.as_ref())?));
             }
 
             // Create a new stack entry with its own scope
@@ -524,26 +719,40 @@ impl Interpreter {
                 {
                     let scope = self.get_current_scope();
                     let mut scope_mut = scope.borrow_mut();
-                    for (value, (param, type_of)) in zip(evaled_params, &fn_type.params) {
+                    for ((param_node, value), (param, type_of)) in
+                        zip(evaled_params, &fn_type.params)
+                    {
                         // TODO: Type check here
                         let value = value.unwrap();
                         if let InterpreterValue::Empty = value {
-                            return Err(Error::ExpectedValue(param.to_owned()));
+                            return Err(ErrorWithRange {
+                                err: Error::ExpectedValue(param.to_owned()),
+                                range: 1..2,
+                            });
                         }
 
-                        scope_mut.declare_variable(
-                            param.clone(),
-                            value,
-                            type_of.clone(),
-                            true,
-                            false,
-                        )?;
+                        scope_mut
+                            .declare_variable(
+                                param.clone(),
+                                value,
+                                type_of.clone(),
+                                true,
+                                false,
+                                param_node.range.clone(),
+                            )
+                            .map_err(|e| ErrorWithRange {
+                                err: e,
+                                range: param_node.range.clone(),
+                            })?;
                     }
                 }
                 match &fn_type.execution_body {
                     FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body)?,
                     FunctionExecutionStrategy::Buildin(callback) => {
-                        callback(self.get_current_scope())?
+                        callback(self.get_current_scope()).map_err(|e| ErrorWithRange {
+                            err: e,
+                            range: 1..2,
+                        })?
                     }
                 }
             });
@@ -551,7 +760,10 @@ impl Interpreter {
             match result {
                 IsReturn::NoReturn(InterpreterValue::Empty) => Ok(InterpreterValue::Empty),
                 IsReturn::Return(v) => Ok(v),
-                _ => Err(Error::MissingReturn(fn_name.clone())),
+                _ => Err(ErrorWithRange {
+                    err: Error::MissingReturn(fn_name.clone()),
+                    range: 1..2,
+                }),
             }
         } else {
             unimplemented!("error here")
@@ -560,7 +772,7 @@ impl Interpreter {
 }
 
 impl Stage for Interpreter {
-    fn init(&mut self, prev_stage_result: StageResult) -> Result<(), crate::Error> {
+    fn init(&mut self, prev_stage_result: StageResult) -> Result<(), ErrorWithRange> {
         match prev_stage_result {
             StageResult::Preprocessor(global_scope, ast) => {
                 self.ast = ast;
@@ -571,11 +783,14 @@ impl Stage for Interpreter {
 
                 Ok(())
             }
-            _ => Err(Error::StageError(1, prev_stage_result.into())),
+            _ => Err(ErrorWithRange {
+                err: Error::StageError(1, prev_stage_result.into()),
+                range: 0..1,
+            }),
         }
     }
 
-    fn run(mut self) -> Result<StageResult, Error> {
+    fn run(mut self) -> Result<StageResult, ErrorWithRange> {
         let main_fn = self
             .get_current_scope()
             .borrow()
@@ -589,24 +804,30 @@ impl Stage for Interpreter {
                     .expect("must be present if value is present");
                 self.call_function(&self.entrypoint_fn.clone(), &vec![], main_fn)?;
             } else {
-                return Err(Error::WrongType(
-                    self.entrypoint_fn.clone(),
-                    TypeSymbolType::Function(FunctionType {
-                        name: "main".to_string(),
-                        params: vec![],
-                        return_type: None,
-                        execution_body: FunctionExecutionStrategy::Interpreted(vec![]),
-                    })
-                    .to_string(),
-                    self.get_current_scope()
-                        .borrow()
-                        .resolve_type(&self.entrypoint_fn)
-                        .expect("must be present if value is presen")
+                return Err(ErrorWithRange {
+                    err: Error::WrongType(
+                        self.entrypoint_fn.clone(),
+                        TypeSymbolType::Function(FunctionType {
+                            name: "main".to_string(),
+                            params: vec![],
+                            return_type: None,
+                            execution_body: FunctionExecutionStrategy::Interpreted(vec![]),
+                        })
                         .to_string(),
-                ));
+                        self.get_current_scope()
+                            .borrow()
+                            .resolve_type(&self.entrypoint_fn)
+                            .expect("must be present if value is presen")
+                            .to_string(),
+                    ),
+                    range: 1..1,
+                });
             }
         } else {
-            return Err(Error::MainNotFound);
+            return Err(ErrorWithRange {
+                err: Error::MainNotFound,
+                range: 1..1,
+            });
         }
 
         Ok(StageResult::Interpretation)
@@ -615,7 +836,10 @@ impl Stage for Interpreter {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Interpreter, Parser, Preprocessor, StageResult, Stages, ast_grammar, run_stages};
+    use crate::{
+        BeautifyError, Interpreter, Parser, Preprocessor, StageResult, Stages, ast_grammar,
+        run_stages,
+    };
 
     #[test]
     fn test_basic_interpretation() {
@@ -642,7 +866,7 @@ mod tests {
     fn test_basic_interpretation2() {
         let source = r#"
            fn main() {
-            a := 10;
+            a = 10;
             a += 20;
             println(a);
            }
@@ -657,7 +881,11 @@ mod tests {
 
         let state = StageResult::Parsing(ast);
 
-        let _ = run_stages(stages, state).unwrap();
+        let result = run_stages(stages, state);
+
+        if let Err(err) = result {
+            err.print_error(source);
+        }
     }
 
     #[test]
@@ -738,10 +966,12 @@ mod tests {
                 for (a in [10, 20, 30, 40]) {
                     res += a;
                 }
-                assert(res == 100);
+                assert(res == true);
            }
            "#
         .to_owned();
+
+        let source_safe = source.clone();
 
         let stages = vec![
             Stages::Parser(Parser::default()),
@@ -751,6 +981,9 @@ mod tests {
 
         let state = StageResult::PreParse(source);
 
-        let _ = run_stages(stages, state).unwrap();
+        let result = run_stages(stages, state);
+        if let Err(occured_error) = result {
+            occured_error.print_error(&source_safe);
+        }
     }
 }

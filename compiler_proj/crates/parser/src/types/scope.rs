@@ -1,16 +1,17 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc};
 
 use crate::{
-    Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType, TypeSymbol, TypeSymbolType
+    Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType, TypeSymbol,
+    TypeSymbolType,
 };
 
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
     values: HashMap<Symbol, InterpreterValue>,
     types_for_variable: HashMap<Symbol, TypeSymbol>,
     defined_types: HashMap<Symbol, TypeSymbol>,
+    original_locations: HashMap<Symbol, Range<usize>>,
 }
 
 impl Scope {
@@ -20,6 +21,7 @@ impl Scope {
             values: HashMap::new(),
             types_for_variable: HashMap::new(),
             defined_types: HashMap::new(),
+            original_locations: HashMap::new(),
         }
     }
 
@@ -28,6 +30,7 @@ impl Scope {
         name: Symbol,
         mut type_of: TypeSymbol,
         pre_resolve: bool,
+        location: Range<usize>,
     ) -> Result<(), Error> {
         if !pre_resolve {
             self.check_variable_type(&mut type_of)?;
@@ -35,7 +38,8 @@ impl Scope {
             let _ = self.check_variable_type(&mut type_of);
         }
 
-        self.defined_types.insert(name, type_of);
+        self.defined_types.insert(name.clone(), type_of);
+        self.original_locations.insert(name, location);
         Ok(())
     }
 
@@ -113,7 +117,6 @@ impl Scope {
                 queries,
                 execution_body: _,
             }) => {
-
                 if let Some(queries) = queries {
                     for query in queries {
                         for dependency in query.type_of.get_dependent_symbols() {
@@ -155,9 +158,10 @@ impl Scope {
         mut type_of: TypeSymbol,
         shadow: bool,
         pre_resolve: bool,
+        location: Range<usize>,
     ) -> Result<(), Error> {
-        if !shadow && self.types_for_variable.contains_key(&name){
-                return Err(Error::VariableAlreadyDeclared(name));
+        if !shadow && self.types_for_variable.contains_key(&name) {
+            return Err(Error::VariableAlreadyDeclared(name));
         }
 
         if !pre_resolve {
@@ -168,6 +172,7 @@ impl Scope {
 
         self.types_for_variable.insert(name.clone(), type_of);
         self.values.insert(name.clone(), value);
+        self.original_locations.insert(name, location);
 
         Ok(())
     }
@@ -179,8 +184,9 @@ impl Scope {
         type_of: TypeSymbol,
         shadow: bool,
         pre_resolve: bool,
+        location: Range<usize>,
     ) -> Result<(), Error> {
-        self.declare_variable(name, value, type_of, shadow, pre_resolve)
+        self.declare_variable(name, value, type_of, shadow, pre_resolve, location)
     }
 
     pub fn declare_system(
@@ -190,26 +196,26 @@ impl Scope {
         type_of: TypeSymbol,
         shadow: bool,
         pre_resolve: bool,
+        location: Range<usize>,
     ) -> Result<(), Error> {
-        self.declare_variable(name, value, type_of, shadow, pre_resolve)
+        self.declare_variable(name, value, type_of, shadow, pre_resolve, location)
     }
 
     pub fn set_value(&mut self, name: Symbol, value: InterpreterValue) -> Result<(), Error> {
         // TODO: do type checking here
         match self.values.get(&name) {
-            Some(_) => { // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
+            Some(_) => {
+                // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
                 self.values.insert(name, value);
             }
-            None => {
-                match &self.parent {
-                    Some(parent) => {
-                        parent.borrow_mut().set_value(name, value)?;
-                    }
-                    _ => {
-                        Err(Error::SymbolNotFound(name))?;
-                    }
+            None => match &self.parent {
+                Some(parent) => {
+                    parent.borrow_mut().set_value(name, value)?;
                 }
-            }
+                _ => {
+                    Err(Error::SymbolNotFound(name))?;
+                }
+            },
         }
 
         Ok(())

@@ -42,7 +42,7 @@ impl BuildinFunctionDescription {
             return_type: self.return_type,
         }));
 
-        scope.declare_function(self.name, value, type_of, true, true)?;
+        scope.declare_function(self.name, value, type_of, true, true, 0..1)?;
 
         Ok(())
     }

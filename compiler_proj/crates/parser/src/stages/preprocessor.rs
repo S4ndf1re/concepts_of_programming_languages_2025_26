@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    AstNode, AstNodeType, AstTypeDefinition, Error, FunctionType, InterpreterValue, Scope, Stage,
-    StageResult, StructType, SystemType, TypeSymbol, TypeSymbolType, register_buildin,
+    AstNode, AstNodeType, AstTypeDefinition, Error, ErrorWithRange, FunctionType, InterpreterValue,
+    Scope, Stage, StageResult, StructType, SystemType, TypeSymbol, TypeSymbolType,
+    register_buildin,
 };
 
 pub struct Preprocessor {
@@ -20,41 +21,58 @@ impl Preprocessor {
 }
 
 impl Stage for Preprocessor {
-    fn init(&mut self, old_output: StageResult) -> Result<(), Error> {
+    fn init(&mut self, old_output: StageResult) -> Result<(), ErrorWithRange> {
         if let StageResult::Parsing(ast) = old_output {
             self.ast = ast;
         } else {
-            return Err(Error::StageError(0, old_output.into()));
+            return Err(ErrorWithRange {
+                err: Error::StageError(0, old_output.into()),
+                range: 0..1,
+            });
         }
 
         let scope = &mut self.global_scope;
-        scope.declare_type(
-            "int".to_owned(),
-            TypeSymbol::strong(TypeSymbolType::Int),
-            false,
-        )?;
-        scope.declare_type(
-            "float".to_owned(),
-            TypeSymbol::strong(TypeSymbolType::Float),
-            false,
-        )?;
-        scope.declare_type(
-            "bool".to_owned(),
-            TypeSymbol::strong(TypeSymbolType::Bool),
-            false,
-        )?;
-        scope.declare_type(
-            "string".to_owned(),
-            TypeSymbol::strong(TypeSymbolType::String),
-            false,
-        )?;
+        scope
+            .declare_type(
+                "int".to_owned(),
+                TypeSymbol::strong(TypeSymbolType::Int),
+                false,
+                0..1,
+            )
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+        scope
+            .declare_type(
+                "float".to_owned(),
+                TypeSymbol::strong(TypeSymbolType::Float),
+                false,
+                0..1,
+            )
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
 
-        register_buildin(scope)?;
+        scope
+            .declare_type(
+                "bool".to_owned(),
+                TypeSymbol::strong(TypeSymbolType::Bool),
+                false,
+                0..1
+            )
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+
+        scope
+            .declare_type(
+                "string".to_owned(),
+                TypeSymbol::strong(TypeSymbolType::String),
+                false,
+                0..1,
+            )
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+
+        register_buildin(scope).map_err(|err| ErrorWithRange { err, range: 0..1 })?;
 
         Ok(())
     }
 
-    fn run(mut self) -> Result<StageResult, Error> {
+    fn run(mut self) -> Result<StageResult, ErrorWithRange> {
         let mut other_nodes = Vec::new();
 
         for node in self.ast {
@@ -78,7 +96,11 @@ impl Stage for Preprocessor {
                                 }));
                             // SAFETY: Is always initialized
                             self.global_scope
-                                .declare_function(typename, fun, fun_type, false, true)?;
+                                .declare_function(typename, fun, fun_type, false, true, node.range.clone())
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: node.range.clone(),
+                                })?;
                         }
                         AstTypeDefinition::Struct(attributes) => {
                             let mut methods = Vec::new();
@@ -119,7 +141,12 @@ impl Stage for Preprocessor {
                                     statics,
                                 }));
 
-                            self.global_scope.declare_type(typename, struct_def, true)?;
+                            self.global_scope
+                                .declare_type(typename, struct_def, true, node.range.clone())
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: node.range.clone(),
+                                })?;
                         }
                         AstTypeDefinition::System(params, queries) => {
                             // first, validate the params, if all params have a matching query
@@ -128,7 +155,15 @@ impl Stage for Preprocessor {
                                     && queries.is_some()
                                     && !queries.as_ref().expect("already checked").is_empty()
                             {
-                                Err(Error::OperationUnsupported)?;
+                                Err(ErrorWithRange {
+                                    err: Error::OperationUnsupported {
+                                        operation: "system definition".to_owned(),
+                                        type_of:
+                                            "non matching param list in query and system parameters"
+                                                .to_owned(),
+                                    },
+                                    range: node.range.clone(),
+                                })?;
                             }
 
                             if !params.is_empty()
@@ -138,20 +173,38 @@ impl Stage for Preprocessor {
                                 for query in queries {
                                     query_resolver.insert(query.symbol.clone(), query.clone());
                                 }
-                                let mut visited_quries = HashSet::new();
+                                let mut visited_queries = HashSet::new();
 
                                 for param in &params {
                                     if query_resolver.contains_key(&param.1) {
-                                        visited_quries.insert(param.1.clone());
+                                        visited_queries.insert(param.1.clone());
                                     } else {
-                                        Err(Error::OperationUnsupported)?;
+                                        Err(ErrorWithRange {
+                                            err: Error::OperationUnsupported {
+                                                operation: "system definition".to_owned(),
+                                                type_of: format!(
+                                                    "missing query for parameter {}, expected {}",
+                                                    param.0, param.1
+                                                ),
+                                            },
+                                            range: node.range.clone(),
+                                        })?;
                                     }
                                 }
 
-                                if visited_quries.len() < query_resolver.len() {
+                                if visited_queries.len() < query_resolver.len() {
                                     for query in &query_resolver {
-                                        if !visited_quries.contains(query.0) {
-                                            Err(Error::OperationUnsupported)?;
+                                        if !visited_queries.contains(query.0) {
+                                            Err(ErrorWithRange {
+                                                err: Error::OperationUnsupported {
+                                                    operation: "system definition".to_owned(),
+                                                    type_of: format!(
+                                                        "non used query parameter {}",
+                                                        query.0
+                                                    ),
+                                                },
+                                                range: node.range.clone(),
+                                            })?;
                                         }
                                     }
                                 }
@@ -168,7 +221,11 @@ impl Stage for Preprocessor {
                             }));
                             // SAFETY: Is always initialized
                             self.global_scope
-                                .declare_system(typename, sys, sys_type, true, true)?;
+                                .declare_system(typename, sys, sys_type, true, true, node.range.clone())
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: node.range.clone(),
+                                })?;
                         }
                         _ => (),
                     }
@@ -177,7 +234,9 @@ impl Stage for Preprocessor {
             }
         }
         Ok(StageResult::Preprocessor(
-            self.global_scope.check_all_types_after_pre_resolve()?,
+            self.global_scope
+                .check_all_types_after_pre_resolve()
+                .map_err(|err| ErrorWithRange { err, range: 0..1 })?,
             other_nodes,
         ))
     }
