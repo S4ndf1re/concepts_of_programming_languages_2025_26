@@ -2,6 +2,18 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 
+
+typedef union {
+    char* values;
+    float valuef;
+} InterpreterValue;
+
+
+void set_value(int value_id, InterpreterValue value) {
+    printf("THis is a callback");
+}
+
+
 int main()
 {
     char *program;
@@ -15,10 +27,15 @@ int main()
     program[2] = 0x12;
     program[3] = 0;
     program[4] = 0;
-    program[5] = 0xC3;
+    program[5] = // make function call &set_value
+    program[6] = // make gc callback
+    program[7] = 0xC3;
 
     fnptr = (int (*)(void))program;
     a = fnptr();
+
+
+    void (*fn_addr)(int, InterpreterValue) = &set_value;
 
     printf("Result = %X\n", a);
     return 0;

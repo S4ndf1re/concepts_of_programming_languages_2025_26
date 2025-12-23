@@ -25,6 +25,7 @@ macro_rules! impl_system_fn {
 
             #[inline]
             fn call<'w>(&mut self, param: SystemParamItem<($($param,)*)>) -> Self::Out {
+                #[allow(clippy::complexity)]
                 fn call_inner<Out, $($param,)*>(mut f: impl FnMut($($param,)*) -> Out, $($param: $param,)*) -> Out {
                     f($($param,)*)
                 }

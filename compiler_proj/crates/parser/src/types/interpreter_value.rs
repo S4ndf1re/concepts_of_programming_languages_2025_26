@@ -220,6 +220,33 @@ impl InterpreterValue {
                 }
                 _ => Err(Error::OperationUnsupported),
             },
+            InterpreterValue::Component(l, lfields) => match rval {
+                InterpreterValue::Component(r, rfields) => {
+                    // TODO: Optimize clone away
+                    let mut eqls = true;
+                    eqls = eqls && l == r;
+
+                    for (l, lfield) in &lfields {
+                        if let Some(rfield) = rfields.get(l)
+                            // Must clone here, otherwise its a moved value in the next comparison
+                            && let InterpreterValue::Bool(b) = lfield.clone().equals(*rfield.clone())?
+                        {
+                            eqls = eqls && b;
+                        }
+                    }
+
+                    for (r, rfield) in rfields {
+                        if let Some(lfield) = lfields.get(&r)
+                            && let InterpreterValue::Bool(b) = rfield.equals(*lfield.clone())?
+                        {
+                            eqls = eqls && b;
+                        }
+                    }
+
+                    Ok(InterpreterValue::Bool(eqls))
+                }
+                _ => Err(Error::OperationUnsupported),
+            },
             _ => Err(Error::OperationUnsupported),
         }
     }

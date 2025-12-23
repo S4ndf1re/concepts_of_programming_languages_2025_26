@@ -4,10 +4,7 @@ pub use system::*;
 pub mod world;
 pub use world::*;
 
-use std::{
-    any::TypeId,
-    collections::{HashMap, btree_map::Keys},
-};
+use std::{any::TypeId, collections::HashMap};
 
 use typed_generational_arena::{Index, NonzeroGeneration};
 

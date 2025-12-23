@@ -1,7 +1,9 @@
-use crate::{
-    AstNode, AstNodeType, AstTypeDefinition, Error, FunctionType, InterpreterValue, Scope, Stage, StageResult, StructType, TypeSymbol, TypeSymbolType, register_buildin
-};
+use std::collections::{HashMap, HashSet};
 
+use crate::{
+    AstNode, AstNodeType, AstTypeDefinition, Error, FunctionType, InterpreterValue, Scope, Stage,
+    StageResult, StructType, SystemType, TypeSymbol, TypeSymbolType, register_buildin,
+};
 
 pub struct Preprocessor {
     ast: Vec<AstNode>,
@@ -70,7 +72,9 @@ impl Stage for Preprocessor {
                                     name: typename.clone(),
                                     params,
                                     return_type: return_type.map(Box::new),
-                                    execution_body: crate::FunctionExecutionStrategy::Interpreted(execution_body),
+                                    execution_body: crate::FunctionExecutionStrategy::Interpreted(
+                                        execution_body,
+                                    ),
                                 }));
                             // SAFETY: Is always initialized
                             self.global_scope
@@ -93,7 +97,10 @@ impl Stage for Preprocessor {
                                         name: methodname.clone(),
                                         params,
                                         return_type: return_type.map(Box::new),
-                                        execution_body: crate::FunctionExecutionStrategy::Interpreted(execution_body),
+                                        execution_body:
+                                            crate::FunctionExecutionStrategy::Interpreted(
+                                                execution_body,
+                                            ),
                                     };
 
                                     if is_method {
@@ -113,6 +120,55 @@ impl Stage for Preprocessor {
                                 }));
 
                             self.global_scope.declare_type(typename, struct_def, true)?;
+                        }
+                        AstTypeDefinition::System(params, queries) => {
+                            // first, validate the params, if all params have a matching query
+                            if !params.is_empty() && queries.is_none()
+                                || params.is_empty()
+                                    && queries.is_some()
+                                    && !queries.as_ref().expect("already checked").is_empty()
+                            {
+                                Err(Error::OperationUnsupported)?;
+                            }
+
+                            if !params.is_empty()
+                                && let Some(queries) = &queries
+                            {
+                                let mut query_resolver = HashMap::new();
+                                for query in queries {
+                                    query_resolver.insert(query.symbol.clone(), query.clone());
+                                }
+                                let mut visited_quries = HashSet::new();
+
+                                for param in &params {
+                                    if query_resolver.contains_key(&param.1) {
+                                        visited_quries.insert(param.1.clone());
+                                    } else {
+                                        Err(Error::OperationUnsupported)?;
+                                    }
+                                }
+
+                                if visited_quries.len() < query_resolver.len() {
+                                    for query in &query_resolver {
+                                        if !visited_quries.contains(query.0) {
+                                            Err(Error::OperationUnsupported)?;
+                                        }
+                                    }
+                                }
+                            }
+
+                            let sys = InterpreterValue::System(typename.clone());
+                            let sys_type = TypeSymbol::strong(TypeSymbolType::System(SystemType {
+                                name: typename.clone(),
+                                params,
+                                queries,
+                                execution_body: crate::SystemExecutionStrategy::Interpreted(
+                                    execution_body,
+                                ),
+                            }));
+                            // SAFETY: Is always initialized
+                            self.global_scope
+                                .declare_system(typename, sys, sys_type, true, true)?;
                         }
                         _ => (),
                     }

@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    Error, FunctionType, InterpreterValue, StructType, Symbol, TypeSymbol, TypeSymbolType,
+    Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType, TypeSymbol, TypeSymbolType
 };
 
 #[derive(Debug)]
@@ -107,6 +107,25 @@ impl Scope {
                 }
                 Ok(())
             }
+            TypeSymbolType::System(SystemType {
+                name: _,
+                params: _,
+                queries,
+                execution_body: _,
+            }) => {
+
+                if let Some(queries) = queries {
+                    for query in queries {
+                        for dependency in query.type_of.get_dependent_symbols() {
+                            if self.resolve_defined_type(dependency).is_none() {
+                                Err(Error::TypeDeductionError)?;
+                            }
+                        }
+                    }
+                }
+
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
@@ -154,6 +173,17 @@ impl Scope {
     }
 
     pub fn declare_function(
+        &mut self,
+        name: Symbol,
+        value: InterpreterValue,
+        type_of: TypeSymbol,
+        shadow: bool,
+        pre_resolve: bool,
+    ) -> Result<(), Error> {
+        self.declare_variable(name, value, type_of, shadow, pre_resolve)
+    }
+
+    pub fn declare_system(
         &mut self,
         name: Symbol,
         value: InterpreterValue,

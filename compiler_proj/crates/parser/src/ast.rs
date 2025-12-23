@@ -23,8 +23,103 @@ pub trait ToGraphviz {
     }
 }
 
+
 #[derive(Debug, PartialEq, Clone)]
-pub enum Query {}
+pub enum GroupSystem {
+    Single(Symbol),
+    Ordered(Symbol, Symbol),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum RegisterType {
+    Chain(Vec<Symbol>),
+    After(Symbol, Symbol),
+    Before(Symbol, Symbol),
+}
+
+
+#[derive(Debug, PartialEq, Clone, Hash)]
+pub struct QueryTerm {
+    pub components: Vec<Symbol>,
+}
+
+#[derive(Debug, PartialEq, Clone, Hash)]
+pub enum QueryCond {
+    Component(Symbol),
+    Not(Box<QueryCond>),
+    And(Box<QueryCond>, Box<QueryCond>),
+    Or(Box<QueryCond>, Box<QueryCond>),
+}
+
+impl QueryCond {
+    pub fn get_dependent_symbols(&self) -> Vec<&Symbol> {
+        match self {
+            QueryCond::Component(s) => vec![s],
+            QueryCond::Not(cond) => cond.get_dependent_symbols(),
+            QueryCond::And(c1, c2) => c1
+                .get_dependent_symbols()
+                .into_iter()
+                .chain(c2.get_dependent_symbols())
+                .collect::<Vec<_>>(),
+            QueryCond::Or(c1, c2) => c1
+                .get_dependent_symbols()
+                .into_iter()
+                .chain(c2.get_dependent_symbols())
+                .collect::<Vec<_>>(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Hash)]
+pub enum QueryType {
+    List {
+        select: QueryTerm,
+        condition: Option<QueryCond>,
+    },
+    Single {
+        select: QueryTerm,
+        condition: Option<QueryCond>,
+    },
+    World,
+    Resource(Symbol),
+    EventReader(Symbol),
+    EventWriter(Symbol),
+}
+
+impl QueryType {
+    pub fn get_dependent_symbols(&self) -> Vec<&Symbol> {
+        let mut result = Vec::new();
+        match self {
+            QueryType::List { select, condition } => {
+                for symbol in &select.components {
+                    result.push(symbol);
+                }
+                if let Some(cond) = condition {
+                    result.extend(cond.get_dependent_symbols());
+                }
+            }
+            QueryType::Single { select, condition } => {
+                for symbol in &select.components {
+                    result.push(symbol);
+                }
+                if let Some(cond) = condition {
+                    result.extend(cond.get_dependent_symbols());
+                }
+            }
+            QueryType::Resource(res) => result.push(res),
+            QueryType::EventReader(evt) | QueryType::EventWriter(evt) => result.push(evt),
+            _ => (),
+        }
+
+        result
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Hash)]
+pub struct Query {
+    pub symbol: Symbol,
+    pub type_of: QueryType,
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AstTypeDefinition {
@@ -37,7 +132,7 @@ pub enum AstTypeDefinition {
     List(TypeSymbol),
     Map(TypeSymbol, TypeSymbol),
     Function(Vec<(Symbol, TypeSymbol)>, Option<TypeSymbol>),
-    System(Vec<(Symbol, Query)>),
+    System(Vec<(Symbol, Symbol)>, Option<Vec<Query>>),
     Option(TypeSymbol),
     Result(TypeSymbol, TypeSymbol),
 }
@@ -110,7 +205,7 @@ impl ToGraphviz for AstTypeDefinition {
 
                 vec![attr!("label", "function")]
             }
-            AstTypeDefinition::System(_items) => {
+            AstTypeDefinition::System(_items, _query) => {
                 // TODO: implemented yet
                 vec![attr!("label", "system")]
             }
@@ -353,8 +448,19 @@ pub enum AstNodeType {
     ReturnStatement {
         return_value: Box<AstNode>,
     },
-    // TODO: Break statement in loops,
+    GroupDef {
+        systems: Vec<GroupSystem>,
+    },
+    Register {
+        /// Can be both groups and systems
+        schedule_entity: RegisterType,
+    },
+    EntityDef {
+        name: Symbol,
+        default_components: Option<Vec<AstNode>>,
+    },
     Weak(Box<AstNode>),
+    // TODO: Break statement in loops,
 }
 
 impl ToGraphviz for AstNode {
@@ -650,7 +756,9 @@ impl ToGraphviz for AstNode {
                 let expr_node = ast_node.to_graphviz(graph);
                 edges.push(edge!(n.id.clone() => expr_node.id.clone()));
                 vec![attr!("label", "weak")]
-            }
+            },
+            _ => vec![attr!("label", "groupDef")]
+,
         };
 
         n.attributes = attrs;

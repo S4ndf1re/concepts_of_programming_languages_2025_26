@@ -40,7 +40,6 @@ impl IsReturn {
 
 pub struct Environment {
     scope: Rc<RefCell<Scope>>,
-    // TODO: Add is_in_loop flag for checking returns, alternatively handle this only in preprocessing
 }
 
 pub struct Interpreter {
@@ -183,16 +182,23 @@ impl Interpreter {
         let scope = self.get_current_scope();
         let mut scope = scope.borrow_mut();
         if let Some(old_value) = scope.resolve_value(recipient) {
-            let new_value = match op {
-                AssignmentOperations::Add => (old_value + value)?,
-                AssignmentOperations::Subtract => (old_value - value)?,
-                AssignmentOperations::Multiply => (old_value * value)?,
-                AssignmentOperations::Divide => (old_value / value)?,
-                AssignmentOperations::Modulo => (old_value % value)?,
-                AssignmentOperations::Identity => value,
-            };
-
-            scope.set_value(recipient.clone(), new_value.make_reference_counted()?)?;
+            if let InterpreterValue::Entity(_e) = old_value.deref()? {
+                if let InterpreterValue::Component(_, _) = value.deref()? {
+                    // TODO: manipulate entity here, using value as a component
+                } else {
+                    Err(Error::OperationUnsupported)?;
+                }
+            } else {
+                let new_value = match op {
+                    AssignmentOperations::Add => (old_value + value)?,
+                    AssignmentOperations::Subtract => (old_value - value)?,
+                    AssignmentOperations::Multiply => (old_value * value)?,
+                    AssignmentOperations::Divide => (old_value / value)?,
+                    AssignmentOperations::Modulo => (old_value % value)?,
+                    AssignmentOperations::Identity => value,
+                };
+                scope.set_value(recipient.clone(), new_value.make_reference_counted()?)?;
+            }
         } else {
             Err(Error::SymbolNotFound(recipient.clone()))?
         }
@@ -373,7 +379,9 @@ impl Interpreter {
         &mut self,
         _values: &Vec<(Box<AstNode>, Box<AstNode>)>,
     ) -> Result<InterpreterValue, Error> {
-        todo!()
+        unimplemented!(
+            "not planned, because of time limitations. It is needed to actually have hashable types for this features. This is currently not implemented"
+        )
         // let mut map = HashMap::new();
 
         // for value in values {
@@ -479,7 +487,7 @@ impl Interpreter {
                 iterable,
                 body,
             } => self.eval_for_each(recipient, iterable, body)?,
-            _ => IsReturn::NoReturn(InterpreterValue::Empty),
+            _ => Err(Error::OperationUnsupported)?,
         };
 
         Ok(evaluated)

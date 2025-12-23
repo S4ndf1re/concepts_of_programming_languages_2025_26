@@ -607,4 +607,94 @@ mod tests {
             panic!("{}", err)
         }
     }
+
+    #[test]
+    fn system_test() {
+        let source = r#"
+                        system query_entites(a: A, b: B, c: C, d: D, e: E, f: F) 
+                            querying
+                                A as List with {Entity, C1, C2},
+                                B as Single with {Entity, C1, C2 % { C1 && C2 && (C3 || !C4)}},
+                                C as World,
+                                D as Resource of Res1,
+                                E as EventReader for Evt1,
+                                F as EventWriter for Evt2,
+                            {
+                                println("abc");
+                            }
+                    "#;
+        let expr = ast_grammar::ProgrammParser::new().parse(source);
+
+        if let Err(err) = expr {
+            err.print_error(source);
+            panic!("{}", err)
+        }
+    }
+
+    #[test]
+    fn group_test() {
+        let source = r#"
+                    group PreUpdate {
+                        s1,s2,s3
+                    }
+
+                    group Update {
+                        s1,s2,s3,
+                    }
+
+                    group PostUpdate {
+                        s1, 
+                        s2 -> s3,
+                        s3 -> s4,
+                        s3 -> s5,
+                    }
+                    "#;
+        let expr = ast_grammar::ProgrammParser::new().parse(source);
+
+        if let Err(err) = expr {
+            err.print_error(source);
+            panic!("{}", err)
+        }
+    }
+
+    #[test]
+    fn register_test1() {
+        let source = r#"
+                    register PreUpdate -> Update;
+                    register s1 -> s2 -> s3;
+                    register s4 after s1;
+                    register s5 before s1;
+                    "#;
+        let expr = ast_grammar::ProgrammParser::new().parse(source);
+
+        if let Err(err) = expr {
+            err.print_error(source);
+            panic!("{}", err)
+        }
+    }
+
+    #[test]
+    fn create_entity_test1() {
+        let source = r#"
+                        create entity e1;
+
+                        create entity e2
+                            with 
+                                C1,
+                                C2,
+                                C3;
+
+                        e1 += C1 {
+                            fov: 45.0,
+                            speed: 10.0,
+                            distance: 10.0,
+                        };
+                    "#;
+        let expr = ast_grammar::ProgrammParser::new().parse(source);
+
+        if let Err(err) = expr {
+            err.print_error(source);
+            panic!("{}", err)
+        }
+    }
 }

@@ -1,12 +1,15 @@
-use std::{fmt::Display, iter::zip};
+use std::{cell::RefCell, fmt::{Display, Error}, iter::zip, rc::Rc, thread::Scope};
 
 use derivative::Derivative;
 
-use crate::{AstNode, Symbol, TypeSymbol};
+use crate::{AstNode, Query, Symbol};
+
+
+pub type BuildinSystemCallback = fn(scope: Rc<RefCell<Scope>>) -> Result<(), Error>;
 
 #[derive(Debug, Clone)]
 pub enum SystemExecutionStrategy {
-    // Buildin(BuildinCallback),
+    Buildin(BuildinSystemCallback),
     Interpreted(Vec<Box<AstNode>>),
 }
 
@@ -14,8 +17,8 @@ pub enum SystemExecutionStrategy {
 #[derivative(Debug, Clone, Hash, Eq)]
 pub struct SystemType {
     pub name: Symbol,
-    pub params: Vec<(Symbol, TypeSymbol)>,
-    pub return_type: Option<Box<TypeSymbol>>,
+    pub params: Vec<(Symbol, Symbol)>,
+    pub queries: Option<Vec<Query>>,
     #[derivative(Hash = "ignore")]
     pub execution_body: SystemExecutionStrategy,
 }
@@ -28,37 +31,21 @@ impl PartialEq for SystemType {
             equals = equals && p1.1 == p2.1;
         }
 
-        equals = equals && self.return_type == other.return_type;
-
         equals
     }
 }
 
 impl Display for SystemType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(ret) = &self.return_type {
-            write!(
-                f,
-                "system {}({}): {}",
-                self.name,
-                self.params
-                    .iter()
-                    .map(|p| format!("{}: {}", p.0, p.1))
-                    .collect::<Vec<String>>()
-                    .join(", "),
-                ret,
-            )
-        } else {
-            write!(
-                f,
-                "system {}({})",
-                self.name,
-                self.params
-                    .iter()
-                    .map(|p| format!("{}: {}", p.0, p.1))
-                    .collect::<Vec<String>>()
-                    .join(", "),
-            )
-        }
+        write!(
+            f,
+            "system {}({})",
+            self.name,
+            self.params
+                .iter()
+                .map(|p| format!("{}: {}", p.0, p.1))
+                .collect::<Vec<String>>()
+                .join(", "),
+        )
     }
 }
