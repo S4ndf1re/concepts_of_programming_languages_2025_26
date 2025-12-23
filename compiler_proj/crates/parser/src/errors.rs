@@ -56,6 +56,8 @@ pub enum Error {
     CantCastAsType(Symbol),
     #[error("parser error")]
     ParseError(ParseError<usize, ast_grammar::Token<'static>, &'static str>),
+    #[error("type is not a scope")]
+    IsNotAScope,
 }
 
 pub trait BeautifyError: Display {
@@ -377,6 +379,20 @@ impl BeautifyError for ErrorWithRange {
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label(format!("should be of type {expected}")),
+                        ),
+                    )];
+
+                let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
+                println!("{}", renderer.render(report));
+            }
+            Error::IsNotAScope => {
+                let report = &[Level::ERROR
+                    .primary_title(format!("{}", &self.err))
+                    .element(
+                        Snippet::source(source).annotation(
+                            AnnotationKind::Primary
+                                .span(self.range.clone())
+                                .label("should be a scope like type (struct, module, component)"),
                         ),
                     )];
 

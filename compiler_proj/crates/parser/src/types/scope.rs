@@ -1,14 +1,14 @@
-use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, hash_map::Iter},
+    ops::Range,
+    rc::Rc,
+};
 
 use crate::{
     Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType, TypeSymbol,
     TypeSymbolType,
 };
-
-pub trait ScopeLike {
-    fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue>;
-    fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error>;
-}
 
 #[derive(Debug, Default)]
 pub struct Scope {
@@ -28,6 +28,14 @@ impl Scope {
             defined_types: HashMap::new(),
             original_locations: HashMap::new(),
         }
+    }
+
+    pub fn get_parent_scope(&self) -> Option<Rc<RefCell<Scope>>> {
+        self.parent.as_ref().map(|p| Rc::clone(p))
+    }
+
+    pub fn set_parent_scope(&mut self, parent: Option<Rc<RefCell<Scope>>>) {
+        self.parent = parent;
     }
 
     pub fn declare_type(
@@ -206,6 +214,37 @@ impl Scope {
         self.declare_variable(name, value, type_of, shadow, pre_resolve, location)
     }
 
+    /// resolve value of a variable
+    pub fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
+        let mut value = self.values.get(name).cloned();
+        if value.is_none()
+            && let Some(parent) = &self.parent
+        {
+            value = parent.borrow().resolve_value(name);
+        }
+
+        value
+    }
+
+    pub fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error> {
+        // TODO: do type checking here
+        // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
+        let scoped_variable = self.values.get_mut(name);
+        if let Some(scoped_variable) = scoped_variable {
+            *scoped_variable = value;
+        } else {
+            match &self.parent {
+                Some(parent) => {
+                    parent.borrow_mut().set_value(name, value)?;
+                }
+                _ => {
+                    Err(Error::SymbolNotFound(name.to_owned()))?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Resolve type of a variable
     pub fn resolve_type(&self, name: &Symbol) -> Option<TypeSymbol> {
         let mut type_of = self.types_for_variable.get(name).cloned();
@@ -248,37 +287,12 @@ impl Scope {
         self.types_for_variable = new_variable_types;
         Ok(self)
     }
-}
 
-impl ScopeLike for Scope {
-    /// resolve value of a variable
-    fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
-        let mut value = self.values.get(name).cloned();
-        if value.is_none()
-            && let Some(parent) = &self.parent
-        {
-            value = parent.borrow().resolve_value(name);
-        }
-
-        value
+    pub fn iter_values(&self) -> Iter<'_, Symbol, InterpreterValue> {
+        self.values.iter()
     }
 
-    fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error> {
-        // TODO: do type checking here
-        // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
-        let scoped_variable = self.values.get_mut(name);
-        if let Some(scoped_variable) = scoped_variable {
-            *scoped_variable = value;
-        } else {
-            match &self.parent {
-                Some(parent) => {
-                    parent.borrow_mut().set_value(name, value)?;
-                }
-                _ => {
-                    Err(Error::SymbolNotFound(name.to_owned()))?;
-                }
-            }
-        }
-        Ok(())
+    pub fn iter_types(&self) -> Iter<'_, Symbol, TypeSymbol> {
+        self.types_for_variable.iter()
     }
 }

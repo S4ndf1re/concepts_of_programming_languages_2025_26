@@ -1,9 +1,14 @@
-use std::{cell::RefCell, iter::zip, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    iter::zip,
+    rc::Rc,
+};
 
 use crate::{
     AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy,
     FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator,
-    Scope, ScopeLike, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType,
+    Scope, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType,
 };
 
 macro_rules! scoped {
@@ -11,6 +16,27 @@ macro_rules! scoped {
         $s.push_scope();
         let ret = { $inner };
         $s.pop_scope();
+        ret
+    }};
+}
+
+macro_rules! with_scope {
+    ($s:ident, $scope:ident, $inner:block) => {{
+        $s.environments.push(Environment {
+            scope: Rc::clone($scope),
+        });
+        let ret = { $inner };
+        $s.pop_scope();
+        ret
+    }};
+}
+
+macro_rules! with_parent_scope {
+    ($s:ident, $parent:ident, $scope:ident $inner:block) => {{
+        let old_parent = scope.get_parent_scope();
+        scope.set_parent_scope(parent);
+        let ret = { $inner };
+        scope.set_parent_scope(old_parent);
         ret
     }};
 }
@@ -543,44 +569,235 @@ impl Interpreter {
     }
 
     /// Member call represents any type of member call, a, a.b, a.b().c, a.b(a()).c, etc
-    pub fn eval_member_call(&mut self, calls: &[MemberAccess]) -> Result<IsReturn, ErrorWithRange> {
+    pub fn eval_member_call(
+        &mut self,
+        node: &AstNode,
+        calls: &[MemberAccess],
+    ) -> Result<IsReturn, ErrorWithRange> {
+        // mutably borrow here, to allow for more complex pointer casting;
+        let mut current_scope = Some(Rc::clone(&self.get_current_scope()));
+
         assert!(calls.len() == 1, "currently, only one call is supported");
 
-        let call = &calls[0];
+        let mut last_res = Err(ErrorWithRange {
+            err: Error::OperationUnsupported {
+                operation: "member call".to_owned(),
+                type_of: "must be at least one member call".to_owned(),
+            },
+            range: node.range.clone(),
+        });
 
-        let res = match &call.type_of {
-            MemberAccessType::Function(params) => {
-                let fn_type = {
-                    // Scoped to free borrowed refcell
-                    self.get_current_scope().borrow().resolve_type(&call.member)
-                };
+        for call in calls {
+            let res = match &call.type_of {
+                MemberAccessType::Function(params) => {
+                    let fn_type = {
+                        // Scoped to free borrowed refcell
+                        let Some(local_scope) = &current_scope else {
+                            return Err(ErrorWithRange {
+                                err: Error::IsNotAScope,
+                                range: call.range.clone(),
+                            });
+                        };
 
-                if let Some(fn_type) = fn_type {
-                    let res = self.call_function(&call.member, params, fn_type)?;
-                    IsReturn::NoReturn(res)
-                } else {
-                    Err(ErrorWithRange {
-                        err: Error::SymbolNotFound(call.member.clone()),
-                        range: call.range.clone(),
-                    })?
+                        local_scope.borrow().resolve_type(&call.member)
+                    };
+
+                    if let Some(fn_type) = fn_type {
+                        // TODO: this will not work, since the scopes are not right. The params must come from the actual scope, while the function itself must get executed in its local scope.
+                        let res = self.call_function(&call.member, params, fn_type)?;
+                        // Set current scope here. it must be checked before every execution
+                        current_scope = res.clone().into();
+                        IsReturn::NoReturn(res)
+                    } else {
+                        Err(ErrorWithRange {
+                            err: Error::SymbolNotFound(call.member.clone()),
+                            range: call.range.clone(),
+                        })?
+                    }
                 }
-            }
-            MemberAccessType::Symbol => {
-                IsReturn::NoReturn(self.eval_symbol(&call.member).map_err(|e| ErrorWithRange {
-                    err: e,
-                    range: call.range.clone(),
-                })?)
-            }
-            _ => Err(ErrorWithRange {
-                err: Error::OperationUnsupported {
-                    operation: "Struct creation".to_owned(),
-                    type_of: "struct".to_owned(),
-                },
-                range: call.range.clone(),
-            })?,
-        };
+                MemberAccessType::Symbol => {
+                    let Some(local_scope) = &current_scope else {
+                        return Err(ErrorWithRange {
+                            err: Error::IsNotAScope,
+                            range: call.range.clone(),
+                        });
+                    };
 
-        Ok(res)
+                    let res = with_scope!(self, local_scope, {
+                        self.eval_symbol(&call.member).map_err(|e| ErrorWithRange {
+                            err: e,
+                            range: call.range.clone(),
+                        })
+                    })?;
+                    current_scope = res.clone().into();
+                    IsReturn::NoReturn(res)
+                }
+                MemberAccessType::Struct(fields_to_assign) => {
+                    let struct_type = {
+                        // Scoped to free borrowed refcell
+                        let Some(local_scope) = &current_scope else {
+                            return Err(ErrorWithRange {
+                                err: Error::IsNotAScope,
+                                range: call.range.clone(),
+                            });
+                        };
+
+                        // NOTE: resolve defined type here, not variable type, as this is a defined type
+                        local_scope.borrow().resolve_defined_type(&call.member)
+                    };
+
+                    if let Some(struct_type) = struct_type {
+                        match &struct_type.type_of {
+                            TypeSymbolType::Struct(struct_type_def) => {
+                                let mut fields_of_struct_type =
+                                    HashMap::<&String, &TypeSymbol>::new();
+                                for (fieldname, type_of) in &struct_type_def.fields {
+                                    fields_of_struct_type.insert(fieldname, type_of);
+                                }
+
+                                let mut assigned_fields = HashSet::<&String>::new();
+                                let struct_scope = Rc::new(RefCell::new(Scope::default()));
+
+                                for (field, value_node) in fields_to_assign {
+                                    if fields_of_struct_type.contains_key(field) {
+                                        assigned_fields.insert(field);
+                                        let value = self.eval_node(value_node)?.unwrap();
+                                        struct_scope
+                                            .borrow_mut()
+                                            .declare_variable(
+                                                field.clone(),
+                                                value,
+                                                fields_of_struct_type[field].clone(),
+                                                true,
+                                                false,
+                                                value_node.range.clone(),
+                                            )
+                                            .map_err(|err| ErrorWithRange {
+                                                err,
+                                                range: value_node.range.clone(),
+                                            })?;
+                                    } else {
+                                        todo!("throw error here, as field does not exist")
+                                    }
+                                }
+
+                                for (field, _) in fields_of_struct_type {
+                                    if !assigned_fields.contains(field) {
+                                        todo!("throw error, because field is not assigned")
+                                    }
+                                }
+
+                                // NOTE: make self as the struct value itself. since self is a keyword in the lexer, it cant be used as a variable name
+                                let struct_value = InterpreterValue::Struct(
+                                    struct_type_def.name.clone(),
+                                    Rc::clone(&struct_scope),
+                                )
+                                .make_reference_counted()
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: call.range.clone(),
+                                })?;
+
+                                struct_scope
+                                    .borrow_mut()
+                                    .declare_variable(
+                                        "self".to_owned(),
+                                        struct_value.clone(),
+                                        struct_type.clone(),
+                                        true,
+                                        false,
+                                        call.range.clone(),
+                                    )
+                                    .map_err(|err| ErrorWithRange {
+                                        err,
+                                        range: call.range.clone(),
+                                    })?;
+
+                                current_scope = Some(struct_scope);
+                                IsReturn::NoReturn(struct_value)
+                            }
+                            TypeSymbolType::Component(struct_type_def) => {
+                                let mut fields_of_struct_type =
+                                    HashMap::<&String, &TypeSymbol>::new();
+                                for (fieldname, type_of) in &struct_type_def.fields {
+                                    fields_of_struct_type.insert(fieldname, type_of);
+                                }
+
+                                let mut assigned_fields = HashSet::<&String>::new();
+                                let struct_scope = Rc::new(RefCell::new(Scope::default()));
+
+                                for (field, value_node) in fields_to_assign {
+                                    if fields_of_struct_type.contains_key(field) {
+                                        assigned_fields.insert(field);
+                                        let value = self.eval_node(value_node)?.unwrap();
+                                        struct_scope
+                                            .borrow_mut()
+                                            .declare_variable(
+                                                field.clone(),
+                                                value,
+                                                fields_of_struct_type[field].clone(),
+                                                true,
+                                                false,
+                                                value_node.range.clone(),
+                                            )
+                                            .map_err(|err| ErrorWithRange {
+                                                err,
+                                                range: value_node.range.clone(),
+                                            })?;
+                                    } else {
+                                        todo!("throw error here, as field does not exist")
+                                    }
+                                }
+
+                                for (field, _) in fields_of_struct_type {
+                                    if !assigned_fields.contains(field) {
+                                        todo!("throw error, because field is not assigned")
+                                    }
+                                }
+
+                                // NOTE: make self as the struct value itself. since self is a keyword in the lexer, it cant be used as a variable name
+                                let struct_value = InterpreterValue::Component(
+                                    struct_type_def.name.clone(),
+                                    Rc::clone(&struct_scope),
+                                )
+                                .make_reference_counted()
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: call.range.clone(),
+                                })?;
+
+                                struct_scope
+                                    .borrow_mut()
+                                    .declare_variable(
+                                        "self".to_owned(),
+                                        struct_value.clone(),
+                                        struct_type.clone(),
+                                        true,
+                                        false,
+                                        call.range.clone(),
+                                    )
+                                    .map_err(|err| ErrorWithRange {
+                                        err,
+                                        range: call.range.clone(),
+                                    })?;
+
+                                current_scope = Some(struct_scope);
+                                IsReturn::NoReturn(struct_value)
+                            }
+                            _ => todo!("error here, cause type is not a struct like"),
+                        }
+                    } else {
+                        Err(ErrorWithRange {
+                            err: Error::SymbolNotFound(call.member.clone()),
+                            range: call.range.clone(),
+                        })?
+                    }
+                }
+            };
+            last_res = Ok(res);
+        }
+
+        last_res
     }
 
     pub fn eval_node(&mut self, node: &AstNode) -> Result<IsReturn, ErrorWithRange> {
@@ -632,7 +849,7 @@ impl Interpreter {
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             // Member call can be anything that is of the form a.b.c.d(a,b).c etc. a() and a are also member calls with length 1
-            AstNodeType::MemberCall { calls } => self.eval_member_call(calls)?,
+            AstNodeType::MemberCall { calls } => self.eval_member_call(node, calls)?,
             // AstNodeType::MemberCall { calls } => self.eval_member_call(calls).map_err(
             //     |e|ErrorWithRange{
             //         err: e,

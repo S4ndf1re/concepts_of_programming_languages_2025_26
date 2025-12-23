@@ -5,7 +5,9 @@ use graphviz_rust::{
     dot_structures::{Attribute, Graph, Id, Node, NodeId, Stmt},
 };
 
-use crate::{FunctionType, StructType, Symbol, SystemType, ToGraphviz};
+use crate::{
+    ComponentType, FunctionType, InterpreterValue, StructType, Symbol, SystemType, ToGraphviz,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeSymbolType {
@@ -19,11 +21,22 @@ pub enum TypeSymbolType {
     Option(Box<TypeSymbol>),
     Result(Box<TypeSymbol>, Box<TypeSymbol>),
     Struct(StructType),
+    Component(ComponentType),
     Function(FunctionType),
     System(SystemType),
     SelfType,
     Any,
     Entity,
+}
+
+impl TypeSymbolType {
+    pub fn is_structlike(&self) -> bool {
+        match self {
+            TypeSymbolType::Struct(_) => true,
+            TypeSymbolType::Component(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl Display for TypeSymbolType {
@@ -39,6 +52,7 @@ impl Display for TypeSymbolType {
             Self::Option(v) => write!(f, "{}?", v),
             Self::Result(v, e) => write!(f, "{}!{}", v, e),
             Self::Struct(s) => write!(f, "{}", s),
+            Self::Component(c) => write!(f, "{}", c),
             Self::Function(v) => write!(f, "{}", v),
             Self::System(v) => write!(f, "{}", v),
             Self::SelfType => write!(f, "self"),

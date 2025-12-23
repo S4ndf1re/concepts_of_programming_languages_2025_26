@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, InterpreterValue, IsReturn, Scope, ScopeLike, Symbol, TypeSymbol, TypeSymbolType
+    BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, InterpreterValue, IsReturn, Scope, Symbol, TypeSymbol, TypeSymbolType
 };
 
 pub fn println(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {

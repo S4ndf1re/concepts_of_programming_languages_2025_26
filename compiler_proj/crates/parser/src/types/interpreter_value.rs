@@ -9,7 +9,7 @@ use std::{
 use ecs::Entity;
 use typed_generational_arena::Index;
 
-use crate::{Error, Scope, ScopeLike, StructType, Symbol, TypeSymbol, TypeSymbolType};
+use crate::{ComponentType, Error, Scope, StructType, Symbol, TypeSymbol, TypeSymbolType};
 
 fn type_of_i_value(a: InterpreterValue) -> &'static str {
     match a {
@@ -42,7 +42,7 @@ pub enum InterpreterValue {
     Bool(bool),
     List(Vec<InterpreterValue>),
     Map(HashMap<InterpreterValue, InterpreterValue>),
-    Struct(Symbol, HashMap<Symbol, Box<InterpreterValue>>),
+    Struct(Symbol, Rc<RefCell<Scope>>),
     Option(Option<Box<InterpreterValue>>),
     Result(Result<Box<InterpreterValue>, Box<InterpreterValue>>),
     Function(Symbol), // Functions execution body is contained in its type definition,
@@ -52,7 +52,7 @@ pub enum InterpreterValue {
 
     // ECS Intergration
     Entity(Index<Entity>),
-    Component(Symbol, HashMap<Symbol, Box<InterpreterValue>>),
+    Component(Symbol, Rc<RefCell<Scope>>),
     System(Symbol), // System execution body is contained in its type definition,
 
     // This can be any scope
@@ -109,10 +109,7 @@ impl InterpreterValue {
         }
     }
 
-    fn preprocess_for_operation(
-        mut a: Self,
-        mut b: Self,
-    ) -> Result<(InterpreterValue, InterpreterValue), Error> {
+    pub fn preprocess_single(mut a: Self) -> Result<InterpreterValue, Error> {
         let lval = if a.is_reference_counted() {
             if a.must_upgrade_before_deref() {
                 a = a.upgrade()?;
@@ -123,18 +120,18 @@ impl InterpreterValue {
             &a
         };
 
-        let rval = if b.is_reference_counted() {
-            if b.must_upgrade_before_deref() {
-                b = b.upgrade()?;
-            }
+        Ok(lval.clone())
+    }
 
-            b.deref()?
-        } else {
-            &b
-        };
+    pub fn preprocess_for_operation(
+        a: Self,
+        mut b: Self,
+    ) -> Result<(InterpreterValue, InterpreterValue), Error> {
+        let lval = Self::preprocess_single(a)?;
+        let rval = Self::preprocess_single(b)?;
 
         // TODO: Performance optimization
-        Ok((lval.clone(), rval.clone()))
+        Ok((lval, rval))
     }
 
     pub fn logical_and(self, other: Self) -> Result<InterpreterValue, Error> {
@@ -287,22 +284,27 @@ impl InterpreterValue {
             },
             InterpreterValue::Struct(l, lfields) => match rval {
                 InterpreterValue::Struct(r, rfields) => {
+                    // Both are the exact same struct
+                    if lfields.as_ref() as *const _ == rfields.as_ref() as *const _ {
+                        return Ok(InterpreterValue::Bool(true));
+                    }
+
                     // TODO: Optimize clone away
                     let mut eqls = true;
                     eqls = eqls && *l == r;
 
-                    for (l, lfield) in lfields {
-                        if let Some(rfield) = rfields.get(l)
+                    for (l, lfield) in lfields.borrow().iter_values() {
+                        if let Some(rfield) = rfields.borrow().resolve_value(l)
                             // Must clone here, otherwise its a moved value in the next comparison
-                            && let InterpreterValue::Bool(b) = lfield.clone().equals(*rfield.clone())?
+                            && let InterpreterValue::Bool(b) = lfield.clone().equals(rfield)?
                         {
                             eqls = eqls && b;
                         }
                     }
 
-                    for (r, rfield) in rfields {
-                        if let Some(lfield) = lfields.get(&r)
-                            && let InterpreterValue::Bool(b) = rfield.equals(*lfield.clone())?
+                    for (r, rfield) in rfields.borrow().iter_values() {
+                        if let Some(lfield) = lfields.borrow().resolve_value(&r)
+                            && let InterpreterValue::Bool(b) = rfield.clone().equals(lfield)?
                         {
                             eqls = eqls && b;
                         }
@@ -321,22 +323,27 @@ impl InterpreterValue {
             },
             InterpreterValue::Component(l, lfields) => match rval {
                 InterpreterValue::Component(r, rfields) => {
+                    // Both are the exact same struct
+                    if lfields.as_ref() as *const _ == rfields.as_ref() as *const _ {
+                        return Ok(InterpreterValue::Bool(true));
+                    }
+
                     // TODO: Optimize clone away
                     let mut eqls = true;
                     eqls = eqls && *l == r;
 
-                    for (l, lfield) in lfields {
-                        if let Some(rfield) = rfields.get(l)
+                    for (l, lfield) in lfields.borrow().iter_values() {
+                        if let Some(rfield) = rfields.borrow().resolve_value(l)
                             // Must clone here, otherwise its a moved value in the next comparison
-                            && let InterpreterValue::Bool(b) = lfield.clone().equals(*rfield.clone())?
+                            && let InterpreterValue::Bool(b) = lfield.clone().equals(rfield)?
                         {
                             eqls = eqls && b;
                         }
                     }
 
-                    for (r, rfield) in rfields {
-                        if let Some(lfield) = lfields.get(&r)
-                            && let InterpreterValue::Bool(b) = rfield.equals(*lfield.clone())?
+                    for (r, rfield) in rfields.borrow().iter_values() {
+                        if let Some(lfield) = lfields.borrow().resolve_value(&r)
+                            && let InterpreterValue::Bool(b) = rfield.clone().equals(lfield)?
                         {
                             eqls = eqls && b;
                         }
@@ -732,20 +739,24 @@ impl From<InterpreterValue> for Option<TypeSymbol> {
                 Some(TypeSymbol::strong(TypeSymbolType::Struct(StructType {
                     name,
                     fields: fields
-                        .iter()
-                        .map(|v| {
-                            (
-                                v.0.clone(),
-                                Into::<Option<TypeSymbol>>::into(v.1.as_ref().clone()),
-                            )
-                        })
-                        .filter(|v| v.1.is_some())
-                        .map(|v| (v.0, v.1.expect("must be some")))
+                        .borrow()
+                        .iter_types()
+                        .map(|v| (v.0.clone(), v.1.clone()))
                         .collect::<Vec<_>>(),
                     methods: vec![],
                     statics: vec![],
                 })))
             }
+            InterpreterValue::Component(name, fields) => Some(TypeSymbol::strong(
+                TypeSymbolType::Component(ComponentType {
+                    name,
+                    fields: fields
+                        .borrow()
+                        .iter_types()
+                        .map(|v| (v.0.clone(), v.1.clone()))
+                        .collect::<Vec<_>>(),
+                }),
+            )),
             InterpreterValue::Strong(inner) => Into::<Option<TypeSymbol>>::into((*inner).clone()),
             InterpreterValue::Weak(_) => {
                 let inner = value
@@ -767,7 +778,17 @@ impl Display for InterpreterValue {
             InterpreterValue::String(s) => write!(f, "{s}"),
             InterpreterValue::Struct(name, fields) => {
                 let fields = fields
-                    .iter()
+                    .borrow()
+                    .iter_values()
+                    .map(|(name, value)| format!("{name}: {value}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "{name} {{ {} }}", fields)
+            }
+            InterpreterValue::Component(name, fields) => {
+                let fields = fields
+                    .borrow()
+                    .iter_values()
                     .map(|(name, value)| format!("{name}: {value}"))
                     .collect::<Vec<_>>()
                     .join(", ");
@@ -793,38 +814,17 @@ pub enum InterpreterScopeLikeValue {
     Module(Rc<RefCell<Scope>>),
 }
 
-impl ScopeLike for InterpreterScopeLikeValue {
-    fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
-        Some(match self {
-            InterpreterScopeLikeValue::Struct(_, fields) => fields.get(name)?.as_ref().clone(),
-            InterpreterScopeLikeValue::Component(_, fields) => fields.get(name)?.as_ref().clone(),
-            InterpreterScopeLikeValue::Module(inner_scope) => {
-                inner_scope.borrow().resolve_value(name)?
-            }
-        })
-    }
+impl From<InterpreterValue> for Option<Rc<RefCell<Scope>>> {
+    fn from(value: InterpreterValue) -> Self {
+        let Ok(value) = InterpreterValue::preprocess_single(value) else {
+            return None;
+        };
 
-    fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error> {
-        Ok(match self {
-            InterpreterScopeLikeValue::Struct(_, fields) => {
-                let field = fields.get_mut(name);
-                if let Some(field) = field {
-                    *field = Box::new(value);
-                } else {
-                    Err(Error::SymbolNotFound(name.to_owned()))?;
-                }
-            }
-            InterpreterScopeLikeValue::Component(_, fields) => {
-                let field = fields.get_mut(name);
-                if let Some(field) = field {
-                    *field = Box::new(value);
-                } else {
-                    Err(Error::SymbolNotFound(name.to_owned()))?;
-                }
-            }
-            InterpreterScopeLikeValue::Module(inner_scope) => {
-                inner_scope.borrow_mut().set_value(name, value)?;
-            }
-        })
+        match value {
+            InterpreterValue::Struct(_, scope) => Some(scope),
+            InterpreterValue::Component(_, scope) => Some(scope),
+            InterpreterValue::Module(scope) => Some(scope),
+            _ => None,
+        }
     }
 }

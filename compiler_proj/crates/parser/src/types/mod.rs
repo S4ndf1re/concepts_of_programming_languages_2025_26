@@ -15,3 +15,6 @@ pub use system_type::*;
 
 pub mod struct_type;
 pub use struct_type::*;
+
+pub mod component_type;
+pub use component_type::*;
