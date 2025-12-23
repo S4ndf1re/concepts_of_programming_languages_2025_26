@@ -1,33 +1,11 @@
 use std::{cell::RefCell, iter::zip, rc::Rc};
 
 use crate::{
-    AssignmentOperations, AstNode, AstNodeType, BeautifyError, Error, ErrorWithRange,
+    AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange,
     FunctionExecutionStrategy, FunctionType, InfixOperator, InterpreterValue, MemberAccess,
     MemberAccessType, PrefixOperator, Scope, Stage, StageResult, Symbol, TypeSymbol,
     TypeSymbolType,
 };
-
-fn type_of_i_value(a: InterpreterValue) -> &'static str {
-    match a {
-        InterpreterValue::Int(_) => "int",
-        InterpreterValue::Float(_) => "float",
-        InterpreterValue::String(_) => "String",
-        InterpreterValue::Bool(_) => "bool",
-        InterpreterValue::List(interpreter_values) => todo!(),
-        InterpreterValue::Map(hash_map) => todo!(),
-        InterpreterValue::Struct(_, hash_map) => todo!(),
-        InterpreterValue::Option(interpreter_value) => todo!(),
-        InterpreterValue::Result(interpreter_value) => todo!(),
-        InterpreterValue::Function(_) => todo!(),
-        InterpreterValue::Weak(weak) => todo!(),
-        InterpreterValue::Strong(interpreter_value) => todo!(),
-        InterpreterValue::Entity(index) => todo!(),
-        InterpreterValue::Component(_, hash_map) => todo!(),
-        InterpreterValue::System(_) => todo!(),
-        InterpreterValue::Module(ref_cell) => todo!(),
-        InterpreterValue::Empty => todo!(),
-    }
-}
 
 macro_rules! scoped {
     ($s:ident, $inner:block) => {{

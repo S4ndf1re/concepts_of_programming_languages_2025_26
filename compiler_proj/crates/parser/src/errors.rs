@@ -261,21 +261,21 @@ impl BeautifyError for ErrorWithRange {
                         Snippet::source(source).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
-                                .label(format!("no main function")),
+                                .label("no main function"),
                         ),
                     )];
 
                 let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
                 println!("{}", renderer.render(report));
             }
-            Error::MissingReturn(func) => {
+            Error::MissingReturn(_func) => {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
                         Snippet::source(source).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
-                                .label(format!("missing return")),
+                                .label("missing return"),
                         ),
                     )];
 
@@ -327,7 +327,7 @@ impl BeautifyError for ErrorWithRange {
                 let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
                 println!("{}", renderer.render(report));
             }
-            Error::TypeDoesNotExist(type_of) => {
+            Error::TypeDoesNotExist(_type_of) => {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
@@ -341,7 +341,7 @@ impl BeautifyError for ErrorWithRange {
                 let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
                 println!("{}", renderer.render(report));
             }
-            Error::ValueAndTypeDoNotMatch(type_of, value_of) => {
+            Error::ValueAndTypeDoNotMatch(type_of, _value_of) => {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
@@ -355,14 +355,14 @@ impl BeautifyError for ErrorWithRange {
                 let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
                 println!("{}", renderer.render(report));
             }
-            Error::VariableAlreadyDeclared(var) => {
+            Error::VariableAlreadyDeclared(_var) => {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
                         Snippet::source(source).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
-                                .label(format!("already declared")),
+                                .label("already declared"),
                         ),
                     )];
 

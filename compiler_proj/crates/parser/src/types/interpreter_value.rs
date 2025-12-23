@@ -11,28 +11,24 @@ use typed_generational_arena::Index;
 
 use crate::{Error, Scope, StructType, Symbol, TypeSymbol, TypeSymbolType};
 
-fn type_of<T>(_: &T) -> &'static str {
-    std::any::type_name::<T>()
-}
-
 fn type_of_i_value(a: InterpreterValue) -> &'static str {
     match a {
-        InterpreterValue::Int(i) => "int",
+        InterpreterValue::Int(_) => "int",
         InterpreterValue::Float(_) => "float",
         InterpreterValue::String(_) => "String",
         InterpreterValue::Bool(_) => "bool",
-        InterpreterValue::List(interpreter_values) => todo!(),
-        InterpreterValue::Map(hash_map) => todo!(),
-        InterpreterValue::Struct(_, hash_map) => todo!(),
-        InterpreterValue::Option(interpreter_value) => todo!(),
-        InterpreterValue::Result(interpreter_value) => todo!(),
+        InterpreterValue::List(_interpreter_values) => todo!(),
+        InterpreterValue::Map(_hash_map) => todo!(),
+        InterpreterValue::Struct(_, _hash_map) => todo!(),
+        InterpreterValue::Option(_interpreter_value) => todo!(),
+        InterpreterValue::Result(_interpreter_value) => todo!(),
         InterpreterValue::Function(_) => todo!(),
-        InterpreterValue::Weak(weak) => todo!(),
-        InterpreterValue::Strong(interpreter_value) => todo!(),
-        InterpreterValue::Entity(index) => todo!(),
-        InterpreterValue::Component(_, hash_map) => todo!(),
+        InterpreterValue::Weak(_weak) => todo!(),
+        InterpreterValue::Strong(_interpreter_value) => todo!(),
+        InterpreterValue::Entity(_index) => todo!(),
+        InterpreterValue::Component(_, _hash_map) => todo!(),
         InterpreterValue::System(_) => todo!(),
-        InterpreterValue::Module(ref_cell) => todo!(),
+        InterpreterValue::Module(_ref_cell) => todo!(),
         InterpreterValue::Empty => todo!(),
     }
 }

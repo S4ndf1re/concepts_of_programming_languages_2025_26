@@ -1,4 +1,4 @@
-use crate::{AstNode, Error, ErrorWithRange, Interpreter, Parser, Preprocessor, Scope};
+use crate::{AstNode, ErrorWithRange, Interpreter, Parser, Preprocessor, Scope};
 
 pub enum Stages {
     Parser(Parser),

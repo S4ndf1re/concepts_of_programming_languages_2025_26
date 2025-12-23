@@ -17,7 +17,7 @@ impl Stage for Parser {
 
     fn run(self) -> Result<super::StageResult, crate::ErrorWithRange> {
         let ast = ast_grammar::ProgrammParser::new()
-            .parse(&self.main_content)
+            .parse(self.main_content)
             .map_err(|err| ErrorWithRange {
                 err: Error::ParseError(err),
                 range: 0..1,
@@ -29,7 +29,7 @@ impl Stage for Parser {
 impl Drop for Parser {
     fn drop(&mut self) {
         unsafe {
-            Box::from_raw(self.main_content as *const str as *mut str);
+            drop(Box::from_raw(self.main_content as *const str as *mut str));
         }
     }
 }

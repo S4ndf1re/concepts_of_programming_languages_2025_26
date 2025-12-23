@@ -1,5 +1,5 @@
-pub mod system;
-pub use system::*;
+pub mod ecs_system;
+pub use ecs_system::*;
 
 pub mod system_param;
 pub use system_param::*;

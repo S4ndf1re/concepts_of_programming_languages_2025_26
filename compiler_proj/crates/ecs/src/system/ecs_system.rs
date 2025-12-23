@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 use crate::{SystemFn, SystemParameter, World};
 
 
-
 pub trait System {
     fn run(&mut self, world: &World);
 }

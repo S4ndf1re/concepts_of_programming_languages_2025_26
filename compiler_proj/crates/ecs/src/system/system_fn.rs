@@ -1,7 +1,8 @@
+#![allow(non_snake_case)]
+
 use pi_proc_macros::all_tuples;
 
-use crate::{SystemParameter, SystemParamItem};
-
+use crate::{SystemParamItem, SystemParameter};
 
 pub trait SystemFn<Marker>: 'static {
     type Out;
@@ -9,7 +10,6 @@ pub trait SystemFn<Marker>: 'static {
 
     fn call<'w>(&mut self, item: <Self::Param as SystemParameter>::Item<'w>) -> Self::Out;
 }
-
 
 macro_rules! impl_system_fn {
     ($($param: ident), *) => {

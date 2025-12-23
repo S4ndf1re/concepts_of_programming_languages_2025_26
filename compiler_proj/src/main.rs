@@ -1,15 +1,4 @@
-use std::fs::File;
-use std::io::Write;
-
 use ecs::{Component, World};
-use graphviz_rust::dot_generator::*;
-use graphviz_rust::dot_structures::*;
-use graphviz_rust::{
-    attributes::*,
-    cmd::{CommandArg, Format},
-    exec, exec_dot,parse,
-    printer::{DotPrinter, PrinterContext},
-};
 
 #[derive(Debug)]
 pub struct PositionComponent {
@@ -28,6 +17,8 @@ fn my_system(world: &World) {
 
         if let Some(component) = entity.get_component_mut::<PositionComponent>() {
             component.x += 10.0;
+            component.y += 5.0;
+            component.z -= 5.0;
 
             println!("{component:?}")
         }
@@ -35,37 +26,16 @@ fn my_system(world: &World) {
 }
 
 fn main() {
+    let mut world = World::default();
 
-    let mut g = graph!(id!("id");
-         node!("nod"),
-         subgraph!("sb";
-             edge!(node_id!("a") => subgraph!(;
-                node!("n";
-                NodeAttributes::color(color_name::blue), NodeAttributes::shape(shape::egg))
-            ))
-        ),
-        edge!(node_id!("a1") => node_id!(esc "a2"))
-    );
-    let dot = g.print(&mut PrinterContext::default());
-    println!("{}", dot);
-    let format = Format::Svg;
+    world.add_system(my_system);
 
-    let graph_svg = exec_dot(dot.clone(), vec![format.into()]).unwrap();
+    let mut entity = world.spawn();
+    entity.add_component(PositionComponent {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    });
 
-    let mut file = File::create("test.svg").unwrap();
-    file.write_all(&graph_svg).unwrap();
-
-
-    // let mut world = World::default();
-
-    // world.add_system(my_system);
-
-    // let mut entity = world.spawn();
-    // entity.add_component(PositionComponent {
-    //     x: 0.0,
-    //     y: 0.0,
-    //     z: 0.0,
-    // });
-
-    // world.run();
+    world.run();
 }
