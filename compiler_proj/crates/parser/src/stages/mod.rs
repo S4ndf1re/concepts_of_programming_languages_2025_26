@@ -13,6 +13,8 @@ pub use interpreter::*;
 pub mod buildin;
 pub use buildin::*;
 
+mod interpreter_test;
+
 #[cfg(test)]
 mod tests {
     use crate::{BeautifyError, Preprocessor, Stage, StageResult, ast_grammar};

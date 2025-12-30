@@ -407,3 +407,9 @@ impl BeautifyError for ErrorWithRange {
         panic!("{}", self.err)
     }
 }
+
+impl From<&ErrorWithRange> for ErrorWithRange {
+    fn from(value: &ErrorWithRange) -> Self {
+        value.clone()
+    }
+}

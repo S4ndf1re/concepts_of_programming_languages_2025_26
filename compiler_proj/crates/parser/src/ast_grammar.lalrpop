@@ -311,6 +311,7 @@ QueryBasicEntity: QueryCond = {
 
 MemberAccessSegment: MemberAccess = {
     <l:@L> <name:id> <r:@R> => MemberAccess{member: name , type_of: MemberAccessType::Symbol, range: l..r},
+    <l:@L> <name_self:self_term> <r:@R> => MemberAccess{member: name_self.to_owned(), type_of: MemberAccessType::Symbol, range: l..r},
     <l:@L> <name:id> l_paren <params:Comma<ReturnableOrIf>> r_paren <r:@R> => MemberAccess{member: name, type_of: MemberAccessType::Function(params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()), range: l..r},
     <l:@L> <name:id> l_brace <params:StructAssignmentList?> r_brace <r:@R> => MemberAccess{member: name, type_of: MemberAccessType::Struct(params.unwrap_or_default()), range: l..r},
 }

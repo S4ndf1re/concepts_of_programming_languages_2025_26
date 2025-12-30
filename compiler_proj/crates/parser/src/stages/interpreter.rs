@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    env::current_exe,
     iter::zip,
     rc::Rc,
 };
@@ -8,7 +9,7 @@ use std::{
 use crate::{
     AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy,
     FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator,
-    Scope, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType,
+    Scope, ScopeLike, ScopeVariant, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType,
 };
 
 macro_rules! scoped {
@@ -23,7 +24,7 @@ macro_rules! scoped {
 macro_rules! with_scope {
     ($s:ident, $scope:ident, $inner:block) => {{
         $s.environments.push(Environment {
-            scope: Rc::clone($scope),
+            scope: Rc::clone(&$scope),
         });
         let ret = { $inner };
         $s.pop_scope();
@@ -194,20 +195,22 @@ impl Interpreter {
             });
         }
 
-        let scope = self.get_current_scope();
-        let mut scope = scope.borrow_mut();
-
         if let Some(type_of) = assumed_type {
             // The user provided a type. Check if the types align. if yes, everything is ok, else throw error
             // TODO: Type checking
-            let decl_var = scope.declare_variable(
-                new_symbol.clone(),
-                value,
-                type_of.clone(),
-                false,
-                false,
-                node.range.clone(),
-            );
+            let decl_var = {
+                let scope = self.get_current_scope();
+                let mut scope = scope.borrow_mut();
+                scope.declare_variable(
+                    new_symbol.clone(),
+                    value,
+                    type_of.clone(),
+                    false,
+                    false,
+                    node.range.clone(),
+                )
+            };
+
             if let Err(e) = decl_var {
                 return Err(ErrorWithRange {
                     err: e,
@@ -218,14 +221,18 @@ impl Interpreter {
             // Here, the type is not actually provided by the developer, hence, automatic type coercion must occur
             let type_of: Option<TypeSymbol> = value.clone().into();
             if let Some(type_of) = type_of {
-                let decl_var = scope.declare_variable(
-                    new_symbol.clone(),
-                    value,
-                    type_of,
-                    false,
-                    false,
-                    node.range.clone(),
-                );
+                let decl_var = {
+                    let scope = self.get_current_scope();
+                    let mut scope = scope.borrow_mut();
+                    scope.declare_variable(
+                        new_symbol.clone(),
+                        value,
+                        type_of,
+                        false,
+                        false,
+                        node.range.clone(),
+                    )
+                };
                 if let Err(e) = decl_var {
                     return Err(ErrorWithRange {
                         err: e,
@@ -267,7 +274,7 @@ impl Interpreter {
                     range: expression.range.clone(),
                 })?
             {
-                if let InterpreterValue::Component(_, _) =
+                if let InterpreterValue::Component(_, _, _) =
                     value.deref().map_err(|err| ErrorWithRange {
                         err,
                         range: expression.range.clone(),
@@ -575,11 +582,11 @@ impl Interpreter {
         calls: &[MemberAccess],
     ) -> Result<IsReturn, ErrorWithRange> {
         // mutably borrow here, to allow for more complex pointer casting;
-        let mut current_scope = Some(Rc::clone(&self.get_current_scope()));
+        let mut current_scope: Result<ScopeVariant, ErrorWithRange> =
+            Ok(ScopeVariant::Module(Rc::clone(&self.get_current_scope())));
+        let mut last_type: Option<TypeSymbol> = None;
 
-        assert!(calls.len() == 1, "currently, only one call is supported");
-
-        let mut last_res = Err(ErrorWithRange {
+        let mut last_res: Result<IsReturn, ErrorWithRange> = Err(ErrorWithRange {
             err: Error::OperationUnsupported {
                 operation: "member call".to_owned(),
                 type_of: "must be at least one member call".to_owned(),
@@ -590,23 +597,40 @@ impl Interpreter {
         for call in calls {
             let res = match &call.type_of {
                 MemberAccessType::Function(params) => {
+                    let local_scope = current_scope.as_ref()?;
+
                     let fn_type = {
                         // Scoped to free borrowed refcell
-                        let Some(local_scope) = &current_scope else {
-                            return Err(ErrorWithRange {
-                                err: Error::IsNotAScope,
-                                range: call.range.clone(),
-                            });
-                        };
-
-                        local_scope.borrow().resolve_type(&call.member)
+                        local_scope.resolve_type(&call.member)
                     };
 
-                    if let Some(fn_type) = fn_type {
-                        // TODO: this will not work, since the scopes are not right. The params must come from the actual scope, while the function itself must get executed in its local scope.
-                        let res = self.call_function(&call.member, params, fn_type)?;
+                    if let Some(fn_type) = fn_type
+                        && let TypeSymbolType::Function(fn_typedef) = &fn_type.type_of
+                    {
+                        let res = if fn_typedef.is_method {
+                            self.call_method(
+                                &call.member,
+                                params,
+                                last_res?.unwrap(),
+                                last_type.unwrap(),
+                                &local_scope.get_outer_scope(),
+                                fn_type,
+                            )
+                        } else {
+                            self.call_function(
+                                &call.member,
+                                params,
+                                &local_scope.get_outer_scope(),
+                                fn_type,
+                            )
+                        }?;
                         // Set current scope here. it must be checked before every execution
-                        current_scope = res.clone().into();
+                        current_scope = Into::<Result<ScopeVariant, Error>>::into(res.clone())
+                            .map_err(|err| ErrorWithRange {
+                                err,
+                                range: call.range.clone(),
+                            });
+                        last_type = res.clone().into();
                         IsReturn::NoReturn(res)
                     } else {
                         Err(ErrorWithRange {
@@ -616,34 +640,40 @@ impl Interpreter {
                     }
                 }
                 MemberAccessType::Symbol => {
-                    let Some(local_scope) = &current_scope else {
-                        return Err(ErrorWithRange {
-                            err: Error::IsNotAScope,
-                            range: call.range.clone(),
-                        });
-                    };
+                    let local_scope = current_scope.as_ref()?;
 
-                    let res = with_scope!(self, local_scope, {
-                        self.eval_symbol(&call.member).map_err(|e| ErrorWithRange {
-                            err: e,
-                            range: call.range.clone(),
-                        })
+                    let res = {
+                        if let Some(val) = local_scope.resolve_value(&call.member) {
+                            Ok(val)
+                        } else {
+                            Err(Error::SymbolNotFound(call.member.clone()))
+                        }
+                    }
+                    .map_err(|err| ErrorWithRange {
+                        err,
+                        range: call.range.clone(),
                     })?;
-                    current_scope = res.clone().into();
+                    current_scope =
+                        Into::<Result<ScopeVariant, Error>>::into(res.clone()).map_err(|err| {
+                            ErrorWithRange {
+                                err,
+                                range: call.range.clone(),
+                            }
+                        });
+                    last_type = res.clone().into();
                     IsReturn::NoReturn(res)
                 }
                 MemberAccessType::Struct(fields_to_assign) => {
+                    let local_scope = current_scope.as_ref()?;
+
                     let struct_type = {
                         // Scoped to free borrowed refcell
-                        let Some(local_scope) = &current_scope else {
-                            return Err(ErrorWithRange {
-                                err: Error::IsNotAScope,
-                                range: call.range.clone(),
-                            });
-                        };
 
                         // NOTE: resolve defined type here, not variable type, as this is a defined type
-                        local_scope.borrow().resolve_defined_type(&call.member)
+                        local_scope
+                            .get_outer_scope()
+                            .borrow()
+                            .resolve_defined_type(&call.member)
                     };
 
                     if let Some(struct_type) = struct_type {
@@ -656,26 +686,13 @@ impl Interpreter {
                                 }
 
                                 let mut assigned_fields = HashSet::<&String>::new();
-                                let struct_scope = Rc::new(RefCell::new(Scope::default()));
+                                let mut field_values = HashMap::new();
 
                                 for (field, value_node) in fields_to_assign {
                                     if fields_of_struct_type.contains_key(field) {
                                         assigned_fields.insert(field);
                                         let value = self.eval_node(value_node)?.unwrap();
-                                        struct_scope
-                                            .borrow_mut()
-                                            .declare_variable(
-                                                field.clone(),
-                                                value,
-                                                fields_of_struct_type[field].clone(),
-                                                true,
-                                                false,
-                                                value_node.range.clone(),
-                                            )
-                                            .map_err(|err| ErrorWithRange {
-                                                err,
-                                                range: value_node.range.clone(),
-                                            })?;
+                                        field_values.insert(field.clone(), Box::new(value));
                                     } else {
                                         todo!("throw error here, as field does not exist")
                                     }
@@ -690,7 +707,8 @@ impl Interpreter {
                                 // NOTE: make self as the struct value itself. since self is a keyword in the lexer, it cant be used as a variable name
                                 let struct_value = InterpreterValue::Struct(
                                     struct_type_def.name.clone(),
-                                    Rc::clone(&struct_scope),
+                                    Rc::clone(&local_scope.get_outer_scope()),
+                                    field_values,
                                 )
                                 .make_reference_counted()
                                 .map_err(|err| ErrorWithRange {
@@ -698,22 +716,13 @@ impl Interpreter {
                                     range: call.range.clone(),
                                 })?;
 
-                                struct_scope
-                                    .borrow_mut()
-                                    .declare_variable(
-                                        "self".to_owned(),
-                                        struct_value.clone(),
-                                        struct_type.clone(),
-                                        true,
-                                        false,
-                                        call.range.clone(),
-                                    )
-                                    .map_err(|err| ErrorWithRange {
-                                        err,
-                                        range: call.range.clone(),
-                                    })?;
-
-                                current_scope = Some(struct_scope);
+                                current_scope =
+                                    Into::<Result<ScopeVariant, Error>>::into(struct_value.clone())
+                                        .map_err(|err| ErrorWithRange {
+                                            err,
+                                            range: call.range.clone(),
+                                        });
+                                last_type = Some(struct_type);
                                 IsReturn::NoReturn(struct_value)
                             }
                             TypeSymbolType::Component(struct_type_def) => {
@@ -724,26 +733,13 @@ impl Interpreter {
                                 }
 
                                 let mut assigned_fields = HashSet::<&String>::new();
-                                let struct_scope = Rc::new(RefCell::new(Scope::default()));
+                                let mut field_values = HashMap::new();
 
                                 for (field, value_node) in fields_to_assign {
                                     if fields_of_struct_type.contains_key(field) {
                                         assigned_fields.insert(field);
                                         let value = self.eval_node(value_node)?.unwrap();
-                                        struct_scope
-                                            .borrow_mut()
-                                            .declare_variable(
-                                                field.clone(),
-                                                value,
-                                                fields_of_struct_type[field].clone(),
-                                                true,
-                                                false,
-                                                value_node.range.clone(),
-                                            )
-                                            .map_err(|err| ErrorWithRange {
-                                                err,
-                                                range: value_node.range.clone(),
-                                            })?;
+                                        field_values.insert(field.clone(), Box::new(value));
                                     } else {
                                         todo!("throw error here, as field does not exist")
                                     }
@@ -756,9 +752,10 @@ impl Interpreter {
                                 }
 
                                 // NOTE: make self as the struct value itself. since self is a keyword in the lexer, it cant be used as a variable name
-                                let struct_value = InterpreterValue::Component(
+                                let struct_value = InterpreterValue::Struct(
                                     struct_type_def.name.clone(),
-                                    Rc::clone(&struct_scope),
+                                    Rc::clone(&local_scope.get_outer_scope()),
+                                    field_values,
                                 )
                                 .make_reference_counted()
                                 .map_err(|err| ErrorWithRange {
@@ -766,22 +763,14 @@ impl Interpreter {
                                     range: call.range.clone(),
                                 })?;
 
-                                struct_scope
-                                    .borrow_mut()
-                                    .declare_variable(
-                                        "self".to_owned(),
-                                        struct_value.clone(),
-                                        struct_type.clone(),
-                                        true,
-                                        false,
-                                        call.range.clone(),
-                                    )
-                                    .map_err(|err| ErrorWithRange {
-                                        err,
-                                        range: call.range.clone(),
-                                    })?;
+                                current_scope =
+                                    Into::<Result<ScopeVariant, Error>>::into(struct_value.clone())
+                                        .map_err(|err| ErrorWithRange {
+                                            err,
+                                            range: call.range.clone(),
+                                        });
 
-                                current_scope = Some(struct_scope);
+                                last_type = Some(struct_type);
                                 IsReturn::NoReturn(struct_value)
                             }
                             _ => todo!("error here, cause type is not a struct like"),
@@ -850,11 +839,6 @@ impl Interpreter {
             }
             // Member call can be anything that is of the form a.b.c.d(a,b).c etc. a() and a are also member calls with length 1
             AstNodeType::MemberCall { calls } => self.eval_member_call(node, calls)?,
-            // AstNodeType::MemberCall { calls } => self.eval_member_call(calls).map_err(
-            //     |e|ErrorWithRange{
-            //         err: e,
-            //         range: node.range.clone()
-            //     })?,
             AstNodeType::ReturnStatement { return_value } => {
                 IsReturn::Return(self.eval_node(return_value.as_ref())?.unwrap())
             }
@@ -904,6 +888,7 @@ impl Interpreter {
         &mut self,
         fn_name: &Symbol,
         params: &Vec<Box<AstNode>>,
+        call_scope: &Rc<RefCell<Scope>>,
         fn_signature: TypeSymbol,
     ) -> Result<InterpreterValue, ErrorWithRange> {
         if let TypeSymbolType::Function(fn_type) = &fn_signature.type_of {
@@ -914,39 +899,115 @@ impl Interpreter {
                 evaled_params.push((param, self.eval_node(param.as_ref())?));
             }
 
-            // Create a new stack entry with its own scope
-            let result = scoped!(self, {
-                // scoped to free refcell borrow_mut
-                {
-                    let scope = self.get_current_scope();
-                    let mut scope_mut = scope.borrow_mut();
-                    for ((param_node, value), (param, type_of)) in
-                        zip(evaled_params, &fn_type.params)
-                    {
-                        // TODO: Type check here
-                        let value = value.unwrap();
-                        if let InterpreterValue::Empty = value {
-                            return Err(ErrorWithRange {
-                                err: Error::ExpectedValue(param.to_owned()),
-                                range: 1..2,
-                            });
-                        }
+            let param_scope = {
+                let mut param_scope = Scope::new_parented(Rc::clone(call_scope));
+                for ((param_node, value), (param, type_of)) in zip(evaled_params, &fn_type.params) {
+                    // TODO: Type check here
+                    let value = value.unwrap();
+                    if let InterpreterValue::Empty = value {
+                        return Err(ErrorWithRange {
+                            err: Error::ExpectedValue(param.to_owned()),
+                            range: 1..2,
+                        });
+                    }
 
-                        scope_mut
-                            .declare_variable(
-                                param.clone(),
-                                value,
-                                type_of.clone(),
-                                true,
-                                false,
-                                param_node.range.clone(),
-                            )
-                            .map_err(|e| ErrorWithRange {
-                                err: e,
-                                range: param_node.range.clone(),
-                            })?;
+                    param_scope
+                        .declare_variable(
+                            param.clone(),
+                            value,
+                            type_of.clone(),
+                            true,
+                            false,
+                            param_node.range.clone(),
+                        )
+                        .map_err(|e| ErrorWithRange {
+                            err: e,
+                            range: param_node.range.clone(),
+                        })?;
+                }
+                Rc::new(RefCell::new(param_scope))
+            };
+
+            let result = with_scope!(self, param_scope, {
+                match &fn_type.execution_body {
+                    FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body)?,
+                    FunctionExecutionStrategy::Buildin(callback) => {
+                        callback(self.get_current_scope()).map_err(|e| ErrorWithRange {
+                            err: e,
+                            range: 1..2,
+                        })?
                     }
                 }
+            });
+
+            match result {
+                IsReturn::NoReturn(InterpreterValue::Empty) => Ok(InterpreterValue::Empty),
+                IsReturn::Return(v) => Ok(v),
+                _ => Err(ErrorWithRange {
+                    err: Error::MissingReturn(fn_name.clone()),
+                    range: 1..2,
+                }),
+            }
+        } else {
+            unimplemented!("error here")
+        }
+    }
+
+    pub fn call_method(
+        &mut self,
+        fn_name: &Symbol,
+        params: &Vec<Box<AstNode>>,
+        self_value: InterpreterValue,
+        self_type: TypeSymbol,
+        call_scope: &Rc<RefCell<Scope>>,
+        fn_signature: TypeSymbol,
+    ) -> Result<InterpreterValue, ErrorWithRange> {
+        if let TypeSymbolType::Function(fn_type) = &fn_signature.type_of {
+            // TODO: add error handling
+            let mut evaled_params = Vec::new();
+
+            for param in params {
+                evaled_params.push((param, self.eval_node(param.as_ref())?));
+            }
+
+            let param_scope = {
+                let mut param_scope = Scope::new_parented(Rc::clone(call_scope));
+                for ((param_node, value), (param, type_of)) in zip(evaled_params, &fn_type.params) {
+                    // TODO: Type check here
+                    let value = value.unwrap();
+                    if let InterpreterValue::Empty = value {
+                        return Err(ErrorWithRange {
+                            err: Error::ExpectedValue(param.to_owned()),
+                            range: 1..2,
+                        });
+                    }
+
+                    param_scope
+                        .declare_variable(
+                            param.clone(),
+                            value,
+                            type_of.clone(),
+                            true,
+                            false,
+                            param_node.range.clone(),
+                        )
+                        .map_err(|e| ErrorWithRange {
+                            err: e,
+                            range: param_node.range.clone(),
+                        })?;
+                }
+
+                param_scope
+                    .declare_variable("self".to_owned(), self_value, self_type, true, false, 1..2)
+                    .map_err(|e| ErrorWithRange {
+                        err: e,
+                        range: 1..2,
+                    })?;
+
+                Rc::new(RefCell::new(param_scope))
+            };
+
+            let result = with_scope!(self, param_scope, {
                 match &fn_type.execution_body {
                     FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body)?,
                     FunctionExecutionStrategy::Buildin(callback) => {
@@ -1003,13 +1064,19 @@ impl Stage for Interpreter {
                     .borrow()
                     .resolve_type(&self.entrypoint_fn)
                     .expect("must be present if value is present");
-                self.call_function(&self.entrypoint_fn.clone(), &vec![], main_fn)?;
+                self.call_function(
+                    &self.entrypoint_fn.clone(),
+                    &vec![],
+                    &self.get_current_scope(),
+                    main_fn,
+                )?;
             } else {
                 return Err(ErrorWithRange {
                     err: Error::WrongType(
                         self.entrypoint_fn.clone(),
                         TypeSymbolType::Function(FunctionType {
                             name: "main".to_string(),
+                            is_method: false,
                             params: vec![],
                             return_type: None,
                             execution_body: FunctionExecutionStrategy::Interpreted(vec![]),
@@ -1032,159 +1099,5 @@ impl Stage for Interpreter {
         }
 
         Ok(StageResult::Interpretation)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        BeautifyError, Interpreter, Parser, Preprocessor, StageResult, Stages, ast_grammar,
-        run_stages,
-    };
-
-    #[test]
-    fn test_basic_interpretation() {
-        let source = r#"
-           fn main() {
-            a := 10;
-            a += 20;
-           }
-           "#;
-
-        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
-
-        let stages = vec![
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
-        ];
-
-        let state = StageResult::Parsing(ast);
-
-        let _ = run_stages(stages, state).unwrap();
-    }
-
-    #[test]
-    fn test_basic_interpretation2() {
-        let source = r#"
-           fn main() {
-            a = 10;
-            a += 20;
-            println(a);
-           }
-           "#;
-
-        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
-
-        let stages = vec![
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
-        ];
-
-        let state = StageResult::Parsing(ast);
-
-        let result = run_stages(stages, state);
-
-        if let Err(err) = result {
-            err.print_error(source);
-        }
-    }
-
-    #[test]
-    fn function_definition_and_returning() {
-        let source = r#"
-
-           fn test(a: int): int {
-            return a + 10;
-           }
-
-           fn main() {
-            a := 10;
-            println(test(a));
-           }
-           "#
-        .to_owned();
-
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
-        ];
-
-        let state = StageResult::PreParse(source);
-
-        let _ = run_stages(stages, state).unwrap();
-    }
-
-    #[test]
-    fn loop1() {
-        let source = r#"
-           fn main() {
-            a := 10;
-            while (a > 0) {
-                a -= 1;
-            }
-           }
-           "#
-        .to_owned();
-
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
-        ];
-
-        let state = StageResult::PreParse(source);
-
-        let _ = run_stages(stages, state).unwrap();
-    }
-
-    #[test]
-    fn loop2() {
-        let source = r#"
-           fn main() {
-                for (a := 10; a > 0; a -= 1) {
-                }
-           }
-           "#
-        .to_owned();
-
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
-        ];
-
-        let state = StageResult::PreParse(source);
-
-        let _ = run_stages(stages, state).unwrap();
-    }
-
-    #[test]
-    fn loop3() {
-        let source = r#"
-           fn main() {
-                res := 0;
-                for (a in [10, 20, 30, 40]) {
-                    res += a;
-                }
-                assert(res == true);
-           }
-           "#
-        .to_owned();
-
-        let source_safe = source.clone();
-
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
-        ];
-
-        let state = StageResult::PreParse(source);
-
-        let result = run_stages(stages, state);
-        if let Err(occured_error) = result {
-            occured_error.print_error(&source_safe);
-        }
     }
 }

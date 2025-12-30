@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, InterpreterValue, IsReturn, Scope, Symbol, TypeSymbol, TypeSymbolType
+    BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, InterpreterValue, IsReturn, Scope, ScopeLike, Symbol, TypeSymbol, TypeSymbolType
 };
 
 pub fn println(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {
@@ -36,6 +36,7 @@ impl BuildinFunctionDescription {
         let value = InterpreterValue::Function(self.name.clone());
         let type_of = TypeSymbol::strong(crate::TypeSymbolType::Function(FunctionType {
             name: self.name.clone(),
+            is_method: false,
             execution_body: FunctionExecutionStrategy::Buildin(self.callback),
             params: self.params,
             return_type: self.return_type,

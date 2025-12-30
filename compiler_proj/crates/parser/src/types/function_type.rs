@@ -16,6 +16,7 @@ pub enum FunctionExecutionStrategy {
 #[derivative(Debug, Clone, Hash, Eq)]
 pub struct FunctionType {
     pub name: Symbol,
+    pub is_method: bool,
     pub params: Vec<(Symbol, TypeSymbol)>,
     pub return_type: Option<Box<TypeSymbol>>,
     #[derivative(Hash = "ignore")]

@@ -1,7 +1,7 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, hash_map::Iter},
-    ops::Range,
+    ops::{Deref, Range},
     rc::Rc,
 };
 
@@ -10,7 +10,29 @@ use crate::{
     TypeSymbolType,
 };
 
-#[derive(Debug, Default)]
+pub enum ScopeVariant {
+    Module(Rc<RefCell<Scope>>),
+    Struct(
+        Symbol,
+        Rc<RefCell<Scope>>,
+        HashMap<Symbol, Box<InterpreterValue>>,
+    ),
+    Component(
+        Symbol,
+        Rc<RefCell<Scope>>,
+        HashMap<Symbol, Box<InterpreterValue>>,
+    ),
+    Strong(Rc<RefCell<ScopeVariant>>),
+}
+
+pub trait ScopeLike {
+    fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue>;
+    fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error>;
+    fn resolve_type(&self, name: &Symbol) -> Option<TypeSymbol>;
+    fn get_outer_scope(&self) -> Rc<RefCell<Scope>>;
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
     values: HashMap<Symbol, InterpreterValue>,
@@ -31,7 +53,7 @@ impl Scope {
     }
 
     pub fn get_parent_scope(&self) -> Option<Rc<RefCell<Scope>>> {
-        self.parent.as_ref().map(|p| Rc::clone(p))
+        self.parent.as_ref().map(Rc::clone)
     }
 
     pub fn set_parent_scope(&mut self, parent: Option<Rc<RefCell<Scope>>>) {
@@ -112,6 +134,7 @@ impl Scope {
             }
             TypeSymbolType::Function(FunctionType {
                 name: _,
+                is_method: _,
                 params,
                 return_type,
                 execution_body: _,
@@ -214,49 +237,6 @@ impl Scope {
         self.declare_variable(name, value, type_of, shadow, pre_resolve, location)
     }
 
-    /// resolve value of a variable
-    pub fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
-        let mut value = self.values.get(name).cloned();
-        if value.is_none()
-            && let Some(parent) = &self.parent
-        {
-            value = parent.borrow().resolve_value(name);
-        }
-
-        value
-    }
-
-    pub fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error> {
-        // TODO: do type checking here
-        // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
-        let scoped_variable = self.values.get_mut(name);
-        if let Some(scoped_variable) = scoped_variable {
-            *scoped_variable = value;
-        } else {
-            match &self.parent {
-                Some(parent) => {
-                    parent.borrow_mut().set_value(name, value)?;
-                }
-                _ => {
-                    Err(Error::SymbolNotFound(name.to_owned()))?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Resolve type of a variable
-    pub fn resolve_type(&self, name: &Symbol) -> Option<TypeSymbol> {
-        let mut type_of = self.types_for_variable.get(name).cloned();
-        if type_of.is_none()
-            && let Some(parent) = &self.parent
-        {
-            type_of = parent.borrow().resolve_type(name);
-        }
-
-        type_of
-    }
-
     /// Resolve a defined type (not for a variable)
     pub fn resolve_defined_type(&self, name: &Symbol) -> Option<TypeSymbol> {
         let mut type_of = self.defined_types.get(name).cloned();
@@ -294,5 +274,166 @@ impl Scope {
 
     pub fn iter_types(&self) -> Iter<'_, Symbol, TypeSymbol> {
         self.types_for_variable.iter()
+    }
+}
+
+impl ScopeLike for Scope {
+    /// resolve value of a variable
+    fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
+        let mut value = self.values.get(name).cloned();
+        if value.is_none()
+            && let Some(parent) = &self.parent
+        {
+            value = parent.borrow().resolve_value(name);
+        }
+
+        value
+    }
+
+    fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error> {
+        // TODO: do type checking here
+        // NOTE(Jan): use values.get over resolve_value here, since it hast to be checked if THIS scope contains &name, and not any scope hierarchical
+        let scoped_variable = self.values.get_mut(name);
+        if let Some(scoped_variable) = scoped_variable {
+            *scoped_variable = value;
+        } else {
+            match &self.parent {
+                Some(parent) => {
+                    parent.borrow_mut().set_value(name, value)?;
+                }
+                _ => {
+                    Err(Error::SymbolNotFound(name.to_owned()))?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Resolve type of a variable
+    fn resolve_type(&self, name: &Symbol) -> Option<TypeSymbol> {
+        let mut type_of = self.types_for_variable.get(name).cloned();
+        if type_of.is_none()
+            && let Some(parent) = &self.parent
+        {
+            type_of = parent.borrow().resolve_type(name);
+        }
+
+        type_of
+    }
+
+    fn get_outer_scope(&self) -> Rc<RefCell<Scope>> {
+        Rc::new(RefCell::new(self.clone()))
+    }
+}
+
+impl ScopeLike for Rc<RefCell<Scope>> {
+    fn resolve_type(&self, name: &Symbol) -> Option<TypeSymbol> {
+        self.borrow().resolve_type(name)
+    }
+
+    fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
+        self.borrow().resolve_value(name)
+    }
+
+    fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error> {
+        self.borrow_mut().set_value(name, value)
+    }
+
+    fn get_outer_scope(&self) -> Rc<RefCell<Scope>> {
+        Rc::clone(self)
+    }
+}
+
+impl ScopeLike for ScopeVariant {
+    fn resolve_value(&self, name: &Symbol) -> Option<InterpreterValue> {
+        match self {
+            ScopeVariant::Module(slf) => slf.resolve_value(name),
+            ScopeVariant::Struct(_, _, attributes) => attributes.get(name).map(Box::deref).cloned(),
+            ScopeVariant::Component(_, _, attributes) => {
+                attributes.get(name).map(Box::deref).cloned()
+            }
+            ScopeVariant::Strong(inner) => inner.borrow().resolve_value(name),
+        }
+    }
+
+    fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error> {
+        match self {
+            ScopeVariant::Module(slf) => slf.set_value(name, value),
+            ScopeVariant::Struct(_, _, attributes) => {
+                if !attributes.contains_key(name) {
+                    Err(Error::SymbolNotFound(name.clone()))
+                } else {
+                    attributes.insert(name.clone(), Box::new(value));
+                    Ok(())
+                }
+            }
+            ScopeVariant::Component(_, _, attributes) => {
+                if !attributes.contains_key(name) {
+                    Err(Error::SymbolNotFound(name.clone()))
+                } else {
+                    attributes.insert(name.clone(), Box::new(value));
+                    Ok(())
+                }
+            }
+            ScopeVariant::Strong(inner) => inner.borrow_mut().set_value(name, value),
+        }
+    }
+
+    fn resolve_type(&self, name: &Symbol) -> Option<TypeSymbol> {
+        match self {
+            ScopeVariant::Module(slf) => slf.resolve_type(name),
+            ScopeVariant::Struct(struct_name, outer_scope, _) => {
+                let struct_type = outer_scope.borrow().resolve_defined_type(struct_name)?;
+                if let TypeSymbolType::Struct(struct_type) = &struct_type.type_of {
+                    if let Some(method) = struct_type
+                        .methods
+                        .iter()
+                        .find(|(fn_name, _)| fn_name == name)
+                    {
+                        Some(TypeSymbol::strong(TypeSymbolType::Function(
+                            method.1.clone(),
+                        )))
+                    } else if let Some(static_fn) = struct_type
+                        .statics
+                        .iter()
+                        .find(|(fn_name, _)| fn_name == name)
+                    {
+                        Some(TypeSymbol::strong(TypeSymbolType::Function(
+                            static_fn.1.clone(),
+                        )))
+                    } else {
+                        struct_type
+                            .fields
+                            .iter()
+                            .find(|(attrib_name, _)| attrib_name == name)
+                            .map(|attrib| attrib.1.clone())
+                    }
+                } else {
+                    None
+                }
+            }
+            ScopeVariant::Component(struct_name, outer_scope, _) => {
+                let struct_type = outer_scope.borrow().resolve_defined_type(struct_name)?;
+                if let TypeSymbolType::Struct(struct_type) = &struct_type.type_of {
+                    struct_type
+                        .fields
+                        .iter()
+                        .find(|(attrib_name, _)| attrib_name == name)
+                        .map(|attrib| attrib.1.clone())
+                } else {
+                    None
+                }
+            }
+            ScopeVariant::Strong(inner) => inner.borrow().resolve_type(name),
+        }
+    }
+
+    fn get_outer_scope(&self) -> Rc<RefCell<Scope>> {
+        match self {
+            ScopeVariant::Module(slf) => Rc::clone(slf),
+            ScopeVariant::Struct(_, outer_scope, _) => Rc::clone(outer_scope),
+            ScopeVariant::Component(_, outer_scope, _) => Rc::clone(outer_scope),
+            ScopeVariant::Strong(inner) => inner.borrow().get_outer_scope(),
+        }
     }
 }

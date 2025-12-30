@@ -6,7 +6,7 @@ use graphviz_rust::{
 };
 
 use crate::{
-    ComponentType, FunctionType, InterpreterValue, StructType, Symbol, SystemType, ToGraphviz,
+    ComponentType, FunctionType, StructType, Symbol, SystemType, ToGraphviz,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -31,11 +31,10 @@ pub enum TypeSymbolType {
 
 impl TypeSymbolType {
     pub fn is_structlike(&self) -> bool {
-        match self {
-            TypeSymbolType::Struct(_) => true,
-            TypeSymbolType::Component(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            TypeSymbolType::Struct(_) | TypeSymbolType::Component(_)
+        )
     }
 }
 

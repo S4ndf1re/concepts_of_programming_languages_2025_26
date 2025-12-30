@@ -54,7 +54,7 @@ impl Stage for Preprocessor {
                 "bool".to_owned(),
                 TypeSymbol::strong(TypeSymbolType::Bool),
                 false,
-                0..1
+                0..1,
             )
             .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
 
@@ -88,6 +88,7 @@ impl Stage for Preprocessor {
                             let fun_type =
                                 TypeSymbol::strong(TypeSymbolType::Function(FunctionType {
                                     name: typename.clone(),
+                                    is_method: false,
                                     params,
                                     return_type: return_type.map(Box::new),
                                     execution_body: crate::FunctionExecutionStrategy::Interpreted(
@@ -96,7 +97,14 @@ impl Stage for Preprocessor {
                                 }));
                             // SAFETY: Is always initialized
                             self.global_scope
-                                .declare_function(typename, fun, fun_type, false, true, node.range.clone())
+                                .declare_function(
+                                    typename,
+                                    fun,
+                                    fun_type,
+                                    false,
+                                    true,
+                                    node.range.clone(),
+                                )
                                 .map_err(|err| ErrorWithRange {
                                     err,
                                     range: node.range.clone(),
@@ -113,10 +121,12 @@ impl Stage for Preprocessor {
                                     execution_body,
                                 } = node.type_of
                                 {
-                                    let is_method = params[0].1.type_of == TypeSymbolType::SelfType;
+                                    let is_method = !params.is_empty()
+                                        && params[0].1.type_of == TypeSymbolType::SelfType;
 
                                     let fun_type = FunctionType {
                                         name: methodname.clone(),
+                                        is_method,
                                         params,
                                         return_type: return_type.map(Box::new),
                                         execution_body:
@@ -221,7 +231,14 @@ impl Stage for Preprocessor {
                             }));
                             // SAFETY: Is always initialized
                             self.global_scope
-                                .declare_system(typename, sys, sys_type, true, true, node.range.clone())
+                                .declare_system(
+                                    typename,
+                                    sys,
+                                    sys_type,
+                                    true,
+                                    true,
+                                    node.range.clone(),
+                                )
                                 .map_err(|err| ErrorWithRange {
                                     err,
                                     range: node.range.clone(),

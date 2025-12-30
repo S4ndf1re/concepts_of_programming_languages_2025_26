@@ -9,29 +9,7 @@ use std::{
 use ecs::Entity;
 use typed_generational_arena::Index;
 
-use crate::{ComponentType, Error, Scope, StructType, Symbol, TypeSymbol, TypeSymbolType};
-
-fn type_of_i_value(a: InterpreterValue) -> &'static str {
-    match a {
-        InterpreterValue::Int(_) => "int",
-        InterpreterValue::Float(_) => "float",
-        InterpreterValue::String(_) => "String",
-        InterpreterValue::Bool(_) => "bool",
-        InterpreterValue::List(_interpreter_values) => todo!(),
-        InterpreterValue::Map(_hash_map) => todo!(),
-        InterpreterValue::Struct(_, _hash_map) => todo!(),
-        InterpreterValue::Option(_interpreter_value) => todo!(),
-        InterpreterValue::Result(_interpreter_value) => todo!(),
-        InterpreterValue::Function(_) => todo!(),
-        InterpreterValue::Weak(_weak) => todo!(),
-        InterpreterValue::Strong(_interpreter_value) => todo!(),
-        InterpreterValue::Entity(_index) => todo!(),
-        InterpreterValue::Component(_, _hash_map) => todo!(),
-        InterpreterValue::System(_) => todo!(),
-        InterpreterValue::Module(_ref_cell) => todo!(),
-        InterpreterValue::Empty => todo!(),
-    }
-}
+use crate::{Error, Scope, ScopeVariant, Symbol, TypeSymbol, TypeSymbolType};
 
 /// ActualTypeValue only represents the concrete value of a type. The actual type def is defined by
 #[derive(Clone, Debug)]
@@ -42,17 +20,26 @@ pub enum InterpreterValue {
     Bool(bool),
     List(Vec<InterpreterValue>),
     Map(HashMap<InterpreterValue, InterpreterValue>),
-    Struct(Symbol, Rc<RefCell<Scope>>),
+    Struct(
+        Symbol,
+        Rc<RefCell<Scope>>,
+        HashMap<Symbol, Box<InterpreterValue>>,
+    ),
     Option(Option<Box<InterpreterValue>>),
     Result(Result<Box<InterpreterValue>, Box<InterpreterValue>>),
     Function(Symbol), // Functions execution body is contained in its type definition,
+    Method(Symbol),   // Functions execution body is contained in its type definition,
     // Reference counted values (everything afaik)
     Weak(Weak<InterpreterValue>),
     Strong(Rc<InterpreterValue>),
 
     // ECS Intergration
     Entity(Index<Entity>),
-    Component(Symbol, Rc<RefCell<Scope>>),
+    Component(
+        Symbol,
+        Rc<RefCell<Scope>>,
+        HashMap<Symbol, Box<InterpreterValue>>,
+    ),
     System(Symbol), // System execution body is contained in its type definition,
 
     // This can be any scope
@@ -125,7 +112,7 @@ impl InterpreterValue {
 
     pub fn preprocess_for_operation(
         a: Self,
-        mut b: Self,
+        b: Self,
     ) -> Result<(InterpreterValue, InterpreterValue), Error> {
         let lval = Self::preprocess_single(a)?;
         let rval = Self::preprocess_single(b)?;
@@ -142,20 +129,12 @@ impl InterpreterValue {
                 InterpreterValue::Bool(r) => Ok(InterpreterValue::Bool(l && r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "&&".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             _ => Err(Error::OperationUnsupported {
                 operation: "&&".to_string(),
-                type_of: format!(
-                    "{} and {} are not compatible",
-                    type_of_i_value(lval),
-                    type_of_i_value(rval)
-                ),
+                type_of: format!("{} and {} are not compatible", lval, rval),
             }),
         }
     }
@@ -168,20 +147,12 @@ impl InterpreterValue {
                 InterpreterValue::Bool(r) => Ok(InterpreterValue::Bool(l || r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "||".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             _ => Err(Error::OperationUnsupported {
                 operation: "||".to_string(),
-                type_of: format!(
-                    "{} and {} are not compatible",
-                    type_of_i_value(lval),
-                    type_of_i_value(rval)
-                ),
+                type_of: format!("{} and {} are not compatible", lval, rval),
             }),
         }
     }
@@ -194,44 +165,28 @@ impl InterpreterValue {
                 InterpreterValue::Bool(r) => Ok(InterpreterValue::Bool(*l == r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "==".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             InterpreterValue::Int(l) => match rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Bool(*l == r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "==".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             InterpreterValue::Float(l) => match rval {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Bool(*l == r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "==".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             InterpreterValue::String(l) => match rval {
                 InterpreterValue::String(r) => Ok(InterpreterValue::Bool(*l == r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "==".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             InterpreterValue::Option(l) => match rval {
@@ -251,11 +206,7 @@ impl InterpreterValue {
                 }
                 _ => Err(Error::OperationUnsupported {
                     operation: "==".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             InterpreterValue::Result(l) => match rval {
@@ -275,36 +226,28 @@ impl InterpreterValue {
                 }
                 _ => Err(Error::OperationUnsupported {
                     operation: "==".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
-            InterpreterValue::Struct(l, lfields) => match rval {
-                InterpreterValue::Struct(r, rfields) => {
-                    // Both are the exact same struct
-                    if lfields.as_ref() as *const _ == rfields.as_ref() as *const _ {
-                        return Ok(InterpreterValue::Bool(true));
-                    }
-
+            InterpreterValue::Struct(l, _, lfields) => match rval {
+                InterpreterValue::Struct(r, _, rfields) => {
                     // TODO: Optimize clone away
                     let mut eqls = true;
                     eqls = eqls && *l == r;
 
-                    for (l, lfield) in lfields.borrow().iter_values() {
-                        if let Some(rfield) = rfields.borrow().resolve_value(l)
+                    for (l, lfield) in lfields.iter() {
+                        if let Some(rfield) = rfields.get(l)
                             // Must clone here, otherwise its a moved value in the next comparison
-                            && let InterpreterValue::Bool(b) = lfield.clone().equals(rfield)?
+                            && let InterpreterValue::Bool(b) = lfield.clone().equals(*rfield.clone())?
                         {
                             eqls = eqls && b;
                         }
                     }
 
-                    for (r, rfield) in rfields.borrow().iter_values() {
-                        if let Some(lfield) = lfields.borrow().resolve_value(&r)
-                            && let InterpreterValue::Bool(b) = rfield.clone().equals(lfield)?
+                    for (r, rfield) in rfields.iter() {
+                        if let Some(lfield) = lfields.get(r)
+                            && let InterpreterValue::Bool(b) =
+                                rfield.clone().equals(*lfield.clone())?
                         {
                             eqls = eqls && b;
                         }
@@ -314,36 +257,28 @@ impl InterpreterValue {
                 }
                 _ => Err(Error::OperationUnsupported {
                     operation: "==".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval,),
                 }),
             },
-            InterpreterValue::Component(l, lfields) => match rval {
-                InterpreterValue::Component(r, rfields) => {
-                    // Both are the exact same struct
-                    if lfields.as_ref() as *const _ == rfields.as_ref() as *const _ {
-                        return Ok(InterpreterValue::Bool(true));
-                    }
-
+            InterpreterValue::Component(l, _, lfields) => match rval {
+                InterpreterValue::Component(r, _, rfields) => {
                     // TODO: Optimize clone away
                     let mut eqls = true;
                     eqls = eqls && *l == r;
 
-                    for (l, lfield) in lfields.borrow().iter_values() {
-                        if let Some(rfield) = rfields.borrow().resolve_value(l)
+                    for (l, lfield) in lfields.iter() {
+                        if let Some(rfield) = rfields.get(l)
                             // Must clone here, otherwise its a moved value in the next comparison
-                            && let InterpreterValue::Bool(b) = lfield.clone().equals(rfield)?
+                            && let InterpreterValue::Bool(b) = lfield.clone().equals(*rfield.clone())?
                         {
                             eqls = eqls && b;
                         }
                     }
 
-                    for (r, rfield) in rfields.borrow().iter_values() {
-                        if let Some(lfield) = lfields.borrow().resolve_value(&r)
-                            && let InterpreterValue::Bool(b) = rfield.clone().equals(lfield)?
+                    for (r, rfield) in rfields.iter() {
+                        if let Some(lfield) = lfields.get(r)
+                            && let InterpreterValue::Bool(b) =
+                                rfield.clone().equals(*lfield.clone())?
                         {
                             eqls = eqls && b;
                         }
@@ -353,20 +288,12 @@ impl InterpreterValue {
                 }
                 _ => Err(Error::OperationUnsupported {
                     operation: "==".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval,),
                 }),
             },
             _ => Err(Error::OperationUnsupported {
                 operation: "==".to_string(),
-                type_of: format!(
-                    "{} and {} are not compatible",
-                    type_of_i_value(lval),
-                    type_of_i_value(rval)
-                ),
+                type_of: format!("{} and {} are not compatible", lval, rval),
             }),
         }
     }
@@ -384,11 +311,7 @@ impl InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Bool((l as f64) < r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "<".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             InterpreterValue::Float(l) => match rval {
@@ -396,20 +319,12 @@ impl InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Bool(l < r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "<".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             _ => Err(Error::OperationUnsupported {
                 operation: "<".to_string(),
-                type_of: format!(
-                    "{} and {} are not compatible",
-                    type_of_i_value(lval),
-                    type_of_i_value(rval)
-                ),
+                type_of: format!("{} and {} are not compatible", lval, rval),
             }),
         }
     }
@@ -429,11 +344,7 @@ impl InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Bool((l as f64) > r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: ">".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             InterpreterValue::Float(l) => match rval {
@@ -441,20 +352,12 @@ impl InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Bool(l > r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: ">".to_string(),
-                    type_of: format!(
-                        "{} and {} are not compatible",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval)
-                    ),
+                    type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
             _ => Err(Error::OperationUnsupported {
                 operation: ">".to_string(),
-                type_of: format!(
-                    "{} and {} are not compatible",
-                    type_of_i_value(lval),
-                    type_of_i_value(rval)
-                ),
+                type_of: format!("{} and {} are not compatible", lval, rval),
             }),
         }
     }
@@ -470,7 +373,7 @@ impl InterpreterValue {
             InterpreterValue::Bool(b) => Ok(InterpreterValue::Bool(!b)),
             _ => Err(Error::OperationUnsupported {
                 operation: "!".to_string(),
-                type_of: format!("{} cannot be boolean negated", type_of_i_value(self),),
+                type_of: format!("{} cannot be boolean negated", self,),
             }),
         }
     }
@@ -480,7 +383,7 @@ impl InterpreterValue {
             InterpreterValue::Float(f) => Ok(InterpreterValue::Float(-f)),
             _ => Err(Error::OperationUnsupported {
                 operation: "-".to_string(),
-                type_of: format!("{} cannot be number negated", type_of_i_value(self),),
+                type_of: format!("{} cannot be number negated", self,),
             }),
         }
     }
@@ -519,11 +422,7 @@ impl Add for InterpreterValue {
                 InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
                 _ => Err(Error::OperationUnsupported {
                     operation: "+".to_string(),
-                    type_of: format!(
-                        "{} + {} not defined",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval),
-                    ),
+                    type_of: format!("{} + {} not defined", lval, rval,),
                 }),
             },
             InterpreterValue::Float(l) => match rval {
@@ -532,11 +431,7 @@ impl Add for InterpreterValue {
                 InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
                 _ => Err(Error::OperationUnsupported {
                     operation: "+".to_string(),
-                    type_of: format!(
-                        "{} + {} not defined",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval),
-                    ),
+                    type_of: format!("{} + {} not defined", lval, rval,),
                 }),
             },
             InterpreterValue::String(l) => match rval {
@@ -547,11 +442,7 @@ impl Add for InterpreterValue {
             },
             _ => Err(Error::OperationUnsupported {
                 operation: "+".to_string(),
-                type_of: format!(
-                    "{} + {} not defined",
-                    type_of_i_value(lval),
-                    type_of_i_value(rval),
-                ),
+                type_of: format!("{} + {} not defined", lval, rval,),
             }),
         }
     }
@@ -568,11 +459,7 @@ impl Sub for InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 - r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "-".to_string(),
-                    type_of: format!(
-                        "{} - {} not defined",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval),
-                    ),
+                    type_of: format!("{} - {} not defined", lval, rval,),
                 }),
             },
             InterpreterValue::Float(l) => match rval {
@@ -580,20 +467,12 @@ impl Sub for InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l - r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "-".to_string(),
-                    type_of: format!(
-                        "{} - {} not defined",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval),
-                    ),
+                    type_of: format!("{} - {} not defined", lval, rval,),
                 }),
             },
             _ => Err(Error::OperationUnsupported {
                 operation: "-".to_string(),
-                type_of: format!(
-                    "{} - {} not defined",
-                    type_of_i_value(lval),
-                    type_of_i_value(rval),
-                ),
+                type_of: format!("{} - {} not defined", lval, rval,),
             }),
         }
     }
@@ -611,11 +490,7 @@ impl Mul for InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 * r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "*".to_string(),
-                    type_of: format!(
-                        "{} * {} not defined",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval),
-                    ),
+                    type_of: format!("{} * {} not defined", lval, rval,),
                 }),
             },
             InterpreterValue::Float(l) => match rval {
@@ -623,20 +498,12 @@ impl Mul for InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l * r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "*".to_string(),
-                    type_of: format!(
-                        "{} * {} not defined",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval),
-                    ),
+                    type_of: format!("{} * {} not defined", lval, rval,),
                 }),
             },
             _ => Err(Error::OperationUnsupported {
                 operation: "*".to_string(),
-                type_of: format!(
-                    "{} * {} not defined",
-                    type_of_i_value(lval),
-                    type_of_i_value(rval),
-                ),
+                type_of: format!("{} * {} not defined", lval, rval,),
             }),
         }
     }
@@ -654,11 +521,7 @@ impl Div for InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 / r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "/".to_string(),
-                    type_of: format!(
-                        "{} / {} not defined",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval),
-                    ),
+                    type_of: format!("{} / {} not defined", lval, rval,),
                 }),
             },
             InterpreterValue::Float(l) => match rval {
@@ -666,20 +529,12 @@ impl Div for InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l / r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "/".to_string(),
-                    type_of: format!(
-                        "{} / {} not defined",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval),
-                    ),
+                    type_of: format!("{} / {} not defined", lval, rval,),
                 }),
             },
             _ => Err(Error::OperationUnsupported {
                 operation: "/".to_string(),
-                type_of: format!(
-                    "{} / {} not defined",
-                    type_of_i_value(lval),
-                    type_of_i_value(rval),
-                ),
+                type_of: format!("{} / {} not defined", lval, rval,),
             }),
         }
     }
@@ -697,11 +552,7 @@ impl Rem for InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 % r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "%".to_string(),
-                    type_of: format!(
-                        "{} % {} not defined",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval),
-                    ),
+                    type_of: format!("{} % {} not defined", lval, rval,),
                 }),
             },
             InterpreterValue::Float(l) => match rval {
@@ -709,20 +560,12 @@ impl Rem for InterpreterValue {
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l % r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "%".to_string(),
-                    type_of: format!(
-                        "{} % {} not defined",
-                        type_of_i_value(lval),
-                        type_of_i_value(rval),
-                    ),
+                    type_of: format!("{} % {} not defined", lval, rval,),
                 }),
             },
             _ => Err(Error::OperationUnsupported {
                 operation: "%".to_string(),
-                type_of: format!(
-                    "{} % {} not defined",
-                    type_of_i_value(lval),
-                    type_of_i_value(rval),
-                ),
+                type_of: format!("{} % {} not defined", lval, rval,),
             }),
         }
     }
@@ -735,28 +578,12 @@ impl From<InterpreterValue> for Option<TypeSymbol> {
             InterpreterValue::Float(_) => Some(TypeSymbol::strong(TypeSymbolType::Float)),
             InterpreterValue::Bool(_) => Some(TypeSymbol::strong(TypeSymbolType::Bool)),
             InterpreterValue::String(_) => Some(TypeSymbol::strong(TypeSymbolType::String)),
-            InterpreterValue::Struct(name, fields) => {
-                Some(TypeSymbol::strong(TypeSymbolType::Struct(StructType {
-                    name,
-                    fields: fields
-                        .borrow()
-                        .iter_types()
-                        .map(|v| (v.0.clone(), v.1.clone()))
-                        .collect::<Vec<_>>(),
-                    methods: vec![],
-                    statics: vec![],
-                })))
+            InterpreterValue::Struct(name, scope, _fields) => {
+                scope.borrow().resolve_defined_type(&name)
             }
-            InterpreterValue::Component(name, fields) => Some(TypeSymbol::strong(
-                TypeSymbolType::Component(ComponentType {
-                    name,
-                    fields: fields
-                        .borrow()
-                        .iter_types()
-                        .map(|v| (v.0.clone(), v.1.clone()))
-                        .collect::<Vec<_>>(),
-                }),
-            )),
+            InterpreterValue::Component(name, scope, _fields) => {
+                scope.borrow().resolve_defined_type(&name)
+            }
             InterpreterValue::Strong(inner) => Into::<Option<TypeSymbol>>::into((*inner).clone()),
             InterpreterValue::Weak(_) => {
                 let inner = value
@@ -776,23 +603,19 @@ impl Display for InterpreterValue {
             InterpreterValue::Float(fl) => write!(f, "{fl}"),
             InterpreterValue::Bool(b) => write!(f, "{b}"),
             InterpreterValue::String(s) => write!(f, "{s}"),
-            InterpreterValue::Struct(name, fields) => {
-                let fields = fields
-                    .borrow()
-                    .iter_values()
-                    .map(|(name, value)| format!("{name}: {value}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                write!(f, "{name} {{ {} }}", fields)
+            InterpreterValue::Struct(name, scope, _fields) => {
+                if let Some(type_of) = scope.borrow().resolve_defined_type(name) {
+                    write!(f, "{name} {{ {type_of} }}",)
+                } else {
+                    write!(f, "{name} {{  }}",)
+                }
             }
-            InterpreterValue::Component(name, fields) => {
-                let fields = fields
-                    .borrow()
-                    .iter_values()
-                    .map(|(name, value)| format!("{name}: {value}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                write!(f, "{name} {{ {} }}", fields)
+            InterpreterValue::Component(name, scope, _fields) => {
+                if let Some(type_of) = scope.borrow().resolve_defined_type(name) {
+                    write!(f, "{name} {{ {type_of} }}",)
+                } else {
+                    write!(f, "{name} {{  }}",)
+                }
             }
             InterpreterValue::Strong(inner) => write!(f, "{inner}"),
             InterpreterValue::Weak(_) => {
@@ -807,24 +630,25 @@ impl Display for InterpreterValue {
     }
 }
 
-/// Same as InterpreterValue, but a little bit more specific
-pub enum InterpreterScopeLikeValue {
-    Struct(Symbol, HashMap<Symbol, Box<InterpreterValue>>),
-    Component(Symbol, HashMap<Symbol, Box<InterpreterValue>>),
-    Module(Rc<RefCell<Scope>>),
-}
-
-impl From<InterpreterValue> for Option<Rc<RefCell<Scope>>> {
+impl From<InterpreterValue> for Result<ScopeVariant, Error> {
     fn from(value: InterpreterValue) -> Self {
-        let Ok(value) = InterpreterValue::preprocess_single(value) else {
-            return None;
-        };
-
-        match value {
-            InterpreterValue::Struct(_, scope) => Some(scope),
-            InterpreterValue::Component(_, scope) => Some(scope),
-            InterpreterValue::Module(scope) => Some(scope),
-            _ => None,
+        let var = InterpreterValue::preprocess_single(value)?;
+        match var {
+            InterpreterValue::Struct(name, outer_scope, attributes) => {
+                Ok(ScopeVariant::Struct(name, outer_scope, attributes))
+            }
+            InterpreterValue::Component(name, outer_scope, attributes) => {
+                Ok(ScopeVariant::Component(name, outer_scope, attributes))
+            }
+            InterpreterValue::Module(scope) => Ok(ScopeVariant::Module(scope)),
+            InterpreterValue::Strong(inner) => {
+                Ok(ScopeVariant::Strong(Rc::new(RefCell::new(Into::<
+                    Result<ScopeVariant, Error>,
+                >::into(
+                    InterpreterValue::clone(&inner),
+                )?))))
+            }
+            _ => Err(Error::IsNotAScope),
         }
     }
 }
