@@ -268,8 +268,7 @@ transition: null
 ---
 ## Ownership
 
-```rust {*|2-3|5-6|7}{lines:true}
-
+```rust {*|1-2|4-5|6}{lines:true}
 let a = String::new(); // `a` owns value of type string
 println!("{a}"); // Print content of `a`
 
@@ -285,8 +284,7 @@ transition: null
 
 ## Ownership
 
-```rust {*|2-5|7|9|10}{lines:true}
-
+```rust {*|1-4|6|8|9}{lines:true}
 fn own_and_drop(a: String) {
   println!("value of a = {a} will now get dropped");
   // Drop happens here automatically, since a is running out of scope;
@@ -755,11 +753,17 @@ let a = A {
   - So lange wie `a` lebt? Aber wie lange lebt `a`? Wie komme ich an die Lifetime von `a` aus Entwicklersicht
 </v-click>
 
+---
+transition: null
+---
+## Schwierigkeiten -- Linked Lists
+
+[Learn Rust With Entirely Too Many Linked Lists](https://rust-unofficial.github.io/too-many-lists/index.html#learn-rust-with-entirely-too-many-linked-lists)
 
 ---
 transition: null
 ---
-## Ausblick
+# Ausblick
 
 - Erfahrungsgemäß werden viele Bugs bereits zur Compile Zeit ausgeschlossen
   - Fearless Concurrency (Multithreading geprüft durch den Compiler)
