@@ -31,13 +31,25 @@ hideInToc: true
 
 ---
 transition: null
+layout: two-cols-header
 ---
 # Bisher?
 
-- Garbage Collection (Java / Python / JS / TS/ Rubs / Lua)
-  - Vereinfachte Entwicklung
-  - Speicher wird zur Nebensache
-  - Fokus auf höhere Konzepte
+::left::
+<div class="w-1/3 bg-blue-900 p-3 rounded-xl absolute top-50 justify-center text-center">
+  Garbage Collection
+  <br/>
+  Java / Python / JS / TS / Ruby / Lua
+</div>
+
+
+::right::
+
+<div class="w-1/3 bg-purple-900 p-3 rounded-xl absolute top-50 justify-center text-center">
+  Manual Memory Management
+  <br/>
+  C / C++ / Zig
+</div>
 
 <v-click>
 
@@ -49,14 +61,54 @@ transition: null
 
 ---
 transition: null
+layout: image-right
+image: /img/trash.jpg
 ---
-## Wofür überhaupt Performance
+## Recap: Garbage Collection (GC)
 
-- Embedded Entwicklung
-  - Eingeschränkter Speicher und Prozessorgeschwindigkeit
-- Hochskalierende Datenbanken
-  - Postgresql, ScyllaDB, etc.
-- Alles mit Low Level Speicherzugriff oder High Performance!
+- Speicher von Runtime verwaltet
+- Sorgt für einfacherer Entwicklung => Keine händischen Allokationen und Deallokationen notwendig
+- Fokus kann auf höhere Konzepte gesetzt werden
+<v-click>
+
+- Nachteile: 
+  - Stop the World oder andere Performance-Einschränkungen
+  - Keine volle Kontrolle über Speicherzugriff (z.B. Out of Memory Fallbehandlung)
+</v-click>
+
+---
+transition: null
+layout: image-right
+image: /img/lowlevel.jpg
+---
+## Recap: Manual Memory Management (MMM)
+
+- Starke Performance
+  - Kein Stop the World oder anderes
+- Direkte Speicherkontrolle
+  - Out of Memory kann gut gehandhabt werden
+  - Ggf. Pointerarithmetik 
+<v-click>
+
+- Nachteile
+  - Fehleranfällig
+    - Memory Corruption
+    - Use After Free
+    - etc.
+</v-click>
+
+---
+transition: null
+---
+## Besitz (Ownership) und Ausleiehe (Borrowing)?
+
+- Idee: Verbinden der Vorteile von MMM und GC verwalteten Sprachen
+- Lösen von häufigen Fehlerquellen bei MMM
+- Keine Garbage Collection. Dafür: 
+  - Garbage Collection durch statische Codeanalyse zur Compile-Zeit
+  - Direktes abfangen von Fehlern zur Compile-Zeit, die in MMM Sprachen nur während der Laufzeit auffallen
+  - Mantra: If it compiles, it runs
+  - Hoffnung: Compiler wird zum besten Freund des Entwicklers 
 
 
 ---
@@ -266,17 +318,37 @@ transition: null
 ---
 transition: null
 ---
+
 ## Ownership
 
-```rust {*|1-2|4-5|6}{lines:true}
-let a = String::new(); // `a` owns value of type string
-println!("{a}"); // Print content of `a`
+```rust {*|1-2|4-5|6|*}{lines:true}
+let s1 = String::from("hello"); // `a` owns value of type string
+println!("{s1}"); // Print content of `a`
 
-let b = a; // Move ownership of string value to `b`. `a` is now invalidated, as its no longer an owner
-println!("{b}"); // Print content of `b`. Same as previous println!("{a}");
-println!("{a}"); // Compilation error: a was moved
+let s2 = s1; // Move ownership of string value to `s2`. `s1` is now invalidated, as its no longer an owner
+println!("{s2}"); // Print content of `b`. Same as previous println!("{s1}");
+println!("{s1}"); // Compilation error: a was moved
 
 ```
+
+<div class="m-auto w-1/2 p-2 flex justify-center align-center">
+  <div v-click="[5, 6]" class=" w-96 absolute top-2/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 p-3 rounded-xl">
+    <h3>s1 Layout</h3>
+    <img src="/img/s1_value.png" class="rounded-xl"/>
+  </div>
+  <div v-click="[6, 7]" class=" w-96 absolute top-60% left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 p-3 rounded-xl">
+    <h3>Kopieren von s1 nach s2</h3>
+    <img src="/img/s1s2_value.png" class="rounded-xl"/>
+  </div>
+  <div v-click="[7, 8]" class=" w-96 absolute top-50% left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 p-3 rounded-xl">
+    <h3>Echte Deep Copy</h3>
+    <img src="/img/s1s2_copy.png" class="rounded-xl"/>
+  </div>
+  <div v-click="8" class=" w-96 absolute top-58% left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 p-3 rounded-xl">
+    <h3>s1 Invalidiert</h3>
+    <img src="/img/s1_invalid.png" class="rounded-xl"/>
+  </div>
+</div>
 
 ---
 transition: null
@@ -324,6 +396,7 @@ println!("{a}"); // Prints "abc"
 - Ownership kann auch aus Funktionen heraus übertragen werden. Return gibt Ownership aus Funktionsscope nach außen frei
 </v-click>
 
+
 ---
 transition: null
 ---
@@ -331,15 +404,22 @@ transition: null
 ## Ownership
 
 ```rust {*|1|2-3}{lines:true}
-let mut s = String::from("abc");
-s = String::from("cdf"); // "abc" is freed here, and s owns "cdf" now!
-println!("{s}"); // will print "cdf"
+let mut s = String::from("hello");
+s = String::from("ahoy"); // "hello" is freed here, and s owns "ahoy" now!
+println!("{s}"); // will print "ahoy"
 ```
 
 <v-click>
 
 - Ownership kann überschrieben werden, wodurch der alte "Besitz" freigegeben wird
 </v-click>
+
+<div class="m-auto w-1/2 p-2 flex justify-center align-center">
+  <div v-click="4" class=" w-96 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 p-3 rounded-xl">
+    <h3>Überschreiben von s</h3>
+    <img src="/img/overwrite.png" class="rounded-xl"/>
+  </div>
+</div>
 
 ---
 transition: null
@@ -403,7 +483,7 @@ transition: null
 let mut a = String::new();
 
 let b = &a;
-let c = &c;
+let c = &a;
 println!("{b}");
 println!("{c}");
 
@@ -414,7 +494,7 @@ let d = &mut a; // Compilation error: a is already borrowed
 let mut a = String::new();
 {
   let b = &a;
-  let c = &c;
+  let c = &a;
   println!("{b}");
   println!("{c}");
 }
@@ -433,14 +513,22 @@ transition: null
 ```rust {*|1|2|2-3}{lines:true}
 let mut a = String::new();
 let b = &mut a;
-let c = &mut b;
+let c = &mut a;
 ```
 ```rust {2-3}{lines:true}
 let mut a = String::new();
 let b = &mut a; // First borrow occurs here
-let c = &mut b; // Compilation Error: a is already mutably borrowed
+let c = &mut a; // Compilation Error: a is already mutably borrowed
+println!("{b}");
 ```
 ````
+
+<div class="m-auto w-1/2 p-2 flex justify-center align-center">
+  <div v-click="5" class=" w-96 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 p-3 rounded-xl">
+    <h3>Compiler Error</h3>
+    <img src="/img/borrow_error.png" class="rounded-xl"/>
+  </div>
+</div>
 
 ---
 transition: null
@@ -480,16 +568,31 @@ transition: null
 ---
 ## Borrowing -- Lifetimes
 
+```cpp {*}{lines:true}
+/// Use after free
+std::vector<int> *bar = nullptr; 
+{
+  std::vector<int> foo;
+  bar = &foo;
+}
+
+bar.push_back(1); // Object is already freed (Runtime Error, SIGSEGV)
+```
+
+<v-click>
+
 ```rust {*}{lines:true}
 let foo: &String = {
   let bar = String::new();
   &bar // Compilation Error: bar does not live long enough
 };
 ```
+</v-click>
 
 ---
 transition: null
 ---
+
 ## Borrowing -- Lifetimes
 
 - Teil jedes Referenztypen
@@ -497,7 +600,52 @@ transition: null
 - Kann explizit mit angegeben werden:
   - `&'a T` (für Referenz des Typen `T` mit Lifetime `'a`)
   - `&'a mut T` (für änderbare Referenz des Typen `T` mit Lifetime `'a`)
-- Benennt Scope, in dem die Variable lebt (sowie parent Scopes)
+- Benennt Scope, in dem die Variable lebt
+- Borrow Checker Prüft, ob Referenz kürzer oder länger Lebt, also der Owner
+  - Wenn kürzer, Error
+  - Wenn länger, OK
+
+---
+transition: null
+---
+## Borrowing -- Lifetimes
+
+````md magic-move
+```rust {*}{lines:true}
+let foo: &String = {
+  let bar = String::new();
+  &bar // Compilation Error: bar does not live long enough
+};
+```
+```rust {*}{lines:true}
+{                               // ---------'a
+  let bar = String::new();      //           |
+  let foo: &String = &bar;      //           |
+}                               // --------- +
+```
+```rust {*}{lines:true}
+let foo: &String = {
+  let bar = String::new();
+  &bar // Compilation Error: bar does not live long enough
+};
+```
+```rust {*}{lines:true}
+{                               // ---------'a
+  let foo: &String = {          // -----'b   |
+    let bar = String::new();    //       |   |
+    &bar                        //       |   |
+  };                            // ----- +   |
+}                               // --------- +
+```
+```rust {*}{lines:true}
+{                               // ---------'a
+  let foo: &'a String = {       // -----'b   |
+    let bar = String::new();    //       |   |
+    &'b bar                     //       |   |
+  };                            // ----- +   |
+}                               // --------- +
+```
+````
 
 ---
 transition: null
@@ -506,8 +654,8 @@ transition: null
 
 ````md magic-move
 ```rust {*|1|2,3|4,5|1}{lines:true}
-fn either(left: bool, a: &String, b: &String) -> &String {
-  if left {
+fn longest(a: &String, b: &String) -> &String {
+  if a.len() > b.len() {
     a
   } else {
     b
@@ -515,8 +663,8 @@ fn either(left: bool, a: &String, b: &String) -> &String {
 }
 ```
 ```rust {1}{lines:true}
-fn either<'a>(left: bool, a: &'a String, b: &'a String) -> &'a String {
-  if left {
+fn longest<'a>(a: &'a String, b: &'a String) -> &'a String {
+  if a.len() > b.len() {
     a
   } else {
     b
@@ -525,15 +673,108 @@ fn either<'a>(left: bool, a: &'a String, b: &'a String) -> &'a String {
 ```
 ````
 
-<div v-click="[4, 5]">
+<div v-click="[4, 5]" class="absolute top-60% left-45% transform -translate-x-1/2 -translate-y-1/2 w-3/4">
 
 Compilation Error?? Missing Named Lifetimes
+- Rust Compiler weiß nicht, welche Referenz zurückgegeben wird
+- Wir wissen das auch noch nicht, da sich das erst zur Laufzeit entscheidet
 </div>
 
-<div v-click="6">
+<div v-click="6" class="absolute top-60% left-45% transform -translate-x-1/2 -translate-y-1/2 w-3/4">
 
 Ok
 - Strings `a` und `b` müssen `'a` lang leben, und das Ergebnis wird auch `'a` lang leben
+- Borrow Checker: Zurückweisen von allen Aufrufen, bei denen die Lifetime Bedingungen nicht gegeben sind
+  - `a` und `b` leben mindestens gleich lang. Kürzeste Lebensdauer wird als Ergebnis-Lifetime verwendet
+</div>
+
+---
+transition: null
+---
+## Borrowing -- Lifetimes
+
+```rust {*}{lines:true}
+fn longest<'a>(a: &'a String, b: &'a String) -> &'a String {
+  if a.len() > b.len() { a } else { b }
+}
+```
+````md magic-move
+```rust {*|3|5|6}{lines:true}
+// Compiles just fine
+{
+  let string1 = String::from("this is a very very long string");
+  {
+    let string2 = String::from("Short");
+    let result = longest(&string1, &string2);
+    println!("{result}");
+  }
+}
+```
+```rust {*}{lines:true}
+// Compiles just fine
+{                                                                 // ------'a     
+  let string1 = String::from("this is a very very long string");  //        |
+  {                                                               // ---'b  |
+    let string2 = String::from("Short");                          //     |  |
+    let result = longest(&string1, &string2);                     //     |  |
+    println!("{result}");                                         //     |  |
+  }                                                               // ----+  |
+}                                                                 // -------+
+```
+```rust {*|6|*}{lines:true}
+// Compiles just fine
+{                                                                 // ------'a     
+  let string1 = String::from("this is a very very long string");  //        |
+  {                                                               // ---'b  |
+    let string2 = String::from("Short");                          //     |  |
+    let result: &'b String = longest(&'a string1, &'b string2);   //     |  |
+    println!("{result}");                                         //     |  |
+  }                                                               // ----+  |
+}                                                                 // -------+
+```
+```rust {*|4,7}{lines:true}
+// Lifetime Compile Time Error
+{                                                                      
+  let string1 = String::from("this is a very very long string");  
+  let result;                                                     
+  {                                                               
+    let string2 = String::from("Short");                          
+    result = longest(&string1, &string2);                         
+  }                                                               
+  println!("{result}");                                           
+}                                                                 
+```
+```rust {*}{lines:true}
+// Lifetime Compile Time Error
+{                                                                 // ------'a     
+  let string1 = String::from("this is a very very long string");  //        |
+  let result;                                                     //        |
+  {                                                               // ---'b  |
+    let string2 = String::from("Short");                          //     |  |
+    result = longest(&string1, &string2);                         //     |  |
+  }                                                               // ----+  |
+  println!("{result}");                                           //        |
+}                                                                 // -------+
+```
+```rust {*|4,7}{lines:true}
+// Lifetime Compile Time Error
+{                                                                 // ------'a     
+  let string1 = String::from("this is a very very long string");  //        |
+  let result: &'a String;                                         //        |
+  {                                                               // ---'b  |
+    let string2 = String::from("Short");                          //     |  |
+    result = longest(&'a string1, &'b string2); // &'b String     //     |  |
+  }                                                               // ----+  |
+  println!("{result}");                                           //        |
+}                                                                 // -------+
+```
+````
+
+<div class="m-auto w-1/2 p-2 flex justify-center align-center">
+  <div v-click="13" class=" w-96 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 p-3 rounded-xl">
+    <h3>Compiler Error</h3>
+    <img src="/img/lifetime_error.png" class="rounded-xl"/>
+  </div>
 </div>
 
 ---
@@ -605,7 +846,7 @@ transition: null
   - Reference Counting (`RC`) und Änderbare Speicherzellen, die zur Laufzeit geprüft werden (`RefCell`)
 - Cross Referencing: A zeigt auf B, B auf A. Auch hier wieder `RC` und `RefCell` notwendig
 - Alternativ: Fallback zu echten Pointern über `unsafe`-Code
-- Zur not so viel wie möglich value.clone() nutzen, falls Performance und Speichernutzung nicht all zu wichtig sind
+- Zur Not so viel wie möglich value.clone() nutzen, falls Performance und Speichernutzung nicht all zu wichtig sind
 
 
 ---
