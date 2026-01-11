@@ -121,9 +121,10 @@ impl Interpreter {
         left: &AstNode,
         op: &InfixOperator,
         right: &AstNode,
+        world: &World,
     ) -> Result<InterpreterValue, ErrorWithRange> {
-        let lval = self.eval_node(left)?.unwrap();
-        let rval = self.eval_node(right)?.unwrap();
+        let lval = self.eval_node(left, world)?.unwrap();
+        let rval = self.eval_node(right, world)?.unwrap();
 
         let new_val = match op {
             InfixOperator::Plus => lval + rval,
@@ -159,8 +160,9 @@ impl Interpreter {
         &mut self,
         op: &PrefixOperator,
         right: &AstNode,
+        world: &World,
     ) -> Result<InterpreterValue, ErrorWithRange> {
-        let rval = self.eval_node(right)?.unwrap();
+        let rval = self.eval_node(right, world)?.unwrap();
 
         let new_val = match op {
             PrefixOperator::Not => rval.negate_bool(),
@@ -183,11 +185,9 @@ impl Interpreter {
     pub fn eval_entity_declaration(
         &mut self,
         node: &AstNode,
+        world: &World,
         new_symbol: &Symbol,
     ) -> Result<(), ErrorWithRange> {
-
-
-
         Ok(())
     }
 
@@ -197,8 +197,9 @@ impl Interpreter {
         new_symbol: &Symbol,
         expression: &AstNode,
         assumed_type: &Option<TypeSymbol>,
+        world: &World,
     ) -> Result<(), ErrorWithRange> {
-        let value = self.eval_node(expression)?.unwrap();
+        let value = self.eval_node(expression, world)?.unwrap();
         if let InterpreterValue::Empty = value {
             return Err(ErrorWithRange {
                 err: Error::CantBeEmpty,
@@ -267,8 +268,9 @@ impl Interpreter {
         recipient: &Symbol,
         op: &AssignmentOperations,
         expression: &AstNode,
+        world: &World,
     ) -> Result<(), ErrorWithRange> {
-        let value = self.eval_node(expression)?.unwrap();
+        let value = self.eval_node(expression, world)?.unwrap();
         if let InterpreterValue::Empty = value {
             return Err(ErrorWithRange {
                 err: Error::CantBeEmpty,
@@ -342,8 +344,12 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn eval_weak(&mut self, inner: &AstNode) -> Result<InterpreterValue, ErrorWithRange> {
-        let val = self.eval_node(inner)?.unwrap();
+    pub fn eval_weak(
+        &mut self,
+        inner: &AstNode,
+        world: &World,
+    ) -> Result<InterpreterValue, ErrorWithRange> {
+        let val = self.eval_node(inner, world)?.unwrap();
         if let InterpreterValue::Strong(rc) = val {
             Ok(InterpreterValue::Weak(Rc::downgrade(&rc)))
         } else {
@@ -360,9 +366,10 @@ impl Interpreter {
         body: &Vec<Box<AstNode>>,
         else_ifs: &Vec<(Box<AstNode>, Vec<Box<AstNode>>)>,
         else_branch: &Option<Vec<Box<AstNode>>>,
+        world: &World,
     ) -> Result<IsReturn, ErrorWithRange> {
         // NOTE: Cannot be return, hence safe to unwrap
-        let cond1 = self.eval_node(cond)?.unwrap();
+        let cond1 = self.eval_node(cond, world)?.unwrap();
 
         let InterpreterValue::Bool(cond1) = cond1 else {
             return Err(ErrorWithRange {
@@ -375,14 +382,14 @@ impl Interpreter {
         };
 
         if cond1 {
-            let res = scoped!(self, { self.eval_nodes(body)? });
+            let res = scoped!(self, { self.eval_nodes(body, world)? });
 
             return_on_return!(res);
         } else {
             let mut executed_case = false;
 
             for elif in else_ifs {
-                let cond = self.eval_node(elif.0.as_ref())?.unwrap();
+                let cond = self.eval_node(elif.0.as_ref(), world)?.unwrap();
                 let InterpreterValue::Bool(cond) = cond else {
                     return Err(ErrorWithRange {
                         err: Error::OperationUnsupported {
@@ -394,7 +401,7 @@ impl Interpreter {
                 };
 
                 if cond {
-                    let res = scoped!(self, { self.eval_nodes(&elif.1)? });
+                    let res = scoped!(self, { self.eval_nodes(&elif.1, world)? });
 
                     return_on_return!(res);
                     executed_case = true;
@@ -405,7 +412,7 @@ impl Interpreter {
             if !executed_case && else_branch.is_some() {
                 let else_branch = else_branch.as_ref().expect("checked");
 
-                let res = scoped!(self, { self.eval_nodes(else_branch)? });
+                let res = scoped!(self, { self.eval_nodes(else_branch, world)? });
                 return_on_return!(res);
             }
         }
@@ -417,9 +424,10 @@ impl Interpreter {
         &mut self,
         cond: &AstNode,
         body: &Vec<Box<AstNode>>,
+        world: &World,
     ) -> Result<IsReturn, ErrorWithRange> {
         loop {
-            let cond1 = self.eval_node(cond)?.unwrap();
+            let cond1 = self.eval_node(cond, world)?.unwrap();
 
             if !cond1.as_bool().map_err(|e| ErrorWithRange {
                 err: e,
@@ -428,7 +436,7 @@ impl Interpreter {
                 break;
             }
 
-            let res = scoped!(self, { self.eval_nodes(body)? });
+            let res = scoped!(self, { self.eval_nodes(body, world)? });
             return_on_return!(res);
         }
 
@@ -441,6 +449,7 @@ impl Interpreter {
         cond: &Option<Box<AstNode>>,
         step: &Option<Box<AstNode>>,
         body: &Vec<Box<AstNode>>,
+        world: &World,
     ) -> Result<IsReturn, ErrorWithRange> {
         scoped!(self, {
             // Init condition
@@ -451,7 +460,7 @@ impl Interpreter {
                         expression: _,
                         assumed_type: _,
                     } => {
-                        self.eval_node(init.as_ref())?;
+                        self.eval_node(init.as_ref(), world)?;
                     }
                     _ => {
                         return Err(ErrorWithRange {
@@ -467,7 +476,7 @@ impl Interpreter {
 
             loop {
                 if let Some(cond) = cond.as_ref() {
-                    let cond1 = self.eval_node(cond.as_ref())?.unwrap();
+                    let cond1 = self.eval_node(cond.as_ref(), world)?.unwrap();
 
                     if !cond1.as_bool().map_err(|e| ErrorWithRange {
                         err: e,
@@ -477,7 +486,7 @@ impl Interpreter {
                     }
                 }
 
-                let res = scoped!(self, { self.eval_nodes(body)? });
+                let res = scoped!(self, { self.eval_nodes(body, world)? });
                 return_on_return!(res);
 
                 if let Some(step) = step.as_ref() {
@@ -487,7 +496,7 @@ impl Interpreter {
                             operation: _,
                             expression: _,
                         } => {
-                            self.eval_node(step.as_ref())?;
+                            self.eval_node(step.as_ref(), world)?;
                         }
                         _ => {
                             return Err(ErrorWithRange {
@@ -512,8 +521,9 @@ impl Interpreter {
         recipient: &Symbol,
         iterable: &AstNode,
         body: &Vec<Box<AstNode>>,
+        world: &World,
     ) -> Result<IsReturn, ErrorWithRange> {
-        let iterable1 = self.eval_node(iterable)?.unwrap();
+        let iterable1 = self.eval_node(iterable, world)?.unwrap();
 
         for entry in iterable1.as_list().map_err(|e| ErrorWithRange {
             err: e,
@@ -546,7 +556,7 @@ impl Interpreter {
                     })?;
 
                 scoped!(self, {
-                    let res = self.eval_nodes(body)?;
+                    let res = self.eval_nodes(body, world)?;
                     return_on_return!(res);
                 });
             });
@@ -558,11 +568,12 @@ impl Interpreter {
     pub fn eval_list(
         &mut self,
         values: &Vec<Box<AstNode>>,
+        world: &World,
     ) -> Result<InterpreterValue, ErrorWithRange> {
         let mut list_elems = Vec::new();
 
         for value in values {
-            list_elems.push(self.eval_node(value.as_ref())?.unwrap());
+            list_elems.push(self.eval_node(value.as_ref(), world)?.unwrap());
         }
 
         Ok(InterpreterValue::List(list_elems))
@@ -591,6 +602,7 @@ impl Interpreter {
         &mut self,
         node: &AstNode,
         calls: &[MemberAccess],
+        world: &World,
     ) -> Result<IsReturn, ErrorWithRange> {
         // mutably borrow here, to allow for more complex pointer casting;
         let mut current_scope: Result<ScopeVariant, ErrorWithRange> =
@@ -626,6 +638,7 @@ impl Interpreter {
                                 last_type.unwrap(),
                                 &local_scope.get_outer_scope(),
                                 fn_type,
+                                world,
                             )
                         } else {
                             self.call_function(
@@ -633,6 +646,7 @@ impl Interpreter {
                                 params,
                                 &local_scope.get_outer_scope(),
                                 fn_type,
+                                world,
                             )
                         }?;
                         // Set current scope here. it must be checked before every execution
@@ -702,7 +716,7 @@ impl Interpreter {
                                 for (field, value_node) in fields_to_assign {
                                     if fields_of_struct_type.contains_key(field) {
                                         assigned_fields.insert(field);
-                                        let value = self.eval_node(value_node)?.unwrap();
+                                        let value = self.eval_node(value_node, world)?.unwrap();
                                         field_values.insert(field.clone(), Box::new(value));
                                     } else {
                                         todo!("throw error here, as field does not exist")
@@ -749,7 +763,7 @@ impl Interpreter {
                                 for (field, value_node) in fields_to_assign {
                                     if fields_of_struct_type.contains_key(field) {
                                         assigned_fields.insert(field);
-                                        let value = self.eval_node(value_node)?.unwrap();
+                                        let value = self.eval_node(value_node, world)?.unwrap();
                                         field_values.insert(field.clone(), Box::new(value));
                                     } else {
                                         todo!("throw error here, as field does not exist")
@@ -800,7 +814,7 @@ impl Interpreter {
         last_res
     }
 
-    pub fn eval_node(&mut self, node: &AstNode) -> Result<IsReturn, ErrorWithRange> {
+    pub fn eval_node(&mut self, node: &AstNode, world: &World) -> Result<IsReturn, ErrorWithRange> {
         let evaluated = match &node.type_of {
             // Primitives
             AstNodeType::Bool(b) => {
@@ -815,23 +829,24 @@ impl Interpreter {
             AstNodeType::String(s) => IsReturn::NoReturn(InterpreterValue::new_strong(
                 InterpreterValue::String(s.clone()),
             )),
-            AstNodeType::List(values) => IsReturn::NoReturn(self.eval_list(values)?),
+            AstNodeType::List(values) => IsReturn::NoReturn(self.eval_list(values, world)?),
             AstNodeType::Map(values) => {
                 IsReturn::NoReturn(self.eval_map(values).map_err(|e| ErrorWithRange {
                     err: e,
                     range: node.range.clone(),
                 })?)
             }
-            AstNodeType::Weak(inner) => IsReturn::NoReturn(self.eval_weak(inner.as_ref())?),
+            AstNodeType::Weak(inner) => IsReturn::NoReturn(self.eval_weak(inner.as_ref(), world)?),
             // Infix call and prefix calls
             AstNodeType::InfixCall(left, op, right) => {
-                IsReturn::NoReturn(self.eval_infix_call(left.as_ref(), op, right.as_ref())?)
+                IsReturn::NoReturn(self.eval_infix_call(left.as_ref(), op, right.as_ref(), world)?)
             }
             AstNodeType::PrefixCall(prefix, right) => {
-                IsReturn::NoReturn(self.eval_prefix_call(prefix, right.as_ref())?)
+                IsReturn::NoReturn(self.eval_prefix_call(prefix, right.as_ref(), world)?)
             }
             AstNodeType::EntityDeclaration { new_symbol } => {
-                todo!()
+                self.eval_entity_declaration(node, world, new_symbol)?;
+                IsReturn::NoReturn(InterpreterValue::Empty)
             }
             // Assignent and declaration
             AstNodeType::Declaration {
@@ -839,7 +854,7 @@ impl Interpreter {
                 expression,
                 assumed_type,
             } => {
-                self.eval_declaration(node, new_symbol, expression.as_ref(), assumed_type)?;
+                self.eval_declaration(node, new_symbol, expression.as_ref(), assumed_type, world)?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             AstNodeType::AssignmentOp {
@@ -847,32 +862,32 @@ impl Interpreter {
                 operation,
                 expression,
             } => {
-                self.eval_assignment_op(node, recipient, operation, expression.as_ref())?;
+                self.eval_assignment_op(node, recipient, operation, expression.as_ref(), world)?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             // Member call can be anything that is of the form a.b.c.d(a,b).c etc. a() and a are also member calls with length 1
-            AstNodeType::MemberCall { calls } => self.eval_member_call(node, calls)?,
+            AstNodeType::MemberCall { calls } => self.eval_member_call(node, calls, world)?,
             AstNodeType::ReturnStatement { return_value } => {
-                IsReturn::Return(self.eval_node(return_value.as_ref())?.unwrap())
+                IsReturn::Return(self.eval_node(return_value.as_ref(), world)?.unwrap())
             }
             AstNodeType::Branch {
                 cond,
                 body,
                 else_if_branches,
                 else_branch,
-            } => self.eval_branch(cond.as_ref(), body, else_if_branches, else_branch)?,
-            AstNodeType::While { cond, body } => self.eval_while(cond.as_ref(), body)?,
+            } => self.eval_branch(cond.as_ref(), body, else_if_branches, else_branch, world)?,
+            AstNodeType::While { cond, body } => self.eval_while(cond.as_ref(), body, world)?,
             AstNodeType::For {
                 declaration,
                 condition,
                 assignment,
                 body,
-            } => self.eval_for(declaration, condition, assignment, body)?,
+            } => self.eval_for(declaration, condition, assignment, body, world)?,
             AstNodeType::ForEach {
                 recipient,
                 iterable,
                 body,
-            } => self.eval_for_each(node, recipient, iterable, body)?,
+            } => self.eval_for_each(node, recipient, iterable, body, world)?,
             _ => Err(Error::OperationUnsupported {
                 operation: format!("{:?}", &node.type_of),
                 type_of: "".to_owned(),
@@ -886,9 +901,13 @@ impl Interpreter {
         Ok(evaluated)
     }
 
-    pub fn eval_nodes(&mut self, nodes: &Vec<Box<AstNode>>) -> Result<IsReturn, ErrorWithRange> {
+    pub fn eval_nodes(
+        &mut self,
+        nodes: &Vec<Box<AstNode>>,
+        world: &World,
+    ) -> Result<IsReturn, ErrorWithRange> {
         for node in nodes {
-            let res = self.eval_node(node.as_ref())?;
+            let res = self.eval_node(node.as_ref(), world)?;
 
             // Early exit until function call is reached
             return_on_return!(res);
@@ -903,13 +922,14 @@ impl Interpreter {
         params: &Vec<Box<AstNode>>,
         call_scope: &Rc<RefCell<Scope>>,
         fn_signature: TypeSymbol,
+        world: &World,
     ) -> Result<InterpreterValue, ErrorWithRange> {
         if let TypeSymbolType::Function(fn_type) = &fn_signature.type_of {
             // TODO: add error handling
             let mut evaled_params = Vec::new();
 
             for param in params {
-                evaled_params.push((param, self.eval_node(param.as_ref())?));
+                evaled_params.push((param, self.eval_node(param.as_ref(), world)?));
             }
 
             let param_scope = {
@@ -943,7 +963,7 @@ impl Interpreter {
 
             let result = with_scope!(self, param_scope, {
                 match &fn_type.execution_body {
-                    FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body)?,
+                    FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body, world)?,
                     FunctionExecutionStrategy::Buildin(callback) => {
                         callback(self.get_current_scope()).map_err(|e| ErrorWithRange {
                             err: e,
@@ -974,13 +994,14 @@ impl Interpreter {
         self_type: TypeSymbol,
         call_scope: &Rc<RefCell<Scope>>,
         fn_signature: TypeSymbol,
+        world: &World,
     ) -> Result<InterpreterValue, ErrorWithRange> {
         if let TypeSymbolType::Function(fn_type) = &fn_signature.type_of {
             // TODO: add error handling
             let mut evaled_params = Vec::new();
 
             for param in params {
-                evaled_params.push((param, self.eval_node(param.as_ref())?));
+                evaled_params.push((param, self.eval_node(param.as_ref(), world)?));
             }
 
             let param_scope = {
@@ -1022,7 +1043,7 @@ impl Interpreter {
 
             let result = with_scope!(self, param_scope, {
                 match &fn_type.execution_body {
-                    FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body)?,
+                    FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body, world)?,
                     FunctionExecutionStrategy::Buildin(callback) => {
                         callback(self.get_current_scope()).map_err(|e| ErrorWithRange {
                             err: e,
@@ -1099,7 +1120,7 @@ impl Interpreter {
                     crate::SystemExecutionStrategy::Buildin(body) => body(Rc::clone(&param_scope))
                         .map_err(|err| ErrorWithRange { err, range: 0..1 }),
                     crate::SystemExecutionStrategy::Interpreted(ast_nodes) => {
-                        self.eval_nodes(&ast_nodes).map(|_| ())
+                        self.eval_nodes(&ast_nodes, world).map(|_| ())
                     }
                 }
             })?;
@@ -1136,7 +1157,7 @@ impl<'w> Stage<'w> for Rc<RefCell<Interpreter>> {
         }
     }
 
-    fn run(self, _world: &'w World) -> Result<StageResult<'w>, ErrorWithRange> {
+    fn run(self, world: &'w World) -> Result<StageResult<'w>, ErrorWithRange> {
         let entrypoint_fn = self.borrow().entrypoint_fn.clone();
         let main_fn = self
             .borrow()
@@ -1157,6 +1178,7 @@ impl<'w> Stage<'w> for Rc<RefCell<Interpreter>> {
                     &vec![],
                     &current_scope,
                     main_fn,
+                    world,
                 )?;
             } else {
                 return Err(ErrorWithRange {

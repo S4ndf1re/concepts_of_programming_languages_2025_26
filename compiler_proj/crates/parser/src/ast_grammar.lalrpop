@@ -1,6 +1,5 @@
 use std::str::FromStr;
-use crate::ast::*;
-use crate::types::type_symbol::*;
+use crate::*;
 
 grammar;
 
@@ -430,7 +429,7 @@ AssignmentOrDeclarationOrRegisterOrEntity = {
 /// Additionally, the last statement may be returnable
 Block: Vec<Box<AstNode>> = {
     <s:Statement*> <r:Returnable?> => {
-            let mut v = s.into_iter().map(|s| Box::new(s)).collect::<Vec<_>>(); 
+            let mut v = s.into_iter().map(|s| Box::new(s)).collect::<Vec<_>>();
             if let Some(r) = r {
                 v.push(Box::new(r));
             }
