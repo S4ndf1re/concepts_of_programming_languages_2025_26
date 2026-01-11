@@ -1,5 +1,7 @@
 use std::{fmt::Display, hash::Hash, iter::zip};
 
+use ecs::Component;
+
 use crate::{Symbol, TypeSymbol};
 
 #[derive(Debug, Clone, Eq)]

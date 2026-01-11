@@ -1,4 +1,4 @@
-use std::{any::TypeId, cell::RefCell, collections::HashSet, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use typed_generational_arena::{Index, NonzeroGeneration, StandardArena};
 
@@ -6,13 +6,13 @@ use crate::{Component, Entity, EntityCommandsMut, IntoSystem, System, SystemPara
 
 pub struct World {
     pub(crate) entites: Rc<RefCell<StandardArena<Entity>>>,
-    pub(crate) components: Rc<RefCell<HashSet<TypeId>>>,
-    pub(crate) systems: Vec<*const dyn System>,
+    pub(crate) components: Rc<RefCell<HashSet<String>>>,
+    pub(crate) systems: Rc<RefCell<Vec<*const dyn System>>>,
 }
 
 impl World {
     pub fn register_component<C: Component + 'static>(&self) {
-        let id = TypeId::of::<C>();
+        let id = C::ident();
         if self.components.borrow().contains(&id) {
             return;
         }
@@ -48,8 +48,8 @@ impl World {
         }
     }
 
-    pub fn add_system<Marker: 'static, I: IntoSystem<Marker>>(&mut self, into_system: I) {
-        self.systems.push(Box::into_raw(into_system.into_system()));
+    pub fn add_system<Marker: 'static, I: IntoSystem<Marker>>(&self, into_system: I) {
+        self.systems.borrow_mut().push(Box::into_raw(into_system.into_system()));
     }
 
     pub fn run(&mut self) {
@@ -57,7 +57,7 @@ impl World {
             let systems = self.systems.clone();
             loop {
                 // SAFETY: This is safe, as long as no further system manipulation can take place
-                for system in &systems {
+                for system in systems.borrow().iter() {
                     let sys = *system as *mut dyn System;
                     (*sys).run(self);
                 }
@@ -71,14 +71,14 @@ impl Default for World {
         Self {
             entites: Rc::new(RefCell::new(StandardArena::new())),
             components: Rc::new(RefCell::new(HashSet::new())),
-            systems: Vec::new(),
+            systems: Rc::new(RefCell::new(Vec::new())),
         }
     }
 }
 
 impl Drop for World {
     fn drop(&mut self) {
-        for system in &self.systems {
+        for system in self.systems.borrow().iter() {
             unsafe {
                 let _ = Box::from_raw(*system as *mut dyn System);
             }

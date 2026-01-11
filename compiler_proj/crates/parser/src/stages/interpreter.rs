@@ -1,15 +1,16 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
-    env::current_exe,
     iter::zip,
     rc::Rc,
 };
 
+use ecs::{PseudoSystemParameter, World};
+
 use crate::{
     AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy,
     FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator,
-    Scope, ScopeLike, ScopeVariant, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType,
+    Query, Scope, ScopeLike, ScopeVariant, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType,
 };
 
 macro_rules! scoped {
@@ -178,6 +179,16 @@ impl Interpreter {
                 range: right.range.clone(),
             })
         }
+    }
+    pub fn eval_entity_declaration(
+        &mut self,
+        node: &AstNode,
+        new_symbol: &Symbol,
+    ) -> Result<(), ErrorWithRange> {
+
+
+
+        Ok(())
     }
 
     pub fn eval_declaration(
@@ -819,7 +830,9 @@ impl Interpreter {
             AstNodeType::PrefixCall(prefix, right) => {
                 IsReturn::NoReturn(self.eval_prefix_call(prefix, right.as_ref())?)
             }
-
+            AstNodeType::EntityDeclaration { new_symbol } => {
+                todo!()
+            }
             // Assignent and declaration
             AstNodeType::Declaration {
                 new_symbol,
@@ -1031,15 +1044,86 @@ impl Interpreter {
             unimplemented!("error here")
         }
     }
+
+    pub fn call_system(
+        &mut self,
+        sys_name: &Symbol,
+        world: &World,
+        call_scope: &Rc<RefCell<Scope>>,
+        fn_signature: TypeSymbol,
+    ) -> Result<(), ErrorWithRange> {
+        if let TypeSymbolType::System(system_type) = fn_signature.type_of {
+            // assume already validated sytems
+            let mut params = HashMap::new();
+            let mut queries = HashMap::new();
+            let mut query_states = HashMap::new();
+
+            if let Some(sys_queries) = system_type.queries.as_ref() {
+                for query in sys_queries {
+                    queries.insert(query.symbol.clone(), &query.type_of);
+
+                    let mut state = query.instantiate_from_world(world);
+                    let value = Query::get_param(&mut state, world);
+                    query_states.insert(query.symbol.clone(), value);
+                }
+            }
+
+            for param in &system_type.params {
+                params.insert(param.0.clone(), &param.1);
+            }
+
+            let mut param_scope = Scope::new_parented(Rc::clone(call_scope));
+            for param in params {
+                if let Some(item) = query_states.get(&param.0) {
+                    param_scope.declare_variable(
+                        param.0,
+                        InterpreterValue::List(
+                            item.components
+                                .iter()
+                                .map(|v| InterpreterValue::List(v.clone()))
+                                .collect::<Vec<_>>(),
+                        ),
+                        TypeSymbol::strong(TypeSymbolType::List(Box::new(TypeSymbol::strong(
+                            TypeSymbolType::Any,
+                        )))),
+                        false,
+                        false,
+                        0..1,
+                    );
+                }
+            }
+            let param_scope = Rc::new(RefCell::new(param_scope));
+
+            let _ = with_scope!(self, param_scope, {
+                match system_type.execution_body {
+                    crate::SystemExecutionStrategy::Buildin(body) => body(Rc::clone(&param_scope))
+                        .map_err(|err| ErrorWithRange { err, range: 0..1 }),
+                    crate::SystemExecutionStrategy::Interpreted(ast_nodes) => {
+                        self.eval_nodes(&ast_nodes).map(|_| ())
+                    }
+                }
+            })?;
+
+            Ok(())
+        } else {
+            Err(ErrorWithRange {
+                err: Error::OperationUnsupported {
+                    operation: "call system".to_owned(),
+                    type_of: "must be a system".to_owned(),
+                },
+                range: 0..1,
+            })
+        }
+    }
 }
 
-impl Stage for Interpreter {
-    fn init(&mut self, prev_stage_result: StageResult) -> Result<(), ErrorWithRange> {
+impl<'w> Stage<'w> for Rc<RefCell<Interpreter>> {
+    fn init(&mut self, prev_stage_result: StageResult<'w>) -> Result<(), ErrorWithRange> {
         match prev_stage_result {
             StageResult::Preprocessor(global_scope, ast) => {
-                self.ast = ast;
+                self.borrow_mut().ast = ast;
 
-                self.environments = vec![Environment {
+                self.borrow_mut().environments = vec![Environment {
                     scope: Rc::new(RefCell::new(global_scope)),
                 }];
 
@@ -1052,28 +1136,32 @@ impl Stage for Interpreter {
         }
     }
 
-    fn run(mut self) -> Result<StageResult, ErrorWithRange> {
+    fn run(self, _world: &'w World) -> Result<StageResult<'w>, ErrorWithRange> {
+        let entrypoint_fn = self.borrow().entrypoint_fn.clone();
         let main_fn = self
+            .borrow()
             .get_current_scope()
             .borrow()
-            .resolve_value(&self.entrypoint_fn);
+            .resolve_value(&entrypoint_fn);
         if let Some(main) = main_fn {
             if let InterpreterValue::Function(_) = main {
                 let main_fn = self
+                    .borrow()
                     .get_current_scope()
                     .borrow()
-                    .resolve_type(&self.entrypoint_fn)
+                    .resolve_type(&entrypoint_fn)
                     .expect("must be present if value is present");
-                self.call_function(
-                    &self.entrypoint_fn.clone(),
+                let current_scope = self.borrow().get_current_scope();
+                self.borrow_mut().call_function(
+                    &entrypoint_fn,
                     &vec![],
-                    &self.get_current_scope(),
+                    &current_scope,
                     main_fn,
                 )?;
             } else {
                 return Err(ErrorWithRange {
                     err: Error::WrongType(
-                        self.entrypoint_fn.clone(),
+                        entrypoint_fn.clone(),
                         TypeSymbolType::Function(FunctionType {
                             name: "main".to_string(),
                             is_method: false,
@@ -1082,19 +1170,20 @@ impl Stage for Interpreter {
                             execution_body: FunctionExecutionStrategy::Interpreted(vec![]),
                         })
                         .to_string(),
-                        self.get_current_scope()
+                        self.borrow()
+                            .get_current_scope()
                             .borrow()
-                            .resolve_type(&self.entrypoint_fn)
+                            .resolve_type(&entrypoint_fn)
                             .expect("must be present if value is presen")
                             .to_string(),
                     ),
-                    range: 1..1,
+                    range: 0..1,
                 });
             }
         } else {
             return Err(ErrorWithRange {
                 err: Error::MainNotFound,
-                range: 1..1,
+                range: 0..1,
             });
         }
 

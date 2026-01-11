@@ -10,6 +10,9 @@ pub use stages::*;
 pub mod types;
 pub use types::*;
 
+pub mod query;
+pub use query::*;
+
 use lalrpop_util::lalrpop_mod;
 
 lalrpop_mod!(pub ast_grammar);
@@ -611,7 +614,7 @@ mod tests {
     #[test]
     fn system_test() {
         let source = r#"
-                        system query_entites(a: A, b: B, c: C, d: D, e: E, f: F) 
+                        system query_entites(a: A, b: B, c: C, d: D, e: E, f: F)
                             querying
                                 A as List with {Entity, C1, C2},
                                 B as Single with {Entity, C1, C2 % { C1 && C2 && (C3 || !C4)}},
@@ -643,7 +646,7 @@ mod tests {
                     }
 
                     group PostUpdate {
-                        s1, 
+                        s1,
                         s2 -> s3,
                         s3 -> s4,
                         s3 -> s5,
@@ -679,7 +682,7 @@ mod tests {
                         create entity e1;
 
                         create entity e2
-                            with 
+                            with
                                 C1,
                                 C2,
                                 C3;

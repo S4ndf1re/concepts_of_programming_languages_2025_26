@@ -17,7 +17,11 @@ mod interpreter_test;
 
 #[cfg(test)]
 mod tests {
-    use crate::{BeautifyError, Preprocessor, Stage, StageResult, ast_grammar};
+    use std::{cell::RefCell, rc::Rc};
+
+    use ecs::World;
+
+    use crate::{BeautifyError, Interpreter, Preprocessor, Stage, StageResult, ast_grammar};
 
     #[test]
     fn test_preprocessing() {
@@ -33,11 +37,13 @@ mod tests {
         } else {
             let expr = expr.unwrap();
 
-            let s0 = StageResult::Parsing(expr);
+            let world = World::default();
+            let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+            let s0 = StageResult::Parsing(&world, expr, interpreter);
 
             let mut processor = Preprocessor::new().unwrap();
             processor.init(s0).unwrap();
-            processor.run().unwrap();
+            processor.run(&world).unwrap();
         }
     }
 }

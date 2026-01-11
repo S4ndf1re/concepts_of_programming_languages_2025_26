@@ -33,6 +33,7 @@ hideInToc: true
 transition: null
 layout: two-cols-header
 ---
+
 # Bisher?
 
 ::left::
@@ -50,14 +51,6 @@ layout: two-cols-header
   <br/>
   C / C++ / Zig
 </div>
-
-<v-click>
-
-- Manual Memory Management (C / C++ / Zig)
-  - Starke Performance
-  - Hohes Level an Kontrolle
-  - Fehleranfällig!
-</v-click>
 
 ---
 transition: null
@@ -987,12 +980,7 @@ let a = A {
 };
 ```
 
-<v-click>
 
-- Grundsätzlich gültig, da nur eine nicht änderbare Referenz und ein Owner
-- Aber unmöglich die Lifetime zu bestimmen
-  - So lange wie `a` lebt? Aber wie lange lebt `a`? Wie komme ich an die Lifetime von `a` aus Entwicklersicht
-</v-click>
 
 ---
 transition: null

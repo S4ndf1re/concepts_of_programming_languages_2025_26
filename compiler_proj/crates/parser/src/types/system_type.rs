@@ -1,9 +1,8 @@
-use std::{cell::RefCell, fmt::{Display, Error}, iter::zip, rc::Rc, thread::Scope};
+use std::{cell::RefCell, fmt::Display, iter::zip, rc::Rc};
 
 use derivative::Derivative;
 
-use crate::{AstNode, Query, Symbol};
-
+use crate::{AstNode, Error, Query, Scope, Symbol};
 
 pub type BuildinSystemCallback = fn(scope: Rc<RefCell<Scope>>) -> Result<(), Error>;
 

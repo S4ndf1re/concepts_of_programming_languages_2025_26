@@ -1,6 +1,9 @@
-
 #[cfg(test)]
 mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use ecs::World;
+
     use crate::{
         BeautifyError, Interpreter, Parser, Preprocessor, StageResult, Stages, ast_grammar,
         run_stages,
@@ -17,14 +20,17 @@ mod tests {
 
         let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
 
+        let world = World::default();
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+
         let stages = vec![
             Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
+            Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::Parsing(ast);
+        let state = StageResult::Parsing(&world, ast, Rc::clone(&interpreter));
 
-        let _ = run_stages(stages, state).unwrap();
+        let _ = run_stages(stages, state, &world).unwrap();
     }
 
     #[test]
@@ -38,15 +44,17 @@ mod tests {
            "#;
 
         let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+        let world = World::default();
 
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
         let stages = vec![
             Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
+            Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::Parsing(ast);
+        let state = StageResult::Parsing(&world, ast, Rc::clone(&interpreter));
 
-        let result = run_stages(stages, state);
+        let result = run_stages(stages, state, &world);
 
         if let Err(err) = result {
             err.print_error(source);
@@ -68,15 +76,17 @@ mod tests {
            "#
         .to_owned();
 
+        let world = World::default();
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
         let stages = vec![
             Stages::Parser(Parser::default()),
             Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
+            Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(source);
+        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
 
-        let _ = run_stages(stages, state).unwrap();
+        let _ = run_stages(stages, state, &world).unwrap();
     }
 
     #[test]
@@ -91,15 +101,18 @@ mod tests {
            "#
         .to_owned();
 
+        let world = World::default();
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+
         let stages = vec![
             Stages::Parser(Parser::default()),
             Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
+            Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(source);
+        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
 
-        let _ = run_stages(stages, state).unwrap();
+        let _ = run_stages(stages, state, &world).unwrap();
     }
 
     #[test]
@@ -112,15 +125,18 @@ mod tests {
            "#
         .to_owned();
 
+        let world = World::default();
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+
         let stages = vec![
             Stages::Parser(Parser::default()),
             Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
+            Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(source);
+        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
 
-        let _ = run_stages(stages, state).unwrap();
+        let _ = run_stages(stages, state, &world).unwrap();
     }
 
     #[test]
@@ -138,15 +154,18 @@ mod tests {
 
         let source_safe = source.clone();
 
+        let world = World::default();
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+
         let stages = vec![
             Stages::Parser(Parser::default()),
             Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
+            Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(source);
+        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
 
-        let result = run_stages(stages, state);
+        let result = run_stages(stages, state, &world);
         if let Err(occured_error) = result {
             occured_error.print_error(&source_safe);
         }
@@ -175,15 +194,18 @@ mod tests {
 
         let source_safe = source.clone();
 
+        let world = World::default();
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+
         let stages = vec![
             Stages::Parser(Parser::default()),
             Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Interpreter::new("main".to_string())),
+            Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(source);
+        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
 
-        let result = run_stages(stages, state);
+        let result = run_stages(stages, state, &world);
         if let Err(occured_error) = result {
             occured_error.panic_error(&source_safe);
         }

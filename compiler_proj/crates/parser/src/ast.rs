@@ -6,7 +6,7 @@ use graphviz_rust::{
 };
 use rand::distr::{Alphabetic, SampleString};
 
-use crate::TypeSymbol;
+use crate::{Query, TypeSymbol};
 
 /// Any symbol, that is not a type definition
 pub type Symbol = String;
@@ -38,88 +38,6 @@ pub enum RegisterType {
 }
 
 
-#[derive(Debug, PartialEq, Clone, Hash)]
-pub struct QueryTerm {
-    pub components: Vec<Symbol>,
-}
-
-#[derive(Debug, PartialEq, Clone, Hash)]
-pub enum QueryCond {
-    Component(Symbol),
-    Not(Box<QueryCond>),
-    And(Box<QueryCond>, Box<QueryCond>),
-    Or(Box<QueryCond>, Box<QueryCond>),
-}
-
-impl QueryCond {
-    pub fn get_dependent_symbols(&self) -> Vec<&Symbol> {
-        match self {
-            QueryCond::Component(s) => vec![s],
-            QueryCond::Not(cond) => cond.get_dependent_symbols(),
-            QueryCond::And(c1, c2) => c1
-                .get_dependent_symbols()
-                .into_iter()
-                .chain(c2.get_dependent_symbols())
-                .collect::<Vec<_>>(),
-            QueryCond::Or(c1, c2) => c1
-                .get_dependent_symbols()
-                .into_iter()
-                .chain(c2.get_dependent_symbols())
-                .collect::<Vec<_>>(),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Hash)]
-pub enum QueryType {
-    List {
-        select: QueryTerm,
-        condition: Option<QueryCond>,
-    },
-    Single {
-        select: QueryTerm,
-        condition: Option<QueryCond>,
-    },
-    World,
-    Resource(Symbol),
-    EventReader(Symbol),
-    EventWriter(Symbol),
-}
-
-impl QueryType {
-    pub fn get_dependent_symbols(&self) -> Vec<&Symbol> {
-        let mut result = Vec::new();
-        match self {
-            QueryType::List { select, condition } => {
-                for symbol in &select.components {
-                    result.push(symbol);
-                }
-                if let Some(cond) = condition {
-                    result.extend(cond.get_dependent_symbols());
-                }
-            }
-            QueryType::Single { select, condition } => {
-                for symbol in &select.components {
-                    result.push(symbol);
-                }
-                if let Some(cond) = condition {
-                    result.extend(cond.get_dependent_symbols());
-                }
-            }
-            QueryType::Resource(res) => result.push(res),
-            QueryType::EventReader(evt) | QueryType::EventWriter(evt) => result.push(evt),
-            _ => (),
-        }
-
-        result
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Hash)]
-pub struct Query {
-    pub symbol: Symbol,
-    pub type_of: QueryType,
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AstTypeDefinition {

@@ -1,29 +1,53 @@
-use std::collections::{HashMap, HashSet};
-
-use crate::{
-    AstNode, AstNodeType, AstTypeDefinition, Error, ErrorWithRange, FunctionType, InterpreterValue,
-    Scope, Stage, StageResult, StructType, SystemType, TypeSymbol, TypeSymbolType,
-    register_buildin,
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
 };
 
-pub struct Preprocessor {
-    ast: Vec<AstNode>,
-    global_scope: Scope,
+use ecs::World;
+
+use crate::{
+    AstNode, AstNodeType, AstTypeDefinition, ComponentType, Error, ErrorWithRange, FunctionType,
+    Interpreter, InterpreterValue, RegisterType, Scope, Stage, StageResult, StructType, SystemType,
+    TypeSymbol, TypeSymbolType, register_buildin,
+};
+
+pub fn run_system<'w>(sys_name: String, interpreter: Rc<RefCell<Interpreter>>) -> impl FnMut(&World) {
+    let interpreter = Rc::clone(&interpreter);
+    move |world: &World| {
+        let mut interp = interpreter.borrow_mut();
+        let scope = interp.get_current_scope();
+        let type_of = scope.borrow_mut().resolve_defined_type(&sys_name).unwrap();
+        interp
+            .call_system(&sys_name, world, &scope, type_of)
+            .unwrap();
+    }
 }
 
-impl Preprocessor {
+pub struct Preprocessor<'w> {
+    ast: Vec<AstNode>,
+    world: Option<&'w World>,
+    global_scope: Scope,
+    interpreter: Option<Rc<RefCell<Interpreter>>>
+}
+
+impl<'w> Preprocessor<'w> {
     pub fn new() -> Result<Self, Error> {
         Ok(Self {
             global_scope: Scope::default(),
             ast: vec![],
+            world: None,
+            interpreter: None,
         })
     }
 }
 
-impl Stage for Preprocessor {
-    fn init(&mut self, old_output: StageResult) -> Result<(), ErrorWithRange> {
-        if let StageResult::Parsing(ast) = old_output {
+impl<'w> Stage<'w> for Preprocessor<'w> {
+    fn init(&mut self, old_output: StageResult<'w>) -> Result<(), ErrorWithRange> {
+        if let StageResult::Parsing(world, ast, interpreter) = old_output {
             self.ast = ast;
+            self.world = Some(world);
+            self.interpreter = Some(interpreter);
         } else {
             return Err(ErrorWithRange {
                 err: Error::StageError(0, old_output.into()),
@@ -72,7 +96,7 @@ impl Stage for Preprocessor {
         Ok(())
     }
 
-    fn run(mut self) -> Result<StageResult, ErrorWithRange> {
+    fn run(mut self, _world: &'w World) -> Result<StageResult<'w>, ErrorWithRange> {
         let mut other_nodes = Vec::new();
 
         for node in self.ast {
@@ -149,6 +173,20 @@ impl Stage for Preprocessor {
                                     fields: attributes,
                                     methods,
                                     statics,
+                                }));
+
+                            self.global_scope
+                                .declare_type(typename, struct_def, true, node.range.clone())
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: node.range.clone(),
+                                })?;
+                        }
+                        AstTypeDefinition::Component(attributes) => {
+                            let struct_def =
+                                TypeSymbol::strong(TypeSymbolType::Component(ComponentType {
+                                    name: typename.clone(),
+                                    fields: attributes,
                                 }));
 
                             self.global_scope
@@ -247,6 +285,38 @@ impl Stage for Preprocessor {
                         _ => (),
                     }
                 }
+                AstNodeType::Register { schedule_entity } => match schedule_entity {
+                    RegisterType::Chain(chain) => {
+                        if chain.len() > 1 {
+                            Err(ErrorWithRange {
+                                err: Error::OperationUnsupported {
+                                    operation: "register".to_owned(),
+                                    type_of: "other than chain".to_owned(),
+                                },
+                                range: node.range.clone(),
+                            })?
+                        } else if chain.is_empty() {
+                            Err(ErrorWithRange {
+                                err: Error::OperationUnsupported {
+                                    operation: "register".to_owned(),
+                                    type_of: "at least one register required".to_owned(),
+                                },
+                                range: node.range.clone(),
+                            })?
+                        }
+
+                        let sys_reg = chain[0].clone();
+
+                        let _ = self.world.map(|w| w.add_system(run_system(sys_reg, Rc::clone(self.interpreter.as_ref().expect("must be present")))));
+                    }
+                    _ => Err(ErrorWithRange {
+                        err: Error::OperationUnsupported {
+                            operation: "register".to_owned(),
+                            type_of: "other than chain".to_owned(),
+                        },
+                        range: node.range.clone(),
+                    })?,
+                },
                 _ => other_nodes.push(node),
             }
         }

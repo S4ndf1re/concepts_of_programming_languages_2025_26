@@ -6,7 +6,7 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use ecs::Entity;
+use ecs::{Component, Entity};
 use typed_generational_arena::Index;
 
 use crate::{Error, Scope, ScopeVariant, Symbol, TypeSymbol, TypeSymbolType};
@@ -650,5 +650,12 @@ impl From<InterpreterValue> for Result<ScopeVariant, Error> {
             }
             _ => Err(Error::IsNotAScope),
         }
+    }
+}
+
+
+impl Component for InterpreterValue {
+    fn get_ident(&self) -> String {
+        Self::ident()
     }
 }

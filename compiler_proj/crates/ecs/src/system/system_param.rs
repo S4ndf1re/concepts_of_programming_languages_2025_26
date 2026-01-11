@@ -42,3 +42,17 @@ macro_rules! impl_param_tuples {
 }
 
 all_tuples!(impl_param_tuples, 0, 16, P);
+
+
+/// This is not an actual system parameter, but one that can be used when access to the world exists.
+/// The main difference is, that instantiate from world takes &self.
+/// This is sometimes needed, when calling systems with completely dynamic system params.
+/// This can still be used with worlds, but not the same way normal systems can be used (using `SystemFn`s)
+pub trait PseudoSystemParameter {
+    type State;
+    type Item<'w>: PseudoSystemParameter<State = Self::State>;
+
+    fn instantiate_from_world(&self,world: &World) -> Self::State;
+
+    fn get_param<'w>(state: &mut Self::State, world: &'w World) -> Self::Item<'w>;
+}
