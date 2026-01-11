@@ -105,17 +105,6 @@ impl Interpreter {
         self.environments.pop();
     }
 
-    pub fn eval_symbol(&mut self, symbol: &Symbol) -> Result<InterpreterValue, Error> {
-        let scope = self.get_current_scope();
-        let scope = scope.borrow();
-
-        if let Some(val) = scope.resolve_value(symbol) {
-            Ok(val)
-        } else {
-            Err(Error::SymbolNotFound(symbol.clone()))
-        }
-    }
-
     pub fn eval_infix_call(
         &mut self,
         left: &AstNode,
@@ -188,6 +177,25 @@ impl Interpreter {
         world: &World,
         new_symbol: &Symbol,
     ) -> Result<(), ErrorWithRange> {
+        let entity = world.spawn().id();
+
+        let scope = self.get_current_scope();
+        let mut scope = scope.borrow_mut();
+
+        scope
+            .declare_variable(
+                new_symbol.clone(),
+                InterpreterValue::Entity(entity),
+                TypeSymbol::strong(TypeSymbolType::Entity),
+                false,
+                false,
+                node.range.clone(),
+            )
+            .map_err(|err| ErrorWithRange {
+                err,
+                range: node.range.clone(),
+            })?;
+
         Ok(())
     }
 
@@ -281,20 +289,29 @@ impl Interpreter {
         let scope = self.get_current_scope();
         let mut scope = scope.borrow_mut();
         if let Some(old_value) = scope.resolve_value(recipient) {
-            if let InterpreterValue::Entity(_e) =
+            // NOTE: When we have an Entity we have a different definition of assignment operations. only assign add and subtract are supported
+            if let InterpreterValue::Entity(entity) =
                 old_value.deref().map_err(|err| ErrorWithRange {
                     err,
                     range: expression.range.clone(),
                 })?
             {
-                if let InterpreterValue::Component(_, _, _) =
-                    value.deref().map_err(|err| ErrorWithRange {
-                        err,
-                        range: expression.range.clone(),
-                    })?
-                {
-                    // TODO: manipulate entity here, using value as a component
-                    // TODO: split logic up only in the case of assignment add operation
+                let value = value.deref().map_err(|err| ErrorWithRange {
+                    err,
+                    range: expression.range.clone(),
+                })?;
+                if matches!(value, InterpreterValue::Component(_, _, _)) {
+                    if matches!(op, AssignmentOperations::Add) {
+                        if let Some(mut entt) = world.get_entity_mut(*entity) {
+                            entt.add_component(value.clone());
+                        }
+                    } else if matches!(op, AssignmentOperations::Subtract) {
+                        if let Some(mut entt) = world.get_entity_mut(*entity) {
+                            entt.remove_component_by_value(value.clone());
+                        }
+                    } else {
+                        unimplemented!()
+                    }
                 } else {
                     Err(ErrorWithRange {
                         err: Error::OperationUnsupported {
@@ -770,23 +787,39 @@ impl Interpreter {
                                     }
                                 }
 
-                                for (field, _) in fields_of_struct_type {
-                                    if !assigned_fields.contains(field) {
-                                        todo!("throw error, because field is not assigned")
+                                let is_placeholder =
+                                    assigned_fields.is_empty() || fields_of_struct_type.is_empty();
+
+                                if !is_placeholder {
+                                    for (field, _) in fields_of_struct_type {
+                                        if !assigned_fields.contains(field) {
+                                            todo!("throw error, because field is not assigned")
+                                        }
                                     }
                                 }
 
                                 // NOTE: make self as the struct value itself. since self is a keyword in the lexer, it cant be used as a variable name
-                                let struct_value = InterpreterValue::Struct(
-                                    struct_type_def.name.clone(),
-                                    Rc::clone(&local_scope.get_outer_scope()),
-                                    field_values,
-                                )
-                                .make_reference_counted()
-                                .map_err(|err| ErrorWithRange {
-                                    err,
-                                    range: call.range.clone(),
-                                })?;
+                                let struct_value = if !is_placeholder {
+                                    InterpreterValue::Component(
+                                        struct_type_def.name.clone(),
+                                        Rc::clone(&local_scope.get_outer_scope()),
+                                        field_values,
+                                    )
+                                    .make_reference_counted()
+                                    .map_err(|err| ErrorWithRange {
+                                        err,
+                                        range: call.range.clone(),
+                                    })
+                                } else {
+                                    InterpreterValue::ComponentPlaceholder(
+                                        struct_type_def.name.clone(),
+                                    )
+                                    .make_reference_counted()
+                                    .map_err(|err| ErrorWithRange {
+                                        err,
+                                        range: call.range.clone(),
+                                    })
+                                }?;
 
                                 current_scope =
                                     Into::<Result<ScopeVariant, Error>>::into(struct_value.clone())
@@ -838,9 +871,12 @@ impl Interpreter {
             }
             AstNodeType::Weak(inner) => IsReturn::NoReturn(self.eval_weak(inner.as_ref(), world)?),
             // Infix call and prefix calls
-            AstNodeType::InfixCall(left, op, right) => {
-                IsReturn::NoReturn(self.eval_infix_call(left.as_ref(), op, right.as_ref(), world)?)
-            }
+            AstNodeType::InfixCall(left, op, right) => IsReturn::NoReturn(self.eval_infix_call(
+                left.as_ref(),
+                op,
+                right.as_ref(),
+                world,
+            )?),
             AstNodeType::PrefixCall(prefix, right) => {
                 IsReturn::NoReturn(self.eval_prefix_call(prefix, right.as_ref(), world)?)
             }
@@ -986,6 +1022,7 @@ impl Interpreter {
         }
     }
 
+    #[allow(clippy::complexity)]
     pub fn call_method(
         &mut self,
         fn_name: &Symbol,

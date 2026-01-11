@@ -6,7 +6,8 @@ use graphviz_rust::{
 };
 
 use crate::{
-    ComponentType, FunctionType, StructType, Symbol, SystemType, ToGraphviz,
+    ComponentType, Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType,
+    ToGraphviz,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

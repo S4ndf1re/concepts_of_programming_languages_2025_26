@@ -202,6 +202,10 @@ impl<'w> EntityCommandsMut<'w> {
             None
         }
     }
+
+    pub fn id(&self) -> EntityIndex {
+        self.entity
+    }
 }
 
 pub trait Component {

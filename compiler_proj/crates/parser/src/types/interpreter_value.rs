@@ -6,8 +6,7 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use ecs::{Component, Entity};
-use typed_generational_arena::Index;
+use ecs::{Component, EntityIndex};
 
 use crate::{Error, Scope, ScopeVariant, Symbol, TypeSymbol, TypeSymbolType};
 
@@ -34,12 +33,13 @@ pub enum InterpreterValue {
     Strong(Rc<InterpreterValue>),
 
     // ECS Intergration
-    Entity(Index<Entity>),
+    Entity(EntityIndex),
     Component(
         Symbol,
         Rc<RefCell<Scope>>,
         HashMap<Symbol, Box<InterpreterValue>>,
     ),
+    ComponentPlaceholder(Symbol),
     System(Symbol), // System execution body is contained in its type definition,
 
     // This can be any scope
@@ -653,9 +653,12 @@ impl From<InterpreterValue> for Result<ScopeVariant, Error> {
     }
 }
 
-
 impl Component for InterpreterValue {
     fn get_ident(&self) -> String {
-        Self::ident()
+        match self {
+            InterpreterValue::Component(name, _, _)
+            | InterpreterValue::ComponentPlaceholder(name) => name.clone(),
+            _ => panic!("is not a componetn"),
+        }
     }
 }
