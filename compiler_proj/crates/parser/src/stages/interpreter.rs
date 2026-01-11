@@ -806,18 +806,22 @@ impl Interpreter {
                                         field_values,
                                     )
                                     .make_reference_counted()
-                                    .map_err(|err| ErrorWithRange {
-                                        err,
-                                        range: call.range.clone(),
+                                    .map_err(|err| {
+                                        ErrorWithRange {
+                                            err,
+                                            range: call.range.clone(),
+                                        }
                                     })
                                 } else {
                                     InterpreterValue::ComponentPlaceholder(
                                         struct_type_def.name.clone(),
                                     )
                                     .make_reference_counted()
-                                    .map_err(|err| ErrorWithRange {
-                                        err,
-                                        range: call.range.clone(),
+                                    .map_err(|err| {
+                                        ErrorWithRange {
+                                            err,
+                                            range: call.range.clone(),
+                                        }
                                     })
                                 }?;
 
@@ -840,6 +844,7 @@ impl Interpreter {
                         })?
                     }
                 }
+                // TODO: implement list access here
             };
             last_res = Ok(res);
         }
@@ -1132,27 +1137,32 @@ impl Interpreter {
 
             let mut param_scope = Scope::new_parented(Rc::clone(call_scope));
             for param in params {
-                if let Some(item) = query_states.get(&param.0) {
-                    param_scope.declare_variable(
-                        param.0,
-                        InterpreterValue::List(
-                            item.components
-                                .iter()
-                                .map(|v| InterpreterValue::List(v.clone()))
-                                .collect::<Vec<_>>(),
-                        ),
-                        TypeSymbol::strong(TypeSymbolType::List(Box::new(TypeSymbol::strong(
-                            TypeSymbolType::Any,
-                        )))),
-                        false,
-                        false,
-                        0..1,
-                    );
+                if let Some(item) = query_states.get(param.1) {
+                    println!("Declaring param {}", param.0);
+                    param_scope
+                        .declare_variable(
+                            param.0,
+                            InterpreterValue::List(
+                                item.components
+                                    .iter()
+                                    .map(|v| InterpreterValue::List(v.clone()))
+                                    .collect::<Vec<_>>(),
+                            ),
+                            TypeSymbol::strong(TypeSymbolType::List(Box::new(TypeSymbol::strong(
+                                TypeSymbolType::Any,
+                            )))),
+                            false,
+                            false,
+                            0..1,
+                        )
+                        .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+                } else {
+                    println!("Query is none for some reason");
                 }
             }
             let param_scope = Rc::new(RefCell::new(param_scope));
 
-            let _ = with_scope!(self, param_scope, {
+            with_scope!(self, param_scope, {
                 match system_type.execution_body {
                     crate::SystemExecutionStrategy::Buildin(body) => body(Rc::clone(&param_scope))
                         .map_err(|err| ErrorWithRange { err, range: 0..1 }),

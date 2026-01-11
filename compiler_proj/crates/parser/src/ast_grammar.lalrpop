@@ -339,6 +339,7 @@ NonReturnable: AstNode = {
     FunctionDefinition,
     SystemDefinition,
     StructDefinition,
+    ComponentDefinition,
     GroupDefinition,
     <l:@L> return <a:ReturnableOrIf> semicolon <r:@R>=> AstNode::new(l..r, AstNodeType::ReturnStatement{return_value: Box::new(a)}),
 };

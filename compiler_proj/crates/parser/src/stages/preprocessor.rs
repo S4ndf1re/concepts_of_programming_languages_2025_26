@@ -7,17 +7,16 @@ use std::{
 use ecs::World;
 
 use crate::{
-    AstNode, AstNodeType, AstTypeDefinition, ComponentType, Error, ErrorWithRange, FunctionType,
-    Interpreter, InterpreterValue, RegisterType, Scope, Stage, StageResult, StructType, SystemType,
-    TypeSymbol, TypeSymbolType, register_buildin,
+    AstNode, AstNodeType, AstTypeDefinition, ComponentType, Error, ErrorWithRange, FunctionType, Interpreter, InterpreterValue, RegisterType, Scope, ScopeLike, Stage, StageResult, StructType, SystemType, TypeSymbol, TypeSymbolType, register_buildin
 };
 
-pub fn run_system<'w>(sys_name: String, interpreter: Rc<RefCell<Interpreter>>) -> impl FnMut(&World) {
+pub fn run_system(sys_name: String, interpreter: Rc<RefCell<Interpreter>>) -> impl FnMut(&World) {
     let interpreter = Rc::clone(&interpreter);
     move |world: &World| {
         let mut interp = interpreter.borrow_mut();
         let scope = interp.get_current_scope();
-        let type_of = scope.borrow_mut().resolve_defined_type(&sys_name).unwrap();
+        println!("Resolving {sys_name}");
+        let type_of = scope.borrow_mut().resolve_type(&sys_name).unwrap();
         interp
             .call_system(&sys_name, world, &scope, type_of)
             .unwrap();
@@ -268,6 +267,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                 ),
                             }));
                             // SAFETY: Is always initialized
+                            println!("Declairing system {typename}");
                             self.global_scope
                                 .declare_system(
                                     typename,

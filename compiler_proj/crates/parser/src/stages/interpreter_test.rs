@@ -210,4 +210,47 @@ mod tests {
             occured_error.panic_error(&source_safe);
         }
     }
+
+    #[test]
+    fn ecs_integration1() {
+        let source = r#"
+            component Position1d {
+                x: int,
+            }
+
+            system position_add_one(positions: P)
+            querying P as List with {Position1d} {
+                for (entt in positions) {
+                }
+            }
+
+
+            register position_add_one;
+
+            fn main() {
+            }
+
+           "#
+        .to_owned();
+
+        let source_safe = source.clone();
+
+        let mut world = World::default();
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+
+        let stages = vec![
+            Stages::Parser(Parser::default()),
+            Stages::Preprocessor(Preprocessor::new().unwrap()),
+            Stages::Interpreter(Rc::clone(&interpreter)),
+        ];
+
+        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
+
+        let result = run_stages(stages, state, &world);
+        if let Err(occured_error) = result {
+            occured_error.panic_error(&source_safe);
+        }
+
+        world.run();
+    }
 }
