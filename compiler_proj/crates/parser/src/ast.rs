@@ -121,7 +121,7 @@ impl ToGraphviz for AstTypeDefinition {
                 vec![attr!("label", "function")]
             }
             AstTypeDefinition::System(_items, _query) => {
-                // TODO: implemented yet
+                // TODO(Jan): copy function to here
                 vec![attr!("label", "system")]
             }
             AstTypeDefinition::Option(type_symbol) => {
@@ -452,7 +452,7 @@ impl ToGraphviz for AstNode {
                 )]
             }
             AstNodeType::AssignmentOp {
-                recipient,
+                recipient: _,
                 operation,
                 expression: ast_node,
             } => {

@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet, hash_set::Intersection},
+    collections::{HashMap, HashSet},
     iter::zip,
     rc::Rc,
 };
@@ -33,6 +33,7 @@ macro_rules! with_scope {
     }};
 }
 
+#[allow(unused)]
 macro_rules! with_parent_scope {
     ($s:ident, $parent:ident, $scope:ident $inner:block) => {{
         let old_parent = scope.get_parent_scope();
@@ -383,8 +384,8 @@ impl Interpreter {
         world: &World,
     ) -> Result<InterpreterValue, ErrorWithRange> {
         let val = self.eval_node(inner, world)?.unwrap();
-        if let InterpreterValue::Strong(rc) = val {
-            Ok(InterpreterValue::Weak(Rc::downgrade(&rc)))
+        if let InterpreterValue::Strong(rc) = &val {
+            Ok(InterpreterValue::Weak(Rc::downgrade(rc)))
         } else {
             Err(ErrorWithRange {
                 err: Error::MainNotFound,
@@ -1078,7 +1079,6 @@ impl Interpreter {
         world: &World,
     ) -> Result<InterpreterValue, ErrorWithRange> {
         if let TypeSymbolType::Function(fn_type) = &fn_signature.type_of {
-            // TODO: add error handling
             let mut evaled_params = Vec::new();
 
             for param in params {
@@ -1151,7 +1151,6 @@ impl Interpreter {
         world: &World,
     ) -> Result<InterpreterValue, ErrorWithRange> {
         if let TypeSymbolType::Function(fn_type) = &fn_signature.type_of {
-            // TODO: add error handling
             let mut evaled_params = Vec::new();
 
             for param in params {
@@ -1222,7 +1221,7 @@ impl Interpreter {
 
     pub fn call_system(
         &mut self,
-        sys_name: &Symbol,
+        _sys_name: &Symbol,
         world: &World,
         call_scope: &Rc<RefCell<Scope>>,
         fn_signature: TypeSymbol,

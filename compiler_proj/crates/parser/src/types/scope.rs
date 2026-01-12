@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::{
-    Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType, TypeSymbol,
-    TypeSymbolType,
+    BuiltinStruct, Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType,
+    TypeSymbol, TypeSymbolType,
 };
 
 pub trait ScopeLike {
@@ -344,6 +344,12 @@ impl ScopeLike for InterpreterValue {
                 .cloned()
                 .ok_or(Error::SymbolNotFound(name.clone())),
             InterpreterValue::Strong(inner) => inner.borrow().resolve_value(name),
+            InterpreterValue::BuiltinStruct(name, value) => unsafe {
+                let boxed = Box::from_raw(*value as *mut (dyn BuiltinStruct + 'static));
+                let res = boxed.resolve_value(name);
+                Box::leak(boxed);
+                res
+            },
             _ => Err(Error::OperationUnsupported {
                 operation: "resolve_value".to_owned(),
                 type_of: "type is not a scope or struct".to_owned(),
@@ -371,6 +377,12 @@ impl ScopeLike for InterpreterValue {
                 }
             }
             InterpreterValue::Strong(inner) => inner.borrow_mut().set_value(name, value),
+            InterpreterValue::BuiltinStruct(name, self_val) => unsafe {
+                let mut boxed = Box::from_raw(*self_val as *mut (dyn BuiltinStruct + 'static));
+                let res = boxed.set_value(name, value);
+                Box::leak(boxed);
+                res
+            },
             _ => unimplemented!(),
         }
     }
@@ -429,6 +441,12 @@ impl ScopeLike for InterpreterValue {
                 }
             }
             InterpreterValue::Strong(inner) => inner.borrow().resolve_type(name),
+            InterpreterValue::BuiltinStruct(name, self_val) => unsafe {
+                let boxed = Box::from_raw(*self_val as *mut (dyn BuiltinStruct + 'static));
+                let res = boxed.resolve_type(name);
+                Box::leak(boxed);
+                res
+            },
             _ => unimplemented!(),
         }
     }

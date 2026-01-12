@@ -28,7 +28,7 @@ impl<'w> Stage<'w> for Parser<'w> {
         Ok(())
     }
 
-    fn run(self, _world: &'w World, source: String) -> Result<super::StageResult<'w>, crate::ErrorWithRange> {
+    fn run(self, _world: &'w World, _source: String) -> Result<super::StageResult<'w>, crate::ErrorWithRange> {
         let ast = ast_grammar::ProgrammParser::new()
             .parse(self.main_content)
             .map_err(|err| ErrorWithRange {

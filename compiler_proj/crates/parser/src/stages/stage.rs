@@ -4,6 +4,7 @@ use ecs::World;
 
 use crate::{AstNode, ErrorWithRange, Interpreter, Parser, Preprocessor, Scope};
 
+#[allow(clippy::large_enum_variant)]
 pub enum Stages<'w> {
     Parser(Parser<'w>),
     Preprocessor(Preprocessor<'w>),

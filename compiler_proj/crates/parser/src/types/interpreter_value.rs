@@ -8,7 +8,7 @@ use std::{
 
 use ecs::{Component, EntityIndex};
 
-use crate::{Error, Scope, Symbol, TypeSymbol, TypeSymbolType};
+use crate::{BuiltinStruct, Error, Scope, Symbol, TypeSymbol, TypeSymbolType};
 
 /// ActualTypeValue only represents the concrete value of a type. The actual type def is defined by
 #[derive(Clone, Debug)]
@@ -24,6 +24,7 @@ pub enum InterpreterValue {
         Rc<RefCell<Scope>>,
         HashMap<Symbol, Box<InterpreterValue>>,
     ),
+    BuiltinStruct(Symbol, *const dyn BuiltinStruct),
     Option(Option<Box<InterpreterValue>>),
     Result(Result<Box<InterpreterValue>, Box<InterpreterValue>>),
     Function(Symbol), // Functions execution body is contained in its type definition,
@@ -117,7 +118,6 @@ impl InterpreterValue {
         let lval = Self::preprocess_single(a)?;
         let rval = Self::preprocess_single(b)?;
 
-        // TODO: Performance optimization
         Ok((lval, rval))
     }
 
@@ -182,16 +182,15 @@ impl InterpreterValue {
                     type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
-            InterpreterValue::String(l) => match rval {
-                InterpreterValue::String(r) => Ok(InterpreterValue::Bool(*l == r)),
+            InterpreterValue::String(l) => match &rval {
+                InterpreterValue::String(r) => Ok(InterpreterValue::Bool(l == r)),
                 _ => Err(Error::OperationUnsupported {
                     operation: "==".to_string(),
                     type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
-            InterpreterValue::Option(l) => match rval {
+            InterpreterValue::Option(l) => match &rval {
                 InterpreterValue::Option(r) => {
-                    // TODO: Optimize clone away
                     if let Some(l) = l.clone()
                         && let Some(r) = r.clone()
                     {
@@ -209,9 +208,8 @@ impl InterpreterValue {
                     type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
-            InterpreterValue::Result(l) => match rval {
+            InterpreterValue::Result(l) => match &rval {
                 InterpreterValue::Result(r) => {
-                    // TODO: Optimize clone away
                     if let Ok(l) = l.clone()
                         && let Ok(r) = r.clone()
                     {
@@ -219,7 +217,7 @@ impl InterpreterValue {
                     } else if let Err(l) = l
                         && let Err(r) = r
                     {
-                        l.clone().equals(*r)
+                        l.clone().equals((**r).clone())
                     } else {
                         Ok(InterpreterValue::Bool(false))
                     }
@@ -229,11 +227,10 @@ impl InterpreterValue {
                     type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
-            InterpreterValue::Struct(l, _, lfields) => match rval {
+            InterpreterValue::Struct(l, _, lfields) => match &rval {
                 InterpreterValue::Struct(r, _, rfields) => {
-                    // TODO: Optimize clone away
                     let mut eqls = true;
-                    eqls = eqls && *l == r;
+                    eqls = eqls && l == r;
 
                     for (l, lfield) in lfields.iter() {
                         if let Some(rfield) = rfields.get(l)
@@ -260,11 +257,11 @@ impl InterpreterValue {
                     type_of: format!("{} and {} are not compatible", lval, rval,),
                 }),
             },
-            InterpreterValue::Component(l, _, lfields) => match rval {
+            InterpreterValue::Component(l, _, lfields) => match &rval {
                 InterpreterValue::Component(r, _, rfields) => {
                     // TODO: Optimize clone away
                     let mut eqls = true;
-                    eqls = eqls && *l == r;
+                    eqls = eqls && l == r;
 
                     for (l, lfield) in lfields.iter() {
                         if let Some(rfield) = rfields.get(l)
@@ -291,8 +288,8 @@ impl InterpreterValue {
                     type_of: format!("{} and {} are not compatible", lval, rval,),
                 }),
             },
-            InterpreterValue::Strong(l) => match rval {
-                InterpreterValue::Strong(r) => Ok(InterpreterValue::Bool(Rc::ptr_eq(l, &r))),
+            InterpreterValue::Strong(l) => match &rval {
+                InterpreterValue::Strong(r) => Ok(InterpreterValue::Bool(Rc::ptr_eq(l, r))),
                 _ => Err(Error::OperationUnsupported {
                     operation: "==".to_string(),
                     type_of: format!("{} and {} are not compatible", lval, rval,),
@@ -407,8 +404,8 @@ impl InterpreterValue {
     }
 
     pub fn as_list(self) -> Result<Vec<InterpreterValue>, Error> {
-        match self {
-            InterpreterValue::List(l) => Ok(l),
+        match &self {
+            InterpreterValue::List(l) => Ok(l.clone()),
             InterpreterValue::Strong(s) => Ok(s.borrow().clone().as_list()?),
             InterpreterValue::Weak(_) => Ok(self.upgrade()?.as_list()?),
             _ => Err(Error::CantCastAsType("list".to_owned())),
@@ -417,12 +414,13 @@ impl InterpreterValue {
 
     pub fn index(&self, idx: i64) -> Result<InterpreterValue, Error> {
         match self {
-            InterpreterValue::List(l) => {
-                Ok(l.get(idx as usize).ok_or(Error::OperationUnsupported {
+            InterpreterValue::List(l) => Ok(l
+                .get(idx as usize)
+                .ok_or(Error::OperationUnsupported {
                     operation: "index access".to_owned(),
                     type_of: "index bound invalid".to_owned(),
-                })?.clone())
-            }
+                })?
+                .clone()),
             InterpreterValue::Strong(s) => Ok(s.borrow().index(idx)?),
             _ => Err(Error::OperationUnsupported {
                 operation: "index access".to_owned(),
@@ -453,18 +451,18 @@ impl Add for InterpreterValue {
     fn add(self, other: Self) -> Self::Output {
         let (lval, rval) = Self::preprocess_for_operation(self, other)?;
 
-        match lval {
-            InterpreterValue::Int(l) => match rval {
+        match &lval {
+            InterpreterValue::Int(l) => match &rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::Int(l + r)),
-                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l as f64 + r)),
+                InterpreterValue::Float(r) => Ok(InterpreterValue::Float(*l as f64 + r)),
                 InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
                 _ => Err(Error::OperationUnsupported {
                     operation: "+".to_string(),
                     type_of: format!("{} + {} not defined", lval, rval,),
                 }),
             },
-            InterpreterValue::Float(l) => match rval {
-                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l + r as f64)),
+            InterpreterValue::Float(l) => match &rval {
+                InterpreterValue::Int(r) => Ok(InterpreterValue::Float(l + *r as f64)),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::Float(l + r)),
                 InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
                 _ => Err(Error::OperationUnsupported {
@@ -472,7 +470,7 @@ impl Add for InterpreterValue {
                     type_of: format!("{} + {} not defined", lval, rval,),
                 }),
             },
-            InterpreterValue::String(l) => match rval {
+            InterpreterValue::String(l) => match &rval {
                 InterpreterValue::Int(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
                 InterpreterValue::Float(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
                 InterpreterValue::String(r) => Ok(InterpreterValue::String(format!("{}{}", l, r))),
@@ -611,21 +609,23 @@ impl Rem for InterpreterValue {
 
 impl From<InterpreterValue> for Option<TypeSymbol> {
     fn from(value: InterpreterValue) -> Self {
-        match value {
+        match &value {
             InterpreterValue::Int(_) => Some(TypeSymbol::strong(TypeSymbolType::Int)),
             InterpreterValue::Float(_) => Some(TypeSymbol::strong(TypeSymbolType::Float)),
             InterpreterValue::Bool(_) => Some(TypeSymbol::strong(TypeSymbolType::Bool)),
             InterpreterValue::String(_) => Some(TypeSymbol::strong(TypeSymbolType::String)),
             InterpreterValue::Struct(name, scope, _fields) => {
-                scope.borrow().resolve_defined_type(&name)
+                scope.borrow().resolve_defined_type(name)
             }
             InterpreterValue::Component(name, scope, _fields) => {
-                scope.borrow().resolve_defined_type(&name)
+                scope.borrow().resolve_defined_type(name)
             }
             InterpreterValue::List(_) => Some(TypeSymbol::strong(TypeSymbolType::List(Box::new(
                 TypeSymbol::strong(TypeSymbolType::Any),
             )))),
-            InterpreterValue::Strong(inner) => Into::<Option<TypeSymbol>>::into(inner.borrow().clone()),
+            InterpreterValue::Strong(inner) => {
+                Into::<Option<TypeSymbol>>::into(inner.borrow().clone())
+            }
             InterpreterValue::Weak(_) => {
                 let inner = value
                     .upgrade()
@@ -680,6 +680,18 @@ impl Component for InterpreterValue {
             InterpreterValue::Component(name, _, _)
             | InterpreterValue::ComponentPlaceholder(name) => name.clone(),
             _ => panic!("is not a componetn"),
+        }
+    }
+}
+
+impl Drop for InterpreterValue {
+    fn drop(&mut self) {
+        if let InterpreterValue::BuiltinStruct(_, ptr) = self {
+            // Make sure this is dropped to avoid memory leak
+            unsafe {
+                let boxxed = Box::from_raw(*ptr as *mut (dyn BuiltinStruct + 'static));
+                drop(boxxed);
+            }
         }
     }
 }

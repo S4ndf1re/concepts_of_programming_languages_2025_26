@@ -250,7 +250,7 @@ mod tests {
 
         let source_safe = source.clone();
 
-        let mut world = World::default();
+        let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
 
         let stages = vec![
@@ -305,7 +305,7 @@ mod tests {
 
         let source_safe = source.clone();
 
-        let mut world = World::default();
+        let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
 
         let stages = vec![
