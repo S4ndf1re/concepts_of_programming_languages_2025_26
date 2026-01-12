@@ -264,4 +264,55 @@ mod tests {
 
         world.run();
     }
+
+    #[test]
+    fn ecs_integration2() {
+        let source = r#"
+            component Position1d {
+                x: int,
+            }
+
+            system position_add_one(positions: P)
+            querying P as List with {Position1d} {
+                // println("Iterating over components");
+                for (entt in positions) {
+                    entt[0].x += 1;
+                    println(entt[0].x);
+                }
+            }
+
+
+            register position_add_one;
+
+            fn main() {
+               create entity e1;
+
+              e1 += Position1d {
+                x: 0,
+              };
+            }
+
+           "#
+        .to_owned();
+
+        let source_safe = source.clone();
+
+        let mut world = World::default();
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+
+        let stages = vec![
+            Stages::Parser(Parser::default()),
+            Stages::Preprocessor(Preprocessor::new().unwrap()),
+            Stages::Interpreter(Rc::clone(&interpreter)),
+        ];
+
+        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
+
+        let result = run_stages(stages, state, &world, source);
+        if let Err(occured_error) = result {
+            occured_error.panic_error(&source_safe);
+        }
+
+        world.run();
+    }
 }
