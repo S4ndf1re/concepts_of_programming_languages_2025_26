@@ -402,7 +402,14 @@ impl Interpreter {
         world: &World,
     ) -> Result<IsReturn, ErrorWithRange> {
         // NOTE: Cannot be return, hence safe to unwrap
-        let cond1 = self.eval_node(cond, world)?.unwrap();
+        let cond1 = self
+            .eval_node(cond, world)?
+            .unwrap()
+            .deref_value()
+            .map_err(|err| ErrorWithRange {
+                err,
+                range: cond.range.clone(),
+            })?;
 
         let InterpreterValue::Bool(cond1) = cond1 else {
             return Err(ErrorWithRange {
@@ -422,7 +429,15 @@ impl Interpreter {
             let mut executed_case = false;
 
             for elif in else_ifs {
-                let cond = self.eval_node(elif.0.as_ref(), world)?.unwrap();
+                let cond = self
+                    .eval_node(elif.0.as_ref(), world)?
+                    .unwrap()
+                    .deref_value()
+                    .map_err(|err| ErrorWithRange {
+                        err,
+                        range: cond.range.clone(),
+                    })?;
+
                 let InterpreterValue::Bool(cond) = cond else {
                     return Err(ErrorWithRange {
                         err: Error::OperationUnsupported {
@@ -460,12 +475,26 @@ impl Interpreter {
         world: &World,
     ) -> Result<IsReturn, ErrorWithRange> {
         loop {
-            let cond1 = self.eval_node(cond, world)?.unwrap();
+            let cond1 = self
+                .eval_node(cond, world)?
+                .unwrap()
+                .deref_value()
+                .map_err(|err| ErrorWithRange {
+                    err,
+                    range: cond.range.clone(),
+                })?;
 
-            if !cond1.as_bool().map_err(|e| ErrorWithRange {
-                err: e,
-                range: cond.range.clone(),
-            })? {
+            let InterpreterValue::Bool(cond) = cond1 else {
+                return Err(ErrorWithRange {
+                    err: Error::OperationUnsupported {
+                        operation: "elseif condition".to_owned(),
+                        type_of: "must be bool".to_owned(),
+                    },
+                    range: cond.range.clone(),
+                });
+            };
+
+            if !cond {
                 break;
             }
 
@@ -509,12 +538,26 @@ impl Interpreter {
 
             loop {
                 if let Some(cond) = cond.as_ref() {
-                    let cond1 = self.eval_node(cond.as_ref(), world)?.unwrap();
+                    let cond1 = self
+                        .eval_node(cond, world)?
+                        .unwrap()
+                        .deref_value()
+                        .map_err(|err| ErrorWithRange {
+                            err,
+                            range: cond.range.clone(),
+                        })?;
 
-                    if !cond1.as_bool().map_err(|e| ErrorWithRange {
-                        err: e,
-                        range: cond.range.clone(),
-                    })? {
+                    let InterpreterValue::Bool(cond) = cond1 else {
+                        return Err(ErrorWithRange {
+                            err: Error::OperationUnsupported {
+                                operation: "elseif condition".to_owned(),
+                                type_of: "must be bool".to_owned(),
+                            },
+                            range: cond.range.clone(),
+                        });
+                    };
+
+                    if !cond {
                         break;
                     }
                 }
@@ -1075,7 +1118,7 @@ impl Interpreter {
                 match &fn_type.execution_body {
                     FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body, world)?,
                     FunctionExecutionStrategy::Buildin(callback) => {
-                        callback(self.get_current_scope()).map_err(|e| ErrorWithRange {
+                        callback(self.get_current_scope(), world).map_err(|e| ErrorWithRange {
                             err: e,
                             range: 1..2,
                         })?
@@ -1156,7 +1199,7 @@ impl Interpreter {
                 match &fn_type.execution_body {
                     FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body, world)?,
                     FunctionExecutionStrategy::Buildin(callback) => {
-                        callback(self.get_current_scope()).map_err(|e| ErrorWithRange {
+                        callback(self.get_current_scope(), world).map_err(|e| ErrorWithRange {
                             err: e,
                             range: 1..2,
                         })?

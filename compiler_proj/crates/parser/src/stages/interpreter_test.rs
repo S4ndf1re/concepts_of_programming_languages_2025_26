@@ -227,6 +227,10 @@ mod tests {
                     comp := entt[0];
                     comp.x += 1;
                     println(comp.x);
+
+                    if (comp.x > 100) {
+                        stop();
+                    }
                 }
             }
 
@@ -278,6 +282,10 @@ mod tests {
                 for (entt in positions) {
                     entt[0].x += 1;
                     println(entt[0].x);
+
+                    if (entt[0].x > 100) {
+                        stop();
+                    }
                 }
             }
 

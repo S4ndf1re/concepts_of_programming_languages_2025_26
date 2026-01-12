@@ -1,21 +1,28 @@
 use std::{cell::RefCell, rc::Rc};
 
+use ecs::World;
+
 use crate::{
     BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, InterpreterValue, IsReturn,
     Scope, ScopeLike, Symbol, TypeSymbol, TypeSymbolType,
 };
 
-pub fn println(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {
+pub fn println(scope: Rc<RefCell<Scope>>, _world: &World) -> Result<IsReturn, Error> {
     let scope = scope.borrow();
     let val = scope.resolve_value(&"val".to_string())?;
     println!("{val}");
     Ok(IsReturn::Return(InterpreterValue::Empty))
 }
 
-pub fn assert(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {
+pub fn assert(scope: Rc<RefCell<Scope>>, _world: &World) -> Result<IsReturn, Error> {
     let scope = scope.borrow();
     let attr = scope.resolve_value(&"attr".to_string())?;
     assert!(attr.as_bool()?);
+    Ok(IsReturn::Return(InterpreterValue::Empty))
+}
+
+pub fn stop(_scope: Rc<RefCell<Scope>>, world: &World) -> Result<IsReturn, Error> {
+    world.stop();
     Ok(IsReturn::Return(InterpreterValue::Empty))
 }
 
@@ -59,6 +66,14 @@ pub fn register_buildin(scope: &mut Scope) -> Result<(), Error> {
         return_type: None,
     };
     assert_descriptor.add_to_scope(scope)?;
+
+    let stop_descriptor = BuildinFunctionDescription {
+        name: "stop".to_string(),
+        callback: stop,
+        params: vec![],
+        return_type: None,
+    };
+    stop_descriptor.add_to_scope(scope)?;
 
     Ok(())
 }

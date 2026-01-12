@@ -1,10 +1,11 @@
 use std::{cell::RefCell, fmt::Display, iter::zip, rc::Rc};
 
 use derivative::Derivative;
+use ecs::World;
 
 use crate::{AstNode, Error, IsReturn, Scope, Symbol, TypeSymbol};
 
-pub type BuildinCallback = fn(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error>;
+pub type BuildinCallback = fn(scope: Rc<RefCell<Scope>>, world: &World) -> Result<IsReturn, Error>;
 
 #[derive(Debug, Clone)]
 pub enum FunctionExecutionStrategy {

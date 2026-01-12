@@ -8,6 +8,7 @@ pub struct World {
     pub(crate) entites: Rc<RefCell<StandardArena<Entity>>>,
     pub(crate) components: Rc<RefCell<HashSet<String>>>,
     pub(crate) systems: Rc<RefCell<Vec<*const dyn System>>>,
+    pub(crate) is_running: Rc<RefCell<bool>>,
 }
 
 impl World {
@@ -58,13 +59,19 @@ impl World {
     }
 
     pub fn add_system<Marker: 'static, I: IntoSystem<Marker>>(&self, into_system: I) {
-        self.systems.borrow_mut().push(Box::into_raw(into_system.into_system()));
+        self.systems
+            .borrow_mut()
+            .push(Box::into_raw(into_system.into_system()));
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&self) {
         unsafe {
             let systems = self.systems.clone();
+            *self.is_running.borrow_mut() = true;
             loop {
+                if !*self.is_running.borrow() {
+                    break;
+                }
                 // SAFETY: This is safe, as long as no further system manipulation can take place
                 for system in systems.borrow().iter() {
                     let sys = *system as *mut dyn System;
@@ -72,6 +79,10 @@ impl World {
                 }
             }
         }
+    }
+
+    pub fn stop(&self) {
+        *self.is_running.borrow_mut() = false;
     }
 }
 
@@ -81,6 +92,7 @@ impl Default for World {
             entites: Rc::new(RefCell::new(StandardArena::new())),
             components: Rc::new(RefCell::new(HashSet::new())),
             systems: Rc::new(RefCell::new(Vec::new())),
+            is_running: Rc::new(RefCell::new(false)),
         }
     }
 }
