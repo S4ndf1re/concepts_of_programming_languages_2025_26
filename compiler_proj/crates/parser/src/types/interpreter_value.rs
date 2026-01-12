@@ -407,6 +407,27 @@ impl InterpreterValue {
             _ => Err(Error::CantCastAsType("list".to_owned())),
         }
     }
+
+    pub fn index(&self, idx: i64) -> Result<&InterpreterValue, Error> {
+        match self {
+            InterpreterValue::List(l) => Ok(l.get(idx as usize).ok_or(Error::OperationUnsupported {
+                operation: "index access".to_owned(),
+                type_of: "index bound invalid".to_owned(),
+            })?),
+            InterpreterValue::Strong(s) => Ok(s.as_ref().index(idx)?),
+            _ => Err(Error::OperationUnsupported { operation: "index access".to_owned(), type_of: "not a list type".to_owned() })
+        }
+    }
+
+    pub fn index_mut(&mut self, idx: i64) -> Result<&mut InterpreterValue, Error> {
+        match self {
+            InterpreterValue::List(l) => Ok(l.get_mut(idx as usize).ok_or(Error::OperationUnsupported {
+                operation: "index access".to_owned(),
+                type_of: "index bound invalid".to_owned(),
+            })?),
+            _ => Err(Error::OperationUnsupported { operation: "index mut access".to_owned(), type_of: "not a list type".to_owned() })
+        }
+    }
 }
 
 impl Add for InterpreterValue {

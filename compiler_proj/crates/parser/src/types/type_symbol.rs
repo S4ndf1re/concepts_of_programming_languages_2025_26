@@ -5,10 +5,7 @@ use graphviz_rust::{
     dot_structures::{Attribute, Graph, Id, Node, NodeId, Stmt},
 };
 
-use crate::{
-    ComponentType, Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType,
-    ToGraphviz,
-};
+use crate::{ComponentType, FunctionType, StructType, Symbol, SystemType, ToGraphviz};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeSymbolType {

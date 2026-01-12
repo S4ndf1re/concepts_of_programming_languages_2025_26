@@ -23,7 +23,6 @@ pub trait ToGraphviz {
     }
 }
 
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum GroupSystem {
     Single(Symbol),
@@ -36,8 +35,6 @@ pub enum RegisterType {
     After(Symbol, Symbol),
     Before(Symbol, Symbol),
 }
-
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AstTypeDefinition {
@@ -203,6 +200,7 @@ pub enum MemberAccessType {
     Symbol,
     Function(Vec<Box<AstNode>>),
     Struct(Vec<(Symbol, Box<AstNode>)>),
+    Index(i64),
 }
 
 #[derive(Debug, Clone)]
@@ -247,6 +245,12 @@ impl ToGraphviz for MemberAccess {
                 }
 
                 vec![attr!("label", &format!("\"Struct({})\"", self.member))]
+            }
+            MemberAccessType::Index(idx) => {
+                vec![attr!(
+                    "label",
+                    &format!("\"Index({}[{}])\"", self.member, idx)
+                )]
             }
         };
 
@@ -329,6 +333,7 @@ pub enum AstNodeType {
     },
     AssignmentOp {
         recipient: Symbol,
+        index: Option<i64>,
         operation: AssignmentOperations,
         expression: Box<AstNode>,
     },
@@ -456,6 +461,7 @@ impl ToGraphviz for AstNode {
             )],
             AstNodeType::AssignmentOp {
                 recipient,
+                index,
                 operation,
                 expression: ast_node,
             } => {
@@ -464,7 +470,9 @@ impl ToGraphviz for AstNode {
 
                 vec![attr!(
                     "label",
-                    &format!("\"assignment(op: {operation:?}, recipient: {recipient})\"")
+                    &format!(
+                        "\"assignment(op: {operation:?}, recipient: {recipient}, index: {index:?})\""
+                    )
                 )]
             }
             AstNodeType::TypeDef {
@@ -674,9 +682,8 @@ impl ToGraphviz for AstNode {
                 let expr_node = ast_node.to_graphviz(graph);
                 edges.push(edge!(n.id.clone() => expr_node.id.clone()));
                 vec![attr!("label", "weak")]
-            },
-            _ => vec![attr!("label", "groupDef")]
-,
+            }
+            _ => vec![attr!("label", "groupDef")],
         };
 
         n.attributes = attrs;
