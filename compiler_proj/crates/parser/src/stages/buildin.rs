@@ -1,27 +1,22 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, InterpreterValue, IsReturn, Scope, ScopeLike, Symbol, TypeSymbol, TypeSymbolType
+    BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, InterpreterValue, IsReturn,
+    Scope, ScopeLike, Symbol, TypeSymbol, TypeSymbolType,
 };
 
 pub fn println(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {
     let scope = scope.borrow();
-    if let Some(val) = scope.resolve_value(&"val".to_string()) {
-        println!("{val}");
-        Ok(IsReturn::Return(InterpreterValue::Empty))
-    } else {
-        Err(Error::SymbolNotFound("val".to_string()))
-    }
+    let val = scope.resolve_value(&"val".to_string())?;
+    println!("{val}");
+    Ok(IsReturn::Return(InterpreterValue::Empty))
 }
 
 pub fn assert(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {
     let scope = scope.borrow();
-    if let Some(attr) = scope.resolve_value(&"attr".to_string()) {
-        assert!(attr.as_bool()?);
-        Ok(IsReturn::Return(InterpreterValue::Empty))
-    } else {
-        Err(Error::SymbolNotFound("attr".to_string()))
-    }
+    let attr = scope.resolve_value(&"attr".to_string())?;
+    assert!(attr.as_bool()?);
+    Ok(IsReturn::Return(InterpreterValue::Empty))
 }
 
 pub struct BuildinFunctionDescription {

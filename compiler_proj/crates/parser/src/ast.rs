@@ -328,12 +328,8 @@ pub enum AstNodeType {
         expression: Box<AstNode>,
         assumed_type: Option<TypeSymbol>,
     },
-    EntityDeclaration {
-        new_symbol: Symbol,
-    },
     AssignmentOp {
-        recipient: Symbol,
-        index: Option<i64>,
+        recipient: Vec<MemberAccess>,
         operation: AssignmentOperations,
         expression: Box<AstNode>,
     },
@@ -455,13 +451,8 @@ impl ToGraphviz for AstNode {
                     &format!("\"declaration(new_symbol: {new_symbol})\"")
                 )]
             }
-            AstNodeType::EntityDeclaration { new_symbol } => vec![attr!(
-                "label",
-                &format!("\"entity_declaration(new_entity: {new_symbol})\"")
-            )],
             AstNodeType::AssignmentOp {
                 recipient,
-                index,
                 operation,
                 expression: ast_node,
             } => {
@@ -470,9 +461,7 @@ impl ToGraphviz for AstNode {
 
                 vec![attr!(
                     "label",
-                    &format!(
-                        "\"assignment(op: {operation:?}, recipient: {recipient}, index: {index:?})\""
-                    )
+                    &format!("\"assignment(op: {operation:?}\"")
                 )]
             }
             AstNodeType::TypeDef {

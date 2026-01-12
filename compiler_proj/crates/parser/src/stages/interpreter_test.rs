@@ -11,14 +11,16 @@ mod tests {
 
     #[test]
     fn test_basic_interpretation() {
-        let source = r#"
+        let source = String::from(
+            r#"
            fn main() {
             a := 10;
             a += 20;
            }
-           "#;
+           "#,
+        );
 
-        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+        let ast = ast_grammar::ProgrammParser::new().parse(&source).unwrap();
 
         let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
@@ -30,20 +32,20 @@ mod tests {
 
         let state = StageResult::Parsing(&world, ast, Rc::clone(&interpreter));
 
-        let _ = run_stages(stages, state, &world).unwrap();
+        let _ = run_stages(stages, state, &world, source).unwrap();
     }
 
     #[test]
     fn test_basic_interpretation2() {
-        let source = r#"
+        let source = String::from(r#"
            fn main() {
             a = 10;
             a += 20;
             println(a);
            }
-           "#;
+           "#);
 
-        let ast = ast_grammar::ProgrammParser::new().parse(source).unwrap();
+        let ast = ast_grammar::ProgrammParser::new().parse(&source).unwrap();
         let world = World::default();
 
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
@@ -54,10 +56,10 @@ mod tests {
 
         let state = StageResult::Parsing(&world, ast, Rc::clone(&interpreter));
 
-        let result = run_stages(stages, state, &world);
+        let result = run_stages(stages, state, &world, source.clone());
 
         if let Err(err) = result {
-            err.print_error(source);
+            err.print_error(&source);
         }
     }
 
@@ -84,9 +86,9 @@ mod tests {
             Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
+        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
 
-        let _ = run_stages(stages, state, &world).unwrap();
+        let _ = run_stages(stages, state, &world, source).unwrap();
     }
 
     #[test]
@@ -110,9 +112,9 @@ mod tests {
             Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
+        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
 
-        let _ = run_stages(stages, state, &world).unwrap();
+        let _ = run_stages(stages, state, &world, source).unwrap();
     }
 
     #[test]
@@ -134,9 +136,9 @@ mod tests {
             Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
+        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
 
-        let _ = run_stages(stages, state, &world).unwrap();
+        let _ = run_stages(stages, state, &world, source).unwrap();
     }
 
     #[test]
@@ -163,9 +165,9 @@ mod tests {
             Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
+        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
 
-        let result = run_stages(stages, state, &world);
+        let result = run_stages(stages, state, &world, source);
         if let Err(occured_error) = result {
             occured_error.print_error(&source_safe);
         }
@@ -203,9 +205,9 @@ mod tests {
             Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
+        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
 
-        let result = run_stages(stages, state, &world);
+        let result = run_stages(stages, state, &world, source);
         if let Err(occured_error) = result {
             occured_error.panic_error(&source_safe);
         }
@@ -220,7 +222,11 @@ mod tests {
 
             system position_add_one(positions: P)
             querying P as List with {Position1d} {
+                // println("Iterating over components");
                 for (entt in positions) {
+                    comp := entt[0];
+                    comp.x += 1;
+                    println(comp.x);
                 }
             }
 
@@ -228,6 +234,11 @@ mod tests {
             register position_add_one;
 
             fn main() {
+               create entity e1;
+
+              e1 += Position1d {
+                x: 0,
+              };
             }
 
            "#
@@ -244,9 +255,9 @@ mod tests {
             Stages::Interpreter(Rc::clone(&interpreter)),
         ];
 
-        let state = StageResult::PreParse(&world, source, Rc::clone(&interpreter));
+        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
 
-        let result = run_stages(stages, state, &world);
+        let result = run_stages(stages, state, &world, source);
         if let Err(occured_error) = result {
             occured_error.panic_error(&source_safe);
         }

@@ -53,14 +53,14 @@ impl QueryType {
                     && condition
                         .as_ref()
                         .map(|c| c.entity_conforms_condition(entity, world))
-                        .unwrap_or(false)
+                        .unwrap_or(true)
             }
             Self::Single { select, condition } => {
                 select.entity_conforms_condition(entity, world)
                     && condition
                         .as_ref()
                         .map(|c| c.entity_conforms_condition(entity, world))
-                        .unwrap_or(false)
+                        .unwrap_or(true)
             }
             // false, because it is not really implemented yet
             _ => unimplemented!(),

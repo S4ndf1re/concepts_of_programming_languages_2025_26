@@ -1,16 +1,16 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_set::Intersection},
     iter::zip,
     rc::Rc,
 };
 
-use ecs::{PseudoSystemParameter, World};
+use ecs::{Component, PseudoSystemParameter, World};
 
 use crate::{
     AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy,
     FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator,
-    Query, Scope, ScopeLike, ScopeVariant, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType,
+    Query, Scope, ScopeLike, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType,
 };
 
 macro_rules! scoped {
@@ -273,8 +273,7 @@ impl Interpreter {
     pub fn eval_assignment_op(
         &mut self,
         node: &AstNode,
-        recipient: &Symbol,
-        index: &Option<i64>,
+        recipient: &[MemberAccess],
         op: &AssignmentOperations,
         expression: &AstNode,
         world: &World,
@@ -287,98 +286,92 @@ impl Interpreter {
             });
         }
 
-        let scope = self.get_current_scope();
-        let mut scope = scope.borrow_mut();
-        if let Some(mut old_value) = scope.resolve_value(recipient) {
-            // NOTE: When we have an Entity we have a different definition of assignment operations. only assign add and subtract are supported
-            if let InterpreterValue::Entity(entity) =
-                old_value.deref().map_err(|err| ErrorWithRange {
-                    err,
-                    range: expression.range.clone(),
-                })?
+        let (mut scope, list_like, (recipient, old_value)) =
+            self.eval_member_call_helper(node, recipient, world)?;
+
+        // NOTE: When we have an Entity we have a different definition of assignment operations. only assign add and subtract are supported
+        if let InterpreterValue::Entity(entity) =
+            old_value.deref_value().map_err(|err| ErrorWithRange {
+                err,
+                range: expression.range.clone(),
+            })?
+        {
+            // SAFETY: it can be assumed, that this is always reference counted, and possibly never weak
+            let value_deref = value.deref_value().map_err(|err| ErrorWithRange {
+                err,
+                range: expression.range.clone(),
+            })?;
+            if matches!(value_deref, InterpreterValue::Component(_, _, _))
+                || matches!(value_deref, InterpreterValue::ComponentPlaceholder(_))
             {
-                let value = value.deref().map_err(|err| ErrorWithRange {
-                    err,
-                    range: expression.range.clone(),
-                })?;
-                if matches!(value, InterpreterValue::Component(_, _, _)) {
-                    if matches!(op, AssignmentOperations::Add) {
-                        if let Some(mut entt) = world.get_entity_mut(*entity) {
-                            entt.add_component(value.clone());
-                        }
-                    } else if matches!(op, AssignmentOperations::Subtract) {
-                        if let Some(mut entt) = world.get_entity_mut(*entity) {
-                            entt.remove_component_by_value(value.clone());
-                        }
-                    } else {
-                        unimplemented!()
+                if matches!(op, AssignmentOperations::Add) {
+                    if let Some(mut entt) = world.get_entity_mut(entity) {
+                        println!(
+                            "DEBUG: inserting {} into {:?}",
+                            value.get_ident(),
+                            entt.id()
+                        );
+                        entt.add_component(value.clone());
+                    }
+                } else if matches!(op, AssignmentOperations::Subtract) {
+                    if let Some(mut entt) = world.get_entity_mut(entity) {
+                        entt.remove_component_by_value(value.clone());
                     }
                 } else {
-                    Err(ErrorWithRange {
-                        err: Error::OperationUnsupported {
-                            operation: "assignment operation".to_owned(),
-                            type_of: "must assign component to entity".to_owned(),
-                        },
-                        range: expression.range.clone(),
-                    })?;
+                    unimplemented!()
                 }
             } else {
-                let new_value = match op {
-                    AssignmentOperations::Add => old_value.clone() + value,
-                    AssignmentOperations::Subtract => old_value.clone() - value,
-                    AssignmentOperations::Multiply => old_value.clone() * value,
-                    AssignmentOperations::Divide => old_value.clone() / value,
-                    AssignmentOperations::Modulo => old_value.clone() % value,
-                    AssignmentOperations::Identity => Ok(value),
-                }
-                .map_err(|err| ErrorWithRange {
-                    err,
+                Err(ErrorWithRange {
+                    err: Error::OperationUnsupported {
+                        operation: "assignment operation".to_owned(),
+                        type_of: "must assign component to entity".to_owned(),
+                    },
                     range: expression.range.clone(),
-                });
-
-                let new_value = new_value?;
-                if let Some(idx) = index {
-                    *old_value.index_mut(*idx).map_err(|err| ErrorWithRange {
-                        err,
-                        range: node.range.clone(),
-                    })? = new_value;
-
-                    scope
-                        .set_value(
-                            recipient,
-                            old_value
-                                .make_reference_counted()
-                                .map_err(|err| ErrorWithRange {
-                                    err,
-                                    range: expression.range.clone(),
-                                })?,
-                        )
-                        .map_err(|err| ErrorWithRange {
-                            err,
-                            range: expression.range.clone(),
-                        })?;
-                } else {
-                    scope
-                        .set_value(
-                            recipient,
-                            new_value
-                                .make_reference_counted()
-                                .map_err(|err| ErrorWithRange {
-                                    err,
-                                    range: expression.range.clone(),
-                                })?,
-                        )
-                        .map_err(|err| ErrorWithRange {
-                            err,
-                            range: expression.range.clone(),
-                        })?;
-                }
+                })?;
             }
         } else {
-            return Err(ErrorWithRange {
-                err: Error::SymbolNotFound(recipient.clone()),
-                range: node.range.clone(),
+            let new_value = match op {
+                AssignmentOperations::Add => old_value.clone() + value,
+                AssignmentOperations::Subtract => old_value.clone() - value,
+                AssignmentOperations::Multiply => old_value.clone() * value,
+                AssignmentOperations::Divide => old_value.clone() / value,
+                AssignmentOperations::Modulo => old_value.clone() % value,
+                AssignmentOperations::Identity => Ok(value),
+            }
+            .map_err(|err| ErrorWithRange {
+                err,
+                range: expression.range.clone(),
             });
+
+            let new_value = new_value?;
+            if let Some((idx, mut list_value)) = list_like {
+                *list_value.index_mut(idx).map_err(|err| ErrorWithRange {
+                    err,
+                    range: node.range.clone(),
+                })? = new_value;
+
+                scope
+                    .set_value(
+                        &recipient,
+                        list_value
+                            .make_reference_counted()
+                            .map_err(|err| ErrorWithRange {
+                                err,
+                                range: expression.range.clone(),
+                            })?,
+                    )
+                    .map_err(|err| ErrorWithRange {
+                        err,
+                        range: expression.range.clone(),
+                    })?;
+            } else {
+                scope
+                    .set_value(&recipient, new_value)
+                    .map_err(|err| ErrorWithRange {
+                        err,
+                        range: expression.range.clone(),
+                    })?;
+            }
         }
 
         Ok(())
@@ -533,7 +526,6 @@ impl Interpreter {
                     match &step.type_of {
                         AstNodeType::AssignmentOp {
                             recipient: _,
-                            index: _,
                             operation: _,
                             expression: _,
                         } => {
@@ -638,47 +630,66 @@ impl Interpreter {
         // Ok(InterpreterValue::Map(map))
     }
 
-    /// Member call represents any type of member call, a, a.b, a.b().c, a.b(a()).c, etc
-    pub fn eval_member_call(
+    #[allow(clippy::complexity)]
+    fn eval_member_call_helper(
         &mut self,
         node: &AstNode,
         calls: &[MemberAccess],
         world: &World,
-    ) -> Result<IsReturn, ErrorWithRange> {
+    ) -> Result<
+        (
+            InterpreterValue,
+            Option<(i64, InterpreterValue)>,
+            (Symbol, InterpreterValue),
+        ),
+        ErrorWithRange,
+    > {
         // mutably borrow here, to allow for more complex pointer casting;
-        let mut current_scope: Result<ScopeVariant, ErrorWithRange> =
-            Ok(ScopeVariant::Module(Rc::clone(&self.get_current_scope())));
+        let mut last_scope: Option<InterpreterValue> = None;
+        let mut current_scope: InterpreterValue =
+            InterpreterValue::Module(Rc::clone(&self.get_current_scope()));
         let mut last_type: Option<TypeSymbol> = None;
 
-        let mut last_res: Result<IsReturn, ErrorWithRange> = Err(ErrorWithRange {
-            err: Error::OperationUnsupported {
-                operation: "member call".to_owned(),
-                type_of: "must be at least one member call".to_owned(),
-            },
-            range: node.range.clone(),
-        });
+        let mut pre_last_res: Option<(i64, InterpreterValue)> = None;
+        let mut last_res: Result<(Symbol, InterpreterValue), ErrorWithRange> =
+            Err(ErrorWithRange {
+                err: Error::OperationUnsupported {
+                    operation: "member call".to_owned(),
+                    type_of: "must be at least one member call".to_owned(),
+                },
+                range: node.range.clone(),
+            });
 
         for call in calls {
+            last_scope = Some(current_scope.clone());
+            pre_last_res = None;
             let res =
                 match &call.type_of {
                     MemberAccessType::Function(params) => {
-                        let local_scope = current_scope.as_ref()?;
+                        let local_scope = &current_scope;
 
                         let fn_type = {
                             // Scoped to free borrowed refcell
                             local_scope.resolve_type(&call.member)
-                        };
+                        }
+                        .map_err(|err| ErrorWithRange {
+                            err,
+                            range: call.range.clone(),
+                        })?;
 
-                        if let Some(fn_type) = fn_type
-                            && let TypeSymbolType::Function(fn_typedef) = &fn_type.type_of
-                        {
+                        if let TypeSymbolType::Function(fn_typedef) = &fn_type.type_of {
                             let res = if fn_typedef.is_method {
                                 self.call_method(
                                     &call.member,
                                     params,
-                                    last_res?.unwrap(),
+                                    last_res?.1,
                                     last_type.unwrap(),
-                                    &local_scope.get_outer_scope(),
+                                    &local_scope.get_outer_scope().map_err(|err| {
+                                        ErrorWithRange {
+                                            err,
+                                            range: call.range.clone(),
+                                        }
+                                    })?,
                                     fn_type,
                                     world,
                                 )
@@ -686,19 +697,21 @@ impl Interpreter {
                                 self.call_function(
                                     &call.member,
                                     params,
-                                    &local_scope.get_outer_scope(),
+                                    &local_scope.get_outer_scope().map_err(|err| {
+                                        ErrorWithRange {
+                                            err,
+                                            range: call.range.clone(),
+                                        }
+                                    })?,
                                     fn_type,
                                     world,
                                 )
                             }?;
                             // Set current scope here. it must be checked before every execution
-                            current_scope = Into::<Result<ScopeVariant, Error>>::into(res.clone())
-                                .map_err(|err| ErrorWithRange {
-                                    err,
-                                    range: call.range.clone(),
-                                });
+                            current_scope = res.clone();
+
                             last_type = res.clone().into();
-                            IsReturn::NoReturn(res)
+                            res
                         } else {
                             Err(ErrorWithRange {
                                 err: Error::SymbolNotFound(call.member.clone()),
@@ -707,29 +720,20 @@ impl Interpreter {
                         }
                     }
                     MemberAccessType::Symbol => {
-                        let local_scope = current_scope.as_ref()?;
+                        let local_scope = &current_scope;
 
-                        let res = {
-                            if let Some(val) = local_scope.resolve_value(&call.member) {
-                                Ok(val)
-                            } else {
-                                Err(Error::SymbolNotFound(call.member.clone()))
-                            }
-                        }
-                        .map_err(|err| ErrorWithRange {
-                            err,
-                            range: call.range.clone(),
-                        })?;
-                        current_scope = Into::<Result<ScopeVariant, Error>>::into(res.clone())
-                            .map_err(|err| ErrorWithRange {
+                        let res = local_scope.resolve_value(&call.member).map_err(|err| {
+                            ErrorWithRange {
                                 err,
                                 range: call.range.clone(),
-                            });
+                            }
+                        })?;
+                        current_scope = res.clone();
                         last_type = res.clone().into();
-                        IsReturn::NoReturn(res)
+                        res
                     }
                     MemberAccessType::Struct(fields_to_assign) => {
-                        let local_scope = current_scope.as_ref()?;
+                        let local_scope = &current_scope;
 
                         let struct_type = {
                             // Scoped to free borrowed refcell
@@ -737,6 +741,10 @@ impl Interpreter {
                             // NOTE: resolve defined type here, not variable type, as this is a defined type
                             local_scope
                                 .get_outer_scope()
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: call.range.clone(),
+                                })?
                                 .borrow()
                                 .resolve_defined_type(&call.member)
                         };
@@ -772,7 +780,12 @@ impl Interpreter {
                                     // NOTE: make self as the struct value itself. since self is a keyword in the lexer, it cant be used as a variable name
                                     let struct_value = InterpreterValue::Struct(
                                         struct_type_def.name.clone(),
-                                        Rc::clone(&local_scope.get_outer_scope()),
+                                        Rc::clone(&local_scope.get_outer_scope().map_err(
+                                            |err| ErrorWithRange {
+                                                err,
+                                                range: call.range.clone(),
+                                            },
+                                        )?),
                                         field_values,
                                     )
                                     .make_reference_counted()
@@ -781,15 +794,9 @@ impl Interpreter {
                                         range: call.range.clone(),
                                     })?;
 
-                                    current_scope = Into::<Result<ScopeVariant, Error>>::into(
-                                        struct_value.clone(),
-                                    )
-                                    .map_err(|err| ErrorWithRange {
-                                        err,
-                                        range: call.range.clone(),
-                                    });
+                                    current_scope = struct_value.clone();
                                     last_type = Some(struct_type);
-                                    IsReturn::NoReturn(struct_value)
+                                    struct_value
                                 }
                                 TypeSymbolType::Component(struct_type_def) => {
                                     let mut fields_of_struct_type =
@@ -826,7 +833,12 @@ impl Interpreter {
                                     let struct_value = if !is_placeholder {
                                         InterpreterValue::Component(
                                             struct_type_def.name.clone(),
-                                            Rc::clone(&local_scope.get_outer_scope()),
+                                            Rc::clone(&local_scope.get_outer_scope().map_err(
+                                                |err| ErrorWithRange {
+                                                    err,
+                                                    range: call.range.clone(),
+                                                },
+                                            )?),
                                             field_values,
                                         )
                                         .make_reference_counted()
@@ -849,16 +861,10 @@ impl Interpreter {
                                         })
                                     }?;
 
-                                    current_scope = Into::<Result<ScopeVariant, Error>>::into(
-                                        struct_value.clone(),
-                                    )
-                                    .map_err(|err| ErrorWithRange {
-                                        err,
-                                        range: call.range.clone(),
-                                    });
+                                    current_scope = struct_value.clone();
 
                                     last_type = Some(struct_type);
-                                    IsReturn::NoReturn(struct_value)
+                                    struct_value
                                 }
                                 _ => todo!("error here, cause type is not a struct like"),
                             }
@@ -870,50 +876,63 @@ impl Interpreter {
                         }
                     }
                     MemberAccessType::Index(idx) => {
-                        let local_scope = current_scope.as_ref()?;
+                        let local_scope = &current_scope;
 
-                        let res = {
-                            if let Some(val) = local_scope.resolve_value(&call.member) {
-                                Ok(val)
-                            } else {
-                                Err(Error::SymbolNotFound(call.member.clone()))
+                        let res = local_scope.resolve_value(&call.member).map_err(|err| {
+                            ErrorWithRange {
+                                err,
+                                range: call.range.clone(),
                             }
-                        }
-                        .map_err(|err| ErrorWithRange {
-                            err,
-                            range: call.range.clone(),
                         })?;
 
-                        current_scope = Into::<Result<ScopeVariant, Error>>::into(res.clone())
+                        pre_last_res = Some((*idx, res.clone()));
+                        let res = res
+                            .index(*idx)
                             .map_err(|err| ErrorWithRange {
                                 err,
                                 range: call.range.clone(),
-                            });
+                            })?
+                            .clone();
+
+                        current_scope = res.clone();
                         last_type = res.clone().into();
-                        IsReturn::NoReturn(res)
+                        res
                     }
                 };
-            last_res = Ok(res);
+            last_res = Ok((call.member.clone(), res));
         }
 
-        last_res
+        if let Some(last_scope) = last_scope {
+            Ok((last_scope, pre_last_res, last_res?))
+        } else {
+            Err(ErrorWithRange {
+                err: Error::OperationUnsupported {
+                    operation: "member call".to_owned(),
+                    type_of: "must be at least one call".to_owned(),
+                },
+                range: node.range.clone(),
+            })
+        }
+    }
+
+    /// Member call represents any type of member call, a, a.b, a.b().c, a.b(a()).c, etc
+    pub fn eval_member_call(
+        &mut self,
+        node: &AstNode,
+        calls: &[MemberAccess],
+        world: &World,
+    ) -> Result<IsReturn, ErrorWithRange> {
+        let (_, _, (_, res)) = self.eval_member_call_helper(node, calls, world)?;
+        Ok(IsReturn::NoReturn(res))
     }
 
     pub fn eval_node(&mut self, node: &AstNode, world: &World) -> Result<IsReturn, ErrorWithRange> {
         let evaluated = match &node.type_of {
             // Primitives
-            AstNodeType::Bool(b) => {
-                IsReturn::NoReturn(InterpreterValue::new_strong(InterpreterValue::Bool(*b)))
-            }
-            AstNodeType::Int(i) => {
-                IsReturn::NoReturn(InterpreterValue::new_strong(InterpreterValue::Int(*i)))
-            }
-            AstNodeType::Float(f) => {
-                IsReturn::NoReturn(InterpreterValue::new_strong(InterpreterValue::Float(*f)))
-            }
-            AstNodeType::String(s) => IsReturn::NoReturn(InterpreterValue::new_strong(
-                InterpreterValue::String(s.clone()),
-            )),
+            AstNodeType::Bool(b) => IsReturn::NoReturn(InterpreterValue::Bool(*b)),
+            AstNodeType::Int(i) => IsReturn::NoReturn(InterpreterValue::Int(*i)),
+            AstNodeType::Float(f) => IsReturn::NoReturn(InterpreterValue::Float(*f)),
+            AstNodeType::String(s) => IsReturn::NoReturn(InterpreterValue::String(s.clone())),
             AstNodeType::List(values) => IsReturn::NoReturn(self.eval_list(values, world)?),
             AstNodeType::Map(values) => {
                 IsReturn::NoReturn(self.eval_map(values).map_err(|e| ErrorWithRange {
@@ -932,8 +951,11 @@ impl Interpreter {
             AstNodeType::PrefixCall(prefix, right) => {
                 IsReturn::NoReturn(self.eval_prefix_call(prefix, right.as_ref(), world)?)
             }
-            AstNodeType::EntityDeclaration { new_symbol } => {
-                self.eval_entity_declaration(node, world, new_symbol)?;
+            AstNodeType::EntityDef {
+                name,
+                default_components: _,
+            } => {
+                self.eval_entity_declaration(node, world, name)?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             // Assignent and declaration
@@ -947,18 +969,10 @@ impl Interpreter {
             }
             AstNodeType::AssignmentOp {
                 recipient,
-                index,
                 operation,
                 expression,
             } => {
-                self.eval_assignment_op(
-                    node,
-                    recipient,
-                    index,
-                    operation,
-                    expression.as_ref(),
-                    world,
-                )?;
+                self.eval_assignment_op(node, recipient, operation, expression.as_ref(), world)?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             // Member call can be anything that is of the form a.b.c.d(a,b).c etc. a() and a are also member calls with length 1
@@ -1193,7 +1207,6 @@ impl Interpreter {
             let mut param_scope = Scope::new_parented(Rc::clone(call_scope));
             for param in params {
                 if let Some(item) = query_states.get(param.1) {
-                    println!("Declaring param {}", param.0);
                     param_scope
                         .declare_variable(
                             param.0,
@@ -1211,8 +1224,6 @@ impl Interpreter {
                             0..1,
                         )
                         .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
-                } else {
-                    println!("Query is none for some reason");
                 }
             }
             let param_scope = Rc::new(RefCell::new(param_scope));
@@ -1259,54 +1270,49 @@ impl<'w> Stage<'w> for Rc<RefCell<Interpreter>> {
         }
     }
 
-    fn run(self, world: &'w World) -> Result<StageResult<'w>, ErrorWithRange> {
+    fn run(self, world: &'w World, _source: String) -> Result<StageResult<'w>, ErrorWithRange> {
         let entrypoint_fn = self.borrow().entrypoint_fn.clone();
         let main_fn = self
             .borrow()
             .get_current_scope()
             .borrow()
-            .resolve_value(&entrypoint_fn);
-        if let Some(main) = main_fn {
-            if let InterpreterValue::Function(_) = main {
-                let main_fn = self
-                    .borrow()
-                    .get_current_scope()
-                    .borrow()
-                    .resolve_type(&entrypoint_fn)
-                    .expect("must be present if value is present");
-                let current_scope = self.borrow().get_current_scope();
-                self.borrow_mut().call_function(
-                    &entrypoint_fn,
-                    &vec![],
-                    &current_scope,
-                    main_fn,
-                    world,
-                )?;
-            } else {
-                return Err(ErrorWithRange {
-                    err: Error::WrongType(
-                        entrypoint_fn.clone(),
-                        TypeSymbolType::Function(FunctionType {
-                            name: "main".to_string(),
-                            is_method: false,
-                            params: vec![],
-                            return_type: None,
-                            execution_body: FunctionExecutionStrategy::Interpreted(vec![]),
-                        })
-                        .to_string(),
-                        self.borrow()
-                            .get_current_scope()
-                            .borrow()
-                            .resolve_type(&entrypoint_fn)
-                            .expect("must be present if value is presen")
-                            .to_string(),
-                    ),
-                    range: 0..1,
-                });
-            }
+            .resolve_value(&entrypoint_fn)
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+
+        if let InterpreterValue::Function(_) = main_fn {
+            let main_fn = self
+                .borrow()
+                .get_current_scope()
+                .borrow()
+                .resolve_type(&entrypoint_fn)
+                .expect("must be present if value is present");
+            let current_scope = self.borrow().get_current_scope();
+            self.borrow_mut().call_function(
+                &entrypoint_fn,
+                &vec![],
+                &current_scope,
+                main_fn,
+                world,
+            )?;
         } else {
             return Err(ErrorWithRange {
-                err: Error::MainNotFound,
+                err: Error::WrongType(
+                    entrypoint_fn.clone(),
+                    TypeSymbolType::Function(FunctionType {
+                        name: "main".to_string(),
+                        is_method: false,
+                        params: vec![],
+                        return_type: None,
+                        execution_body: FunctionExecutionStrategy::Interpreted(vec![]),
+                    })
+                    .to_string(),
+                    self.borrow()
+                        .get_current_scope()
+                        .borrow()
+                        .resolve_type(&entrypoint_fn)
+                        .expect("must be present if value is presen")
+                        .to_string(),
+                ),
                 range: 0..1,
             });
         }

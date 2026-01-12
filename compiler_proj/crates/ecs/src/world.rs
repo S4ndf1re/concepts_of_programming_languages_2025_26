@@ -20,6 +20,15 @@ impl World {
         self.components.borrow_mut().insert(id);
     }
 
+    pub fn register_component_by_value<C: Component + 'static>(&self, component: &C) {
+        let id = component.get_ident();
+        if self.components.borrow().contains(&id) {
+            return;
+        }
+
+        self.components.borrow_mut().insert(id);
+    }
+
     pub fn spawn<'w>(&'w self) -> EntityCommandsMut<'w> {
         let entity = Entity::new();
         let idx = self.entites.borrow_mut().insert(entity);

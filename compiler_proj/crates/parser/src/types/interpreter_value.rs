@@ -8,7 +8,7 @@ use std::{
 
 use ecs::{Component, EntityIndex};
 
-use crate::{Error, Scope, ScopeVariant, Symbol, TypeSymbol, TypeSymbolType};
+use crate::{Error, Scope, Symbol, TypeSymbol, TypeSymbolType};
 
 /// ActualTypeValue only represents the concrete value of a type. The actual type def is defined by
 #[derive(Clone, Debug)]
@@ -29,8 +29,8 @@ pub enum InterpreterValue {
     Function(Symbol), // Functions execution body is contained in its type definition,
     Method(Symbol),   // Functions execution body is contained in its type definition,
     // Reference counted values (everything afaik)
-    Weak(Weak<InterpreterValue>),
-    Strong(Rc<InterpreterValue>),
+    Weak(Weak<RefCell<InterpreterValue>>),
+    Strong(Rc<RefCell<InterpreterValue>>),
 
     // ECS Intergration
     Entity(EntityIndex),
@@ -51,7 +51,7 @@ pub enum InterpreterValue {
 
 impl InterpreterValue {
     pub fn new_strong(inner: InterpreterValue) -> InterpreterValue {
-        Self::Strong(Rc::new(inner))
+        Self::Strong(Rc::new(RefCell::new(inner)))
     }
 
     pub fn make_reference_counted(self) -> Result<InterpreterValue, Error> {
@@ -88,11 +88,11 @@ impl InterpreterValue {
         matches!(self, InterpreterValue::Weak(_))
     }
 
-    pub fn deref(&self) -> Result<&InterpreterValue, Error> {
-        if let InterpreterValue::Strong(s) = self {
-            Ok(s.as_ref())
-        } else {
-            Err(Error::CantDerefWeak)
+    pub fn deref_value(&self) -> Result<InterpreterValue, Error> {
+        match self {
+            InterpreterValue::Strong(s) => Ok(s.borrow().clone()),
+            InterpreterValue::Weak(_) => Err(Error::CantDerefWeak),
+            _ => Ok(self.clone()),
         }
     }
 
@@ -102,12 +102,12 @@ impl InterpreterValue {
                 a = a.upgrade()?;
             }
 
-            a.deref()?
+            a.deref_value()?
         } else {
-            &a
+            a
         };
 
-        Ok(lval.clone())
+        Ok(lval)
     }
 
     pub fn preprocess_for_operation(
@@ -291,6 +291,13 @@ impl InterpreterValue {
                     type_of: format!("{} and {} are not compatible", lval, rval,),
                 }),
             },
+            InterpreterValue::Strong(l) => match rval {
+                InterpreterValue::Strong(r) => Ok(InterpreterValue::Bool(Rc::ptr_eq(l, &r))),
+                _ => Err(Error::OperationUnsupported {
+                    operation: "==".to_string(),
+                    type_of: format!("{} and {} are not compatible", lval, rval,),
+                }),
+            },
             _ => Err(Error::OperationUnsupported {
                 operation: "==".to_string(),
                 type_of: format!("{} and {} are not compatible", lval, rval),
@@ -391,7 +398,7 @@ impl InterpreterValue {
     pub fn as_bool(&self) -> Result<bool, Error> {
         let v = match self {
             InterpreterValue::Bool(b) => *b,
-            InterpreterValue::Strong(s) => s.as_bool()?,
+            InterpreterValue::Strong(s) => s.borrow().as_bool()?,
             InterpreterValue::Weak(_) => self.upgrade()?.as_bool()?,
             _ => false,
         };
@@ -402,30 +409,40 @@ impl InterpreterValue {
     pub fn as_list(self) -> Result<Vec<InterpreterValue>, Error> {
         match self {
             InterpreterValue::List(l) => Ok(l),
-            InterpreterValue::Strong(s) => Ok(s.as_ref().clone().as_list()?),
+            InterpreterValue::Strong(s) => Ok(s.borrow().clone().as_list()?),
             InterpreterValue::Weak(_) => Ok(self.upgrade()?.as_list()?),
             _ => Err(Error::CantCastAsType("list".to_owned())),
         }
     }
 
-    pub fn index(&self, idx: i64) -> Result<&InterpreterValue, Error> {
+    pub fn index(&self, idx: i64) -> Result<InterpreterValue, Error> {
         match self {
-            InterpreterValue::List(l) => Ok(l.get(idx as usize).ok_or(Error::OperationUnsupported {
+            InterpreterValue::List(l) => {
+                Ok(l.get(idx as usize).ok_or(Error::OperationUnsupported {
+                    operation: "index access".to_owned(),
+                    type_of: "index bound invalid".to_owned(),
+                })?.clone())
+            }
+            InterpreterValue::Strong(s) => Ok(s.borrow().index(idx)?),
+            _ => Err(Error::OperationUnsupported {
                 operation: "index access".to_owned(),
-                type_of: "index bound invalid".to_owned(),
-            })?),
-            InterpreterValue::Strong(s) => Ok(s.as_ref().index(idx)?),
-            _ => Err(Error::OperationUnsupported { operation: "index access".to_owned(), type_of: "not a list type".to_owned() })
+                type_of: "not a list type".to_owned(),
+            }),
         }
     }
 
     pub fn index_mut(&mut self, idx: i64) -> Result<&mut InterpreterValue, Error> {
         match self {
-            InterpreterValue::List(l) => Ok(l.get_mut(idx as usize).ok_or(Error::OperationUnsupported {
-                operation: "index access".to_owned(),
-                type_of: "index bound invalid".to_owned(),
-            })?),
-            _ => Err(Error::OperationUnsupported { operation: "index mut access".to_owned(), type_of: "not a list type".to_owned() })
+            InterpreterValue::List(l) => {
+                Ok(l.get_mut(idx as usize).ok_or(Error::OperationUnsupported {
+                    operation: "index access".to_owned(),
+                    type_of: "index bound invalid".to_owned(),
+                })?)
+            }
+            _ => Err(Error::OperationUnsupported {
+                operation: "index mut access".to_owned(),
+                type_of: "not a list type".to_owned(),
+            }),
         }
     }
 }
@@ -605,7 +622,10 @@ impl From<InterpreterValue> for Option<TypeSymbol> {
             InterpreterValue::Component(name, scope, _fields) => {
                 scope.borrow().resolve_defined_type(&name)
             }
-            InterpreterValue::Strong(inner) => Into::<Option<TypeSymbol>>::into((*inner).clone()),
+            InterpreterValue::List(_) => Some(TypeSymbol::strong(TypeSymbolType::List(Box::new(
+                TypeSymbol::strong(TypeSymbolType::Any),
+            )))),
+            InterpreterValue::Strong(inner) => Into::<Option<TypeSymbol>>::into(inner.borrow().clone()),
             InterpreterValue::Weak(_) => {
                 let inner = value
                     .upgrade()
@@ -638,7 +658,7 @@ impl Display for InterpreterValue {
                     write!(f, "{name} {{  }}",)
                 }
             }
-            InterpreterValue::Strong(inner) => write!(f, "{inner}"),
+            InterpreterValue::Strong(inner) => write!(f, "{}", inner.borrow()),
             InterpreterValue::Weak(_) => {
                 let inner = self
                     .upgrade()
@@ -651,32 +671,12 @@ impl Display for InterpreterValue {
     }
 }
 
-impl From<InterpreterValue> for Result<ScopeVariant, Error> {
-    fn from(value: InterpreterValue) -> Self {
-        let var = InterpreterValue::preprocess_single(value)?;
-        match var {
-            InterpreterValue::Struct(name, outer_scope, attributes) => {
-                Ok(ScopeVariant::Struct(name, outer_scope, attributes))
-            }
-            InterpreterValue::Component(name, outer_scope, attributes) => {
-                Ok(ScopeVariant::Component(name, outer_scope, attributes))
-            }
-            InterpreterValue::Module(scope) => Ok(ScopeVariant::Module(scope)),
-            InterpreterValue::Strong(inner) => {
-                Ok(ScopeVariant::Strong(Rc::new(RefCell::new(Into::<
-                    Result<ScopeVariant, Error>,
-                >::into(
-                    InterpreterValue::clone(&inner),
-                )?))))
-            }
-            _ => Err(Error::IsNotAScope),
-        }
-    }
-}
-
 impl Component for InterpreterValue {
     fn get_ident(&self) -> String {
         match self {
+            InterpreterValue::Strong(_) | InterpreterValue::Weak(_) => {
+                self.deref_value().unwrap().get_ident()
+            }
             InterpreterValue::Component(name, _, _)
             | InterpreterValue::ComponentPlaceholder(name) => name.clone(),
             _ => panic!("is not a componetn"),

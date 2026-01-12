@@ -139,11 +139,13 @@ Import: AstNode = {
 
 /// Any statement, meaning if, while, for, anything non returnable like function definitions, struct definitions and assignments. Additionally Returnable statements with semicolon
 Statement: AstNode = {
+    #[precedence(level="0")]
     NonReturnable,
-    ReturnableStatement,
     If, //Note: das if ist hier nicht zweideutig, wegen dem LR(1)-Lookup von dem Semikolon
     While,
     For,
+    #[precedence(level="1")] #[assoc(side="left")]
+    ReturnableStatement,
 };
 
 /// Anything that may return a value, but with a trailing semicolon
@@ -377,7 +379,6 @@ ReturnableOrIf: AstNode = {
 Declaration: AstNode = {
     <l:@L> <s:id> declare <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None}),
     <l:@L> let_term <st:TypeParamRule> assign <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)}),
-    <l:@L> spawn_term <s:id> <r:@R> => AstNode::new(l..r, AstNodeType::EntityDeclaration{new_symbol: s}),
 }
 
 ForDeclaration: AstNode = {
@@ -387,21 +388,21 @@ ForDeclaration: AstNode = {
 
 /// a = b; also a += b; a -= b; etc.
 Assignment: AstNode = {
-    <l:@L> <s:id> <idx:(l_bracket <int> r_bracket)?> assign     <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, index: idx, operation: AssignmentOperations::Identity, expression: Box::new(e)}),
-    <l:@L> <s:id> <idx:(l_bracket <int> r_bracket)?> assign_add <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, index: idx, operation: AssignmentOperations::Add, expression: Box::new(e)}),
-    <l:@L> <s:id> <idx:(l_bracket <int> r_bracket)?> assign_sub <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, index: idx, operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
-    <l:@L> <s:id> <idx:(l_bracket <int> r_bracket)?> assign_mul <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, index: idx, operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
-    <l:@L> <s:id> <idx:(l_bracket <int> r_bracket)?> assign_div <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, index: idx, operation: AssignmentOperations::Divide, expression: Box::new(e)}),
-    <l:@L> <s:id> <idx:(l_bracket <int> r_bracket)?> assign_mod <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, index: idx, operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign     <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign_add <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign_sub <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign_mul <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign_div <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign_mod <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
 }
 
 ForAssignment: AstNode = {
-    <l:@L> <s:id> assign     <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)}),
-    <l:@L> <s:id> assign_add <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)}),
-    <l:@L> <s:id> assign_sub <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
-    <l:@L> <s:id> assign_mul <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
-    <l:@L> <s:id> assign_div <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)}),
-    <l:@L> <s:id> assign_mod <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
+    <l:@L> <s:id> assign     <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Identity, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_add <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Add, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_sub <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_mul <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_div <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Divide, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_mod <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
 }
 
 ForAssignmentOrDeclaration = {

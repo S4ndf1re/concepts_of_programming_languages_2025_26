@@ -30,28 +30,29 @@ impl<'w> From<StageResult<'w>> for usize {
 
 pub trait Stage<'w> {
     fn init(&mut self, prev_stage_result: StageResult<'w>) -> Result<(), ErrorWithRange>;
-    fn run(self, world: &'w World) -> Result<StageResult<'w>, ErrorWithRange>;
+    fn run(self, world: &'w World, source: String) -> Result<StageResult<'w>, ErrorWithRange>;
 }
 
 pub fn run_stages<'w>(
     stages: Vec<Stages<'w>>,
     mut state: StageResult<'w>,
     world: &'w World,
+    source: String,
 ) -> Result<StageResult<'w>, ErrorWithRange> {
     for stage in stages {
         match stage {
             Stages::Parser(mut p) => {
                 p.init(state)?;
-                state = p.run(world)?;
+                state = p.run(world, source.clone())?;
             }
             Stages::Preprocessor(mut p) => {
                 p.init(state)?;
-                state = p.run(world)?;
+                state = p.run(world, source.clone())?;
             }
             Stages::Interpreter(i) => {
                 let mut interpreter = Rc::clone(&i);
                 interpreter.init(state)?;
-                state = interpreter.run(world)?;
+                state = interpreter.run(world, source.clone())?;
             }
         }
     }

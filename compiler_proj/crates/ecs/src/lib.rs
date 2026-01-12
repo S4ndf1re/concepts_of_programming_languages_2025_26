@@ -33,12 +33,13 @@ pub struct EntityCommandsMut<'w> {
 
 impl<'w> EntityCommandsMut<'w> {
     pub fn add_component<C: Component + 'static>(&mut self, component: C) {
-        self.world.register_component::<C>();
+        self.world.register_component_by_value::<C>(&component);
 
+        let ident = component.get_ident();
         let c_boxed = Box::new(component);
         let boxed: Box<dyn Component> = Box::new(*c_boxed);
         if let Some(e) = self.world.entites.borrow_mut().get_mut(self.entity) {
-            e.components.insert(C::ident(), boxed);
+            e.components.insert(ident, boxed);
         }
     }
 
@@ -150,7 +151,7 @@ impl<'w> EntityCommandsMut<'w> {
             let any = comp as *const dyn Component as *const C;
 
             unsafe {
-                let any_ref_mut = & *any;
+                let any_ref_mut = &*any;
                 Some(any_ref_mut)
             }
         } else {
@@ -158,10 +159,7 @@ impl<'w> EntityCommandsMut<'w> {
         }
     }
 
-    pub fn get_component_by_value<C: Component + 'static>(
-        &self,
-        component: C,
-    ) -> Option<&'w C> {
+    pub fn get_component_by_value<C: Component + 'static>(&self, component: C) -> Option<&'w C> {
         if self.has_component_by_value(&component) {
             let world_entities = self.world.entites.borrow();
             let entity = world_entities.get(self.entity).unwrap();
@@ -175,17 +173,14 @@ impl<'w> EntityCommandsMut<'w> {
             let any = comp as *const dyn Component as *const C;
 
             unsafe {
-                let any_ref_mut = & *any;
+                let any_ref_mut = &*any;
                 Some(any_ref_mut)
             }
         } else {
             None
         }
     }
-    pub fn get_component_by_name<C: Component + 'static>(
-        &self,
-        name: &String,
-    ) -> Option<&'w C> {
+    pub fn get_component_by_name<C: Component + 'static>(&self, name: &String) -> Option<&'w C> {
         if self.has_component_by_name(name) {
             let world_entities = self.world.entites.borrow();
             let entity = world_entities.get(self.entity).unwrap();
@@ -195,7 +190,7 @@ impl<'w> EntityCommandsMut<'w> {
             let any = comp as *const dyn Component as *const C;
 
             unsafe {
-                let any_ref_mut = & *any;
+                let any_ref_mut = &*any;
                 Some(any_ref_mut)
             }
         } else {

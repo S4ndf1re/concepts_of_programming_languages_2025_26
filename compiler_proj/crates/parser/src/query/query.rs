@@ -40,7 +40,9 @@ impl PseudoSystemParameter for Query {
     fn instantiate_from_world(&self, world: &ecs::World) -> Self::State {
         let mut entities = Vec::new();
         for entity in world.get_entites() {
+            // println!("DEBUG: Interating entity: {entity:?}");
             if self.type_of.entity_conforms_condition(entity, world) {
+                // println!("DEBUG: Entity {entity:?} fits query");
                 entities.push(entity);
             }
         }
@@ -55,7 +57,7 @@ impl PseudoSystemParameter for Query {
     fn get_param<'w>(state: &mut Self::State, world: &'w ecs::World) -> Self::Item<'w> {
         let mut components = Vec::new();
 
-        let requestes_comps = state.type_of.get_components();
+        let requested_components = state.type_of.get_components();
 
         for entity in &state.entities {
             let Some(entt) = world.get_entity_mut(*entity) else {
@@ -63,7 +65,7 @@ impl PseudoSystemParameter for Query {
             };
             let mut entry_comps = Vec::new();
 
-            for requested_comp in requestes_comps {
+            for requested_comp in requested_components {
                 if let Some(interpreter_value) =
                     entt.get_component_by_name::<InterpreterValue>(requested_comp)
                 {

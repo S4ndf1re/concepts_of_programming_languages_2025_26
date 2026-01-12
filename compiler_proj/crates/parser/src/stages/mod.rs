@@ -25,15 +25,18 @@ mod tests {
 
     #[test]
     fn test_preprocessing() {
-        let source = r#"fn abc(a: B, c: int, d: float) {}
-                                struct B {
-                                    a: float,
-                                }
-                        "#;
-        let expr = ast_grammar::ProgrammParser::new().parse(source);
+        let source = String::from(
+            r#"fn abc(a: B, c: int, d: float) {}
+                                        struct B {
+                                            a: float,
+                                        }
+                                "#,
+        );
+
+        let expr = ast_grammar::ProgrammParser::new().parse(&source);
 
         if let Err(expr) = expr {
-            expr.panic_error(source);
+            expr.panic_error(&source);
         } else {
             let expr = expr.unwrap();
 
@@ -43,7 +46,7 @@ mod tests {
 
             let mut processor = Preprocessor::new().unwrap();
             processor.init(s0).unwrap();
-            processor.run(&world).unwrap();
+            processor.run(&world, source).unwrap();
         }
     }
 }

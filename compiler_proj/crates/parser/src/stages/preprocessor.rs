@@ -7,19 +7,24 @@ use std::{
 use ecs::World;
 
 use crate::{
-    AstNode, AstNodeType, AstTypeDefinition, ComponentType, Error, ErrorWithRange, FunctionType, Interpreter, InterpreterValue, RegisterType, Scope, ScopeLike, Stage, StageResult, StructType, SystemType, TypeSymbol, TypeSymbolType, register_buildin
+    AstNode, AstNodeType, AstTypeDefinition, BeautifyError, ComponentType, Error, ErrorWithRange,
+    FunctionType, Interpreter, InterpreterValue, RegisterType, Scope, ScopeLike, Stage,
+    StageResult, StructType, SystemType, TypeSymbol, TypeSymbolType, register_buildin,
 };
 
-pub fn run_system(sys_name: String, interpreter: Rc<RefCell<Interpreter>>) -> impl FnMut(&World) {
+pub fn run_system(
+    sys_name: String,
+    interpreter: Rc<RefCell<Interpreter>>,
+    source: String,
+) -> impl FnMut(&World) {
     let interpreter = Rc::clone(&interpreter);
     move |world: &World| {
         let mut interp = interpreter.borrow_mut();
         let scope = interp.get_current_scope();
-        println!("Resolving {sys_name}");
         let type_of = scope.borrow_mut().resolve_type(&sys_name).unwrap();
-        interp
-            .call_system(&sys_name, world, &scope, type_of)
-            .unwrap();
+        if let Err(err) = interp.call_system(&sys_name, world, &scope, type_of) {
+            err.panic_error(&source);
+        }
     }
 }
 
@@ -27,7 +32,7 @@ pub struct Preprocessor<'w> {
     ast: Vec<AstNode>,
     world: Option<&'w World>,
     global_scope: Scope,
-    interpreter: Option<Rc<RefCell<Interpreter>>>
+    interpreter: Option<Rc<RefCell<Interpreter>>>,
 }
 
 impl<'w> Preprocessor<'w> {
@@ -95,7 +100,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
         Ok(())
     }
 
-    fn run(mut self, _world: &'w World) -> Result<StageResult<'w>, ErrorWithRange> {
+    fn run(mut self, _world: &'w World, source: String) -> Result<StageResult<'w>, ErrorWithRange> {
         let mut other_nodes = Vec::new();
 
         for node in self.ast {
@@ -267,7 +272,6 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                 ),
                             }));
                             // SAFETY: Is always initialized
-                            println!("Declairing system {typename}");
                             self.global_scope
                                 .declare_system(
                                     typename,
@@ -307,7 +311,14 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
 
                         let sys_reg = chain[0].clone();
 
-                        let _ = self.world.map(|w| w.add_system(run_system(sys_reg, Rc::clone(self.interpreter.as_ref().expect("must be present")))));
+                        let _ = self.world.map(|w| {
+                            w.add_system(run_system(
+                                sys_reg,
+                                Rc::clone(self.interpreter.as_ref().expect("must be present")),
+                                // TODO: Performace optimiziation
+                                source.clone(),
+                            ))
+                        });
                     }
                     _ => Err(ErrorWithRange {
                         err: Error::OperationUnsupported {
