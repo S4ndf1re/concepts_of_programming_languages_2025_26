@@ -68,6 +68,9 @@ impl World {
         unsafe {
             let systems = self.systems.clone();
             *self.is_running.borrow_mut() = true;
+            if systems.borrow().is_empty() {
+                *self.is_running.borrow_mut() = false;
+            }
             loop {
                 if !*self.is_running.borrow() {
                     break;

@@ -83,7 +83,7 @@ impl Instantiable for StructType {
             return prefab.instantiate(scope, params);
         }
         for param in &self.fields {
-            if params.contains_key(&param.0) {
+            if !params.contains_key(&param.0) {
                 Err(Error::CantBeEmpty)?
             }
         }

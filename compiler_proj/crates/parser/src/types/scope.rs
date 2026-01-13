@@ -434,7 +434,7 @@ impl ScopeLike for InterpreterValue {
                 }
             }
             InterpreterValue::Strong(inner) => inner.borrow().resolve_type(name),
-            InterpreterValue::BuiltinStruct(name, self_val) => self_val.borrow().resolve_type(name),
+            InterpreterValue::BuiltinStruct(_, self_val) => self_val.borrow().resolve_type(name),
             _ => unimplemented!(),
         }
     }
@@ -445,6 +445,7 @@ impl ScopeLike for InterpreterValue {
             InterpreterValue::Struct(_, outer_scope, _) => Ok(Rc::clone(outer_scope)),
             InterpreterValue::Component(_, outer_scope, _) => Ok(Rc::clone(outer_scope)),
             InterpreterValue::Strong(inner) => inner.borrow().get_outer_scope(),
+            InterpreterValue::BuiltinStruct(_, value) => value.borrow().get_outer_scope(),
             _ => Err(Error::CantDerefWeak),
         }
     }

@@ -72,7 +72,11 @@ impl BuiltinList {
 
 impl ScopeLike for BuiltinList {
     fn resolve_value(&self, name: &Symbol) -> Result<InterpreterValue, Error> {
-        Err(Error::SymbolNotFound(name.clone()))
+        if name == "push" || name == "pop" {
+            Ok(InterpreterValue::Function(name.clone()))
+        } else {
+            Err(Error::SymbolNotFound(name.clone()))
+        }
     }
 
     fn set_value(&mut self, name: &Symbol, _value: InterpreterValue) -> Result<(), Error> {
@@ -80,14 +84,27 @@ impl ScopeLike for BuiltinList {
     }
 
     fn resolve_type(&self, name: &Symbol) -> Result<TypeSymbol, Error> {
-        Err(Error::SymbolNotFound(name.clone()))
+        let Some(struct_type) = self
+            .defining_scope
+            .borrow()
+            .resolve_defined_type(&self.name())
+        else {
+            return Err(Error::SymbolNotFound(self.name()));
+        };
+
+        match &struct_type.type_of {
+            TypeSymbolType::Struct(strct) => strct
+                .methods
+                .iter()
+                .find(|f| &f.0 == name)
+                .map(|v| TypeSymbol::strong(TypeSymbolType::Function(v.1.clone())))
+                .ok_or(Error::SymbolNotFound(name.clone())),
+            _ => Err(Error::SymbolNotFound(name.clone())),
+        }
     }
 
     fn get_outer_scope(&self) -> Result<Rc<RefCell<Scope>>, Error> {
-        Err(Error::OperationUnsupported {
-            operation: "can get scope on builtin".to_owned(),
-            type_of: "".to_owned(),
-        })
+        Ok(Rc::clone(&self.defining_scope))
     }
 }
 
