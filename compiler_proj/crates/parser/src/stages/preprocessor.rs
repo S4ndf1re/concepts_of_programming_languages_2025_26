@@ -124,7 +124,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                     params,
                                     return_type: return_type.map(Box::new),
                                     execution_body: crate::FunctionExecutionStrategy::Interpreted(
-                                        execution_body,
+                                        Rc::new(execution_body),
                                     ),
                                 }));
                             // SAFETY: Is always initialized
@@ -164,7 +164,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                         return_type: return_type.map(Box::new),
                                         execution_body:
                                             crate::FunctionExecutionStrategy::Interpreted(
-                                                execution_body,
+                                                Rc::new(execution_body),
                                             ),
                                     };
 

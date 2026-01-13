@@ -10,7 +10,7 @@ pub type BuildinCallback = fn(scope: Rc<RefCell<Scope>>, world: &World) -> Resul
 #[derive(Debug, Clone)]
 pub enum FunctionExecutionStrategy {
     Buildin(BuildinCallback),
-    Interpreted(Vec<Box<AstNode>>),
+    Interpreted(Rc<Vec<Box<AstNode>>>),
 }
 
 #[derive(Derivative)]

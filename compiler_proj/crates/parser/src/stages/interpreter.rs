@@ -1303,7 +1303,7 @@ impl<'w> Stage<'w> for Rc<RefCell<Interpreter>> {
                         is_method: false,
                         params: vec![],
                         return_type: None,
-                        execution_body: FunctionExecutionStrategy::Interpreted(vec![]),
+                        execution_body: FunctionExecutionStrategy::Interpreted(Rc::new(vec![])),
                     })
                     .to_string(),
                     self.borrow()
