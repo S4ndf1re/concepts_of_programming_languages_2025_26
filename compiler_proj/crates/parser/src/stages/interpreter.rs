@@ -9,8 +9,9 @@ use ecs::{Component, PseudoSystemParameter, World};
 
 use crate::{
     AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy,
-    FunctionType, InfixOperator, InterpreterValue, MemberAccess, MemberAccessType, PrefixOperator,
-    Query, Scope, ScopeLike, Stage, StageResult, Symbol, TypeSymbol, TypeSymbolType,
+    FunctionType, InfixOperator, Instantiable, InterpreterValue, MemberAccess, MemberAccessType,
+    PrefixOperator, Query, Scope, ScopeLike, Stage, StageResult, Symbol, TypeSymbol,
+    TypeSymbolType,
 };
 
 macro_rules! scoped {
@@ -796,11 +797,8 @@ impl Interpreter {
                         if let Some(struct_type) = struct_type {
                             match &struct_type.type_of {
                                 TypeSymbolType::Struct(struct_type_def) => {
-                                    let mut fields_of_struct_type =
-                                        HashMap::<&String, &TypeSymbol>::new();
-                                    for (fieldname, type_of) in &struct_type_def.fields {
-                                        fields_of_struct_type.insert(fieldname, type_of);
-                                    }
+                                    let fields_of_struct_type =
+                                        struct_type_def.get_required_parameters();
 
                                     let mut assigned_fields = HashSet::<&String>::new();
                                     let mut field_values = HashMap::new();
@@ -815,68 +813,8 @@ impl Interpreter {
                                         }
                                     }
 
-                                    for (field, _) in fields_of_struct_type {
-                                        if !assigned_fields.contains(field) {
-                                            todo!("throw error, because field is not assigned")
-                                        }
-                                    }
-
-                                    // NOTE: make self as the struct value itself. since self is a keyword in the lexer, it cant be used as a variable name
-                                    let struct_value = InterpreterValue::Struct(
-                                        struct_type_def.name.clone(),
-                                        Rc::clone(&local_scope.get_outer_scope().map_err(
-                                            |err| ErrorWithRange {
-                                                err,
-                                                range: call.range.clone(),
-                                            },
-                                        )?),
-                                        field_values,
-                                    )
-                                    .make_reference_counted()
-                                    .map_err(|err| ErrorWithRange {
-                                        err,
-                                        range: call.range.clone(),
-                                    })?;
-
-                                    current_scope = struct_value.clone();
-                                    last_type = Some(struct_type);
-                                    struct_value
-                                }
-                                TypeSymbolType::Component(struct_type_def) => {
-                                    let mut fields_of_struct_type =
-                                        HashMap::<&String, &TypeSymbol>::new();
-                                    for (fieldname, type_of) in &struct_type_def.fields {
-                                        fields_of_struct_type.insert(fieldname, type_of);
-                                    }
-
-                                    let mut assigned_fields = HashSet::<&String>::new();
-                                    let mut field_values = HashMap::new();
-
-                                    for (field, value_node) in fields_to_assign {
-                                        if fields_of_struct_type.contains_key(field) {
-                                            assigned_fields.insert(field);
-                                            let value = self.eval_node(value_node, world)?.unwrap();
-                                            field_values.insert(field.clone(), Box::new(value));
-                                        } else {
-                                            todo!("throw error here, as field does not exist")
-                                        }
-                                    }
-
-                                    let is_placeholder = assigned_fields.is_empty()
-                                        || fields_of_struct_type.is_empty();
-
-                                    if !is_placeholder {
-                                        for (field, _) in fields_of_struct_type {
-                                            if !assigned_fields.contains(field) {
-                                                todo!("throw error, because field is not assigned")
-                                            }
-                                        }
-                                    }
-
-                                    // NOTE: make self as the struct value itself. since self is a keyword in the lexer, it cant be used as a variable name
-                                    let struct_value = if !is_placeholder {
-                                        InterpreterValue::Component(
-                                            struct_type_def.name.clone(),
+                                    let struct_value = struct_type_def
+                                        .instantiate(
                                             Rc::clone(&local_scope.get_outer_scope().map_err(
                                                 |err| ErrorWithRange {
                                                     err,
@@ -885,28 +823,48 @@ impl Interpreter {
                                             )?),
                                             field_values,
                                         )
-                                        .make_reference_counted()
-                                        .map_err(|err| {
-                                            ErrorWithRange {
-                                                err,
-                                                range: call.range.clone(),
-                                            }
-                                        })
-                                    } else {
-                                        InterpreterValue::ComponentPlaceholder(
-                                            struct_type_def.name.clone(),
-                                        )
-                                        .make_reference_counted()
-                                        .map_err(|err| {
-                                            ErrorWithRange {
-                                                err,
-                                                range: call.range.clone(),
-                                            }
-                                        })
-                                    }?;
+                                        .map_err(|err| ErrorWithRange {
+                                            err,
+                                            range: call.range.clone(),
+                                        })?;
 
                                     current_scope = struct_value.clone();
+                                    last_type = Some(struct_type);
+                                    struct_value
+                                }
+                                TypeSymbolType::Component(struct_type_def) => {
+                                    let fields_of_struct_type =
+                                        struct_type_def.get_required_parameters();
 
+                                    let mut assigned_fields = HashSet::<&String>::new();
+                                    let mut field_values = HashMap::new();
+
+                                    for (field, value_node) in fields_to_assign {
+                                        if fields_of_struct_type.contains_key(field) {
+                                            assigned_fields.insert(field);
+                                            let value = self.eval_node(value_node, world)?.unwrap();
+                                            field_values.insert(field.clone(), Box::new(value));
+                                        } else {
+                                            todo!("throw error here, as field does not exist")
+                                        }
+                                    }
+
+                                    let struct_value = struct_type_def
+                                        .instantiate(
+                                            Rc::clone(&local_scope.get_outer_scope().map_err(
+                                                |err| ErrorWithRange {
+                                                    err,
+                                                    range: call.range.clone(),
+                                                },
+                                            )?),
+                                            field_values,
+                                        )
+                                        .map_err(|err| ErrorWithRange {
+                                            err,
+                                            range: call.range.clone(),
+                                        })?;
+
+                                    current_scope = struct_value.clone();
                                     last_type = Some(struct_type);
                                     struct_value
                                 }

@@ -323,4 +323,40 @@ mod tests {
 
         world.run();
     }
+
+    #[test]
+    fn builtin_struct() {
+        let source = r#"
+            fn main() {
+                list := BuiltinList{};
+                println("Pre push");
+                list.push(10);
+                println("Post push");
+                println(list.pop());
+                println("Final");
+            }
+
+           "#
+        .to_owned();
+
+        let source_safe = source.clone();
+
+        let world = World::default();
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+
+        let stages = vec![
+            Stages::Parser(Parser::default()),
+            Stages::Preprocessor(Preprocessor::new().unwrap()),
+            Stages::Interpreter(Rc::clone(&interpreter)),
+        ];
+
+        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
+
+        let result = run_stages(stages, state, &world, source);
+        if let Err(occured_error) = result {
+            occured_error.panic_error(&source_safe);
+        }
+
+        world.run();
+    }
 }

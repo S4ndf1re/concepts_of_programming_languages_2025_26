@@ -1,8 +1,8 @@
-use std::{fmt::Display, hash::Hash, iter::zip};
+use std::{collections::HashMap, fmt::Display, hash::Hash, iter::zip};
 
-use crate::{Symbol, TypeSymbol};
+use crate::{Instantiable, InterpreterValue, Symbol, TypeSymbol};
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct ComponentType {
     pub name: Symbol,
     pub fields: Vec<(Symbol, TypeSymbol)>,
@@ -39,5 +39,31 @@ impl Display for ComponentType {
         }
 
         Ok(())
+    }
+}
+
+impl Instantiable for ComponentType {
+    fn instantiate(
+        &self,
+        local_scope: std::rc::Rc<std::cell::RefCell<super::Scope>>,
+        params: HashMap<Symbol, Box<super::InterpreterValue>>,
+    ) -> Result<super::InterpreterValue, crate::Error> {
+        let is_placeholder = params.is_empty() || self.fields.is_empty();
+
+        let struct_value = if !is_placeholder {
+            InterpreterValue::Component(self.name.clone(), local_scope, params)
+                .make_reference_counted()
+        } else {
+            InterpreterValue::ComponentPlaceholder(self.name.clone()).make_reference_counted()
+        }?;
+
+        Ok(struct_value)
+    }
+
+    fn get_required_parameters(&self) -> std::collections::HashMap<Symbol, TypeSymbol> {
+        self.fields
+            .iter()
+            .map(|value| (value.0.clone(), value.1.clone()))
+            .collect::<HashMap<_, _>>()
     }
 }

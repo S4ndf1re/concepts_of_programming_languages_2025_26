@@ -7,7 +7,7 @@ use graphviz_rust::{
 
 use crate::{ComponentType, FunctionType, StructType, Symbol, SystemType, ToGraphviz};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum TypeSymbolType {
     Int,
     Float,
@@ -66,7 +66,7 @@ impl Display for TypeSymbolType {
 // }
 
 /// The symbol that represents any existing type
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct TypeSymbol {
     pub is_weak: bool,
     pub type_of: TypeSymbolType,

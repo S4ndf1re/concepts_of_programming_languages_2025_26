@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::{
-    BuiltinStruct, Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType,
-    TypeSymbol, TypeSymbolType,
+    Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType, TypeSymbol,
+    TypeSymbolType,
 };
 
 pub trait ScopeLike {
@@ -92,6 +92,7 @@ impl Scope {
                 fields,
                 methods,
                 statics,
+                prefab: None,
             }) => {
                 for field in fields {
                     self.check_variable_type(&mut field.1)?;
@@ -344,12 +345,7 @@ impl ScopeLike for InterpreterValue {
                 .cloned()
                 .ok_or(Error::SymbolNotFound(name.clone())),
             InterpreterValue::Strong(inner) => inner.borrow().resolve_value(name),
-            InterpreterValue::BuiltinStruct(name, value) => unsafe {
-                let boxed = Box::from_raw(*value as *mut (dyn BuiltinStruct + 'static));
-                let res = boxed.resolve_value(name);
-                Box::leak(boxed);
-                res
-            },
+            InterpreterValue::BuiltinStruct(name, value) => value.borrow().resolve_value(name),
             _ => Err(Error::OperationUnsupported {
                 operation: "resolve_value".to_owned(),
                 type_of: "type is not a scope or struct".to_owned(),
@@ -377,12 +373,9 @@ impl ScopeLike for InterpreterValue {
                 }
             }
             InterpreterValue::Strong(inner) => inner.borrow_mut().set_value(name, value),
-            InterpreterValue::BuiltinStruct(name, self_val) => unsafe {
-                let mut boxed = Box::from_raw(*self_val as *mut (dyn BuiltinStruct + 'static));
-                let res = boxed.set_value(name, value);
-                Box::leak(boxed);
-                res
-            },
+            InterpreterValue::BuiltinStruct(name, self_val) => {
+                self_val.borrow_mut().set_value(name, value)
+            }
             _ => unimplemented!(),
         }
     }
@@ -441,12 +434,7 @@ impl ScopeLike for InterpreterValue {
                 }
             }
             InterpreterValue::Strong(inner) => inner.borrow().resolve_type(name),
-            InterpreterValue::BuiltinStruct(name, self_val) => unsafe {
-                let boxed = Box::from_raw(*self_val as *mut (dyn BuiltinStruct + 'static));
-                let res = boxed.resolve_type(name);
-                Box::leak(boxed);
-                res
-            },
+            InterpreterValue::BuiltinStruct(name, self_val) => self_val.borrow().resolve_type(name),
             _ => unimplemented!(),
         }
     }

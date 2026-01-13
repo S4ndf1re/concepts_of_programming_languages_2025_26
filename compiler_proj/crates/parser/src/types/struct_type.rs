@@ -1,15 +1,24 @@
-use std::{fmt::Display, hash::Hash, iter::zip};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, hash::Hash, iter::zip, rc::Rc};
 
-use crate::{FunctionType, Symbol, TypeSymbol};
+use crate::{BuiltinStruct, Error, FunctionType, InterpreterValue, Scope, Symbol, TypeSymbol};
 
+pub trait Instantiable {
+    fn instantiate(
+        &self,
+        local_scope: Rc<RefCell<Scope>>,
+        params: HashMap<Symbol, Box<InterpreterValue>>,
+    ) -> Result<InterpreterValue, Error>;
+    fn get_required_parameters(&self) -> HashMap<Symbol, TypeSymbol>;
+}
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct StructType {
     pub name: Symbol,
     pub fields: Vec<(Symbol, TypeSymbol)>,
     // Methods are assumed to start with "self"
     pub methods: Vec<(Symbol, FunctionType)>,
     pub statics: Vec<(Symbol, FunctionType)>,
+    pub prefab: Option<Rc<dyn BuiltinStruct>>,
 }
 
 impl PartialEq for StructType {
@@ -61,5 +70,38 @@ impl Display for StructType {
             write!(f, "{}: {},", function.0, function.1)?;
         }
         Ok(())
+    }
+}
+
+impl Instantiable for StructType {
+    fn instantiate(
+        &self,
+        scope: Rc<RefCell<Scope>>,
+        params: HashMap<Symbol, Box<InterpreterValue>>,
+    ) -> Result<InterpreterValue, Error> {
+        if let Some(prefab) = &self.prefab {
+            return prefab.instantiate(scope, params);
+        }
+        for param in &self.fields {
+            if params.contains_key(&param.0) {
+                Err(Error::CantBeEmpty)?
+            }
+        }
+
+        let struct_value =
+            InterpreterValue::Struct(self.name.clone(), scope, params).make_reference_counted()?;
+
+        Ok(struct_value)
+    }
+
+    fn get_required_parameters(&self) -> HashMap<Symbol, TypeSymbol> {
+        if let Some(prefab) = &self.prefab {
+            return prefab.get_required_parameters();
+        }
+
+        self.fields
+            .iter()
+            .map(|value| (value.0.clone(), value.1.clone()))
+            .collect::<HashMap<_, _>>()
     }
 }

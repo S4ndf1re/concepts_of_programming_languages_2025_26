@@ -24,7 +24,7 @@ pub enum InterpreterValue {
         Rc<RefCell<Scope>>,
         HashMap<Symbol, Box<InterpreterValue>>,
     ),
-    BuiltinStruct(Symbol, *const dyn BuiltinStruct),
+    BuiltinStruct(Symbol, Rc<RefCell<dyn BuiltinStruct>>),
     Option(Option<Box<InterpreterValue>>),
     Result(Result<Box<InterpreterValue>, Box<InterpreterValue>>),
     Function(Symbol), // Functions execution body is contained in its type definition,
@@ -617,6 +617,7 @@ impl From<InterpreterValue> for Option<TypeSymbol> {
             InterpreterValue::Struct(name, scope, _fields) => {
                 scope.borrow().resolve_defined_type(name)
             }
+            InterpreterValue::BuiltinStruct(_, value) => value.borrow().resolve_builtin_type(),
             InterpreterValue::Component(name, scope, _fields) => {
                 scope.borrow().resolve_defined_type(name)
             }
@@ -680,18 +681,6 @@ impl Component for InterpreterValue {
             InterpreterValue::Component(name, _, _)
             | InterpreterValue::ComponentPlaceholder(name) => name.clone(),
             _ => panic!("is not a componetn"),
-        }
-    }
-}
-
-impl Drop for InterpreterValue {
-    fn drop(&mut self) {
-        if let InterpreterValue::BuiltinStruct(_, ptr) = self {
-            // Make sure this is dropped to avoid memory leak
-            unsafe {
-                let boxxed = Box::from_raw(*ptr as *mut (dyn BuiltinStruct + 'static));
-                drop(boxxed);
-            }
         }
     }
 }

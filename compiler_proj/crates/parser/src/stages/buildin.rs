@@ -1,28 +1,22 @@
-use std::{cell::RefCell, fmt::Debug, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 use ecs::World;
 
 use crate::{
-    BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, InterpreterValue, IsReturn,
-    Scope, ScopeLike, StructType, Symbol, TypeSymbol, TypeSymbolType,
+    BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, Instantiable,
+    InterpreterValue, IsReturn, Scope, ScopeLike, StructType, Symbol, TypeSymbol, TypeSymbolType,
 };
 
-pub trait BuiltinStruct: Debug + ScopeLike {
-    fn to_type(&self) -> Result<TypeSymbol, Error>;
-    fn instantiate(params: Vec<(Symbol, InterpreterValue)>) -> Result<InterpreterValue, Error>
-    where
-        Self: Sized;
-
-    fn take_self_and_drop(self)
-    where
-        Self: Sized,
-    {
-    }
+pub trait BuiltinStruct: Debug + ScopeLike + Instantiable {
+    fn to_type(self) -> Result<TypeSymbol, Error>;
+    fn resolve_builtin_type(&self) -> Option<TypeSymbol>;
+    fn name(&self) -> String;
 }
 
 #[derive(Debug)]
 pub struct BuiltinList {
     container: Vec<InterpreterValue>,
+    defining_scope: Rc<RefCell<Scope>>,
 }
 
 // TODO: Find a way to actually insert the struct as a type in eval member call within the interpreter
@@ -41,18 +35,14 @@ impl BuiltinList {
         }
     }
 
-    pub fn push_converted(scope: Rc<RefCell<Scope>>) -> Result<IsReturn, Error> {
+    pub fn push_converted(scope: Rc<RefCell<Scope>>, _world: &World) -> Result<IsReturn, Error> {
         let slf = scope.resolve_value(&"self".to_owned())?;
         let value = scope.resolve_value(&"value".to_owned())?;
 
         match &slf.deref_value()? {
             InterpreterValue::BuiltinStruct(_name, ptr) => unsafe {
-                let unboxxed_slf = *ptr as *mut (dyn BuiltinStruct + 'static) as *mut BuiltinList;
-                let mut boxxed_slf = Box::from_raw(unboxxed_slf);
-
-                boxxed_slf.push(value)?;
-
-                Box::leak(boxxed_slf);
+                let val = (&mut *ptr.borrow_mut()) as *mut dyn BuiltinStruct as *mut BuiltinList;
+                (*val).push(value)?;
             },
             _ => Err(Error::OperationUnsupported {
                 operation: "builtin".to_owned(),
@@ -66,14 +56,10 @@ impl BuiltinList {
     pub fn pop_converted(scope: Rc<RefCell<Scope>>, _world: &World) -> Result<IsReturn, Error> {
         let slf = scope.resolve_value(&"self".to_owned())?;
 
-        match &slf.deref_value()? {
+        match &mut slf.deref_value()? {
             InterpreterValue::BuiltinStruct(_name, ptr) => unsafe {
-                let unboxxed_slf = *ptr as *mut (dyn BuiltinStruct + 'static) as *mut BuiltinList;
-                let mut boxxed_slf = Box::from_raw(unboxxed_slf);
-
-                let value = boxxed_slf.pop()?;
-
-                Box::leak(boxxed_slf);
+                let val = (&mut *ptr.borrow_mut()) as *mut dyn BuiltinStruct as *mut BuiltinList;
+                let value = (*val).pop()?;
                 Ok(IsReturn::Return(value))
             },
             _ => Err(Error::OperationUnsupported {
@@ -105,30 +91,71 @@ impl ScopeLike for BuiltinList {
     }
 }
 
+impl Instantiable for BuiltinList {
+    fn instantiate(
+        &self,
+        local_scope: Rc<RefCell<Scope>>,
+        _params: std::collections::HashMap<Symbol, Box<InterpreterValue>>,
+    ) -> Result<InterpreterValue, Error> {
+        let new_value = Self {
+            container: vec![],
+            defining_scope: local_scope,
+        };
+
+        Ok(InterpreterValue::Strong(Rc::new(RefCell::new(
+            InterpreterValue::BuiltinStruct(
+                "BuiltinList".to_owned(),
+                Rc::new(RefCell::new(new_value)),
+            ),
+        ))))
+    }
+
+    fn get_required_parameters(&self) -> std::collections::HashMap<Symbol, TypeSymbol> {
+        // is emtpy, as no args are required
+        HashMap::new()
+    }
+}
+
 impl BuiltinStruct for BuiltinList {
-    fn to_type(&self) -> Result<TypeSymbol, Error> {
+    fn to_type(self) -> Result<TypeSymbol, Error> {
         Ok(TypeSymbol::strong(TypeSymbolType::Struct(StructType {
-            name: "BuiltinList".to_owned(),
-            methods: vec![(
-                "push".to_owned(),
-                FunctionType {
-                    name: "push".to_owned(),
-                    is_method: true,
-                    params: vec![("value".to_owned(), TypeSymbol::strong(TypeSymbolType::Any))],
-                    return_type: None,
-                    execution_body: FunctionExecutionStrategy::Buildin(Self::pop_converted),
-                },
-            )],
+            name: self.name(),
+            methods: vec![
+                (
+                    "push".to_owned(),
+                    FunctionType {
+                        name: "push".to_owned(),
+                        is_method: true,
+                        params: vec![("value".to_owned(), TypeSymbol::strong(TypeSymbolType::Any))],
+                        return_type: None,
+                        execution_body: FunctionExecutionStrategy::Buildin(Self::push_converted),
+                    },
+                ),
+                (
+                    "pop".to_owned(),
+                    FunctionType {
+                        name: "pop".to_owned(),
+                        is_method: true,
+                        params: vec![],
+                        return_type: None,
+                        execution_body: FunctionExecutionStrategy::Buildin(Self::pop_converted),
+                    },
+                ),
+            ],
             statics: vec![],
             fields: vec![],
+            prefab: Some(Rc::new(self)),
         })))
     }
 
-    fn instantiate(_params: Vec<(Symbol, InterpreterValue)>) -> Result<InterpreterValue, Error> {
-        let boxxed = Box::new(Self { container: vec![] });
-        Ok(InterpreterValue::Strong(Rc::new(RefCell::new(
-            InterpreterValue::BuiltinStruct("BuiltinList".to_owned(), Box::leak(boxxed)),
-        ))))
+    fn name(&self) -> String {
+        "BuiltinList".to_owned()
+    }
+
+    fn resolve_builtin_type(&self) -> Option<TypeSymbol> {
+        self.defining_scope
+            .borrow()
+            .resolve_defined_type(&self.name())
     }
 }
 
@@ -175,14 +202,14 @@ impl BuildinFunctionDescription {
     }
 }
 
-pub fn register_buildin(scope: &mut Scope) -> Result<(), Error> {
+pub fn register_buildin(scope: Rc<RefCell<Scope>>) -> Result<(), Error> {
     let println_descriptor = BuildinFunctionDescription {
         name: "println".to_string(),
         callback: println,
         params: vec![("val".to_string(), TypeSymbol::strong(TypeSymbolType::Any))],
         return_type: None,
     };
-    println_descriptor.add_to_scope(scope)?;
+    println_descriptor.add_to_scope(&mut scope.borrow_mut())?;
 
     let assert_descriptor = BuildinFunctionDescription {
         name: "assert".to_string(),
@@ -190,7 +217,7 @@ pub fn register_buildin(scope: &mut Scope) -> Result<(), Error> {
         params: vec![("attr".to_string(), TypeSymbol::strong(TypeSymbolType::Bool))],
         return_type: None,
     };
-    assert_descriptor.add_to_scope(scope)?;
+    assert_descriptor.add_to_scope(&mut scope.borrow_mut())?;
 
     let stop_descriptor = BuildinFunctionDescription {
         name: "stop".to_string(),
@@ -198,7 +225,17 @@ pub fn register_buildin(scope: &mut Scope) -> Result<(), Error> {
         params: vec![],
         return_type: None,
     };
-    stop_descriptor.add_to_scope(scope)?;
+    stop_descriptor.add_to_scope(&mut scope.borrow_mut())?;
+
+    let list = BuiltinList {
+        container: vec![],
+        defining_scope: Rc::clone(&scope),
+    };
+    let name = list.name();
+    let type_of = list.to_type()?;
+    scope
+        .borrow_mut()
+        .declare_type(name, type_of, false, 0..1)?;
 
     Ok(())
 }

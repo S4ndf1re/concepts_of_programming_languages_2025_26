@@ -31,14 +31,14 @@ pub fn run_system(
 pub struct Preprocessor<'w> {
     ast: Vec<AstNode>,
     world: Option<&'w World>,
-    global_scope: Scope,
+    global_scope: Rc<RefCell<Scope>>,
     interpreter: Option<Rc<RefCell<Interpreter>>>,
 }
 
 impl<'w> Preprocessor<'w> {
     pub fn new() -> Result<Self, Error> {
         Ok(Self {
-            global_scope: Scope::default(),
+            global_scope: Rc::new(RefCell::new(Scope::default())),
             ast: vec![],
             world: None,
             interpreter: None,
@@ -59,8 +59,9 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
             });
         }
 
-        let scope = &mut self.global_scope;
+        let scope = Rc::clone(&self.global_scope);
         scope
+            .borrow_mut()
             .declare_type(
                 "int".to_owned(),
                 TypeSymbol::strong(TypeSymbolType::Int),
@@ -69,6 +70,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
             )
             .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
         scope
+            .borrow_mut()
             .declare_type(
                 "float".to_owned(),
                 TypeSymbol::strong(TypeSymbolType::Float),
@@ -78,6 +80,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
             .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
 
         scope
+            .borrow_mut()
             .declare_type(
                 "bool".to_owned(),
                 TypeSymbol::strong(TypeSymbolType::Bool),
@@ -87,6 +90,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
             .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
 
         scope
+            .borrow_mut()
             .declare_type(
                 "string".to_owned(),
                 TypeSymbol::strong(TypeSymbolType::String),
@@ -100,7 +104,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
         Ok(())
     }
 
-    fn run(mut self, _world: &'w World, source: String) -> Result<StageResult<'w>, ErrorWithRange> {
+    fn run(self, _world: &'w World, source: String) -> Result<StageResult<'w>, ErrorWithRange> {
         let mut other_nodes = Vec::new();
 
         for node in self.ast {
@@ -125,6 +129,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                 }));
                             // SAFETY: Is always initialized
                             self.global_scope
+                                .borrow_mut()
                                 .declare_function(
                                     typename,
                                     fun,
@@ -177,9 +182,11 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                     fields: attributes,
                                     methods,
                                     statics,
+                                    prefab: None,
                                 }));
 
                             self.global_scope
+                                .borrow_mut()
                                 .declare_type(typename, struct_def, true, node.range.clone())
                                 .map_err(|err| ErrorWithRange {
                                     err,
@@ -194,6 +201,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                 }));
 
                             self.global_scope
+                                .borrow_mut()
                                 .declare_type(typename, struct_def, true, node.range.clone())
                                 .map_err(|err| ErrorWithRange {
                                     err,
@@ -273,6 +281,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                             }));
                             // SAFETY: Is always initialized
                             self.global_scope
+                                .borrow_mut()
                                 .declare_system(
                                     typename,
                                     sys,
@@ -332,7 +341,9 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
             }
         }
         Ok(StageResult::Preprocessor(
+            // NOTE(Jan): make sure to never use global_scope ever again
             self.global_scope
+                .take()
                 .check_all_types_after_pre_resolve()
                 .map_err(|err| ErrorWithRange { err, range: 0..1 })?,
             other_nodes,
