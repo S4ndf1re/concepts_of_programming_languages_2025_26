@@ -20,8 +20,9 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use ecs::World;
+    use parser_types::{BeautifyError, ast_grammar};
 
-    use crate::{BeautifyError, Interpreter, Preprocessor, Stage, StageResult, ast_grammar};
+    use crate::{Interpreter, Preprocessor, Stage, StageResult};
 
     #[test]
     fn test_preprocessing() {

@@ -1,0 +1,572 @@
+use std::str::FromStr;
+use crate::*;
+
+grammar;
+
+match {
+    r"\s*" => { },
+    r"\/\/[^\n\r]*[\n\r]*" => { }, // Skip `// comments`
+    r"[0-9]+" => INT,
+    r"[0-9]+\.[0-9]+" => FLOAT,
+    "true" => BOOLTRUE,
+    "false" => BOOLFALSE,
+    r#""(\\\\|\\"|\\n|\\t|\\r|[^"\\])*""# => STRING,
+    r"[a-zA-Z][a-zA-Z_0-9]*" => ID,
+    "(" => l_paren,
+    ")" => r_paren,
+    "[" => l_bracket,
+    "]" => r_bracket,
+    "{" => l_brace,
+    "}" => r_brace,
+    "<" => l_angle,
+    ">" => r_angle,
+    "+" => plus,
+    "-" => minus,
+    "*" => asterisk,
+    "/" => slash,
+    "%" => modulo,
+    "<=" => less_equals,
+    ">=" => greater_equals,
+    "==" => equals,
+    "!=" => not_equals,
+    "=" => assign,
+    "+=" => assign_add,
+    "-=" => assign_sub,
+    "*=" => assign_mul,
+    "/=" => assign_div,
+    "%=" => assign_mod,
+    ":=" => declare,
+    "&&" => and,
+    "||" => or,
+    "->" => right_arrow,
+    "fn" => fn_term,
+    "system" => system_term,
+    "struct" => struct_term,
+    "component" => component_term,
+    "let" => let_term,
+    "while" => while_term,
+    "for" => for_term,
+    "in" => in_term,
+    "if" => if_term,
+    "else" => else_term,
+    "return" => return,
+    "with" => with,
+    "default" => default,
+    "import" => import,
+    "native" => native,
+    "spawn" => spawn_term,
+    "as" => as_term,
+    "ffi" => ffi,
+    ";" => semicolon,
+    ":" => colon,
+    "." => dot,
+    "," => comma,
+    "!" => exclamation_mark,
+    "?" => question_mark,
+    "weak" => weak_term,
+    "none" => none_term,
+    "some" => some_term,
+    "ok" => ok_term,
+    "err" => err_term,
+    "self" => self_term,
+    "querying" => querying_term,
+    "List" => list_query_term,
+    "Single" => single_query_term,
+    "World" => world_query_term,
+    "Resource" => resource_query_term,
+    "EventReader" => evt_reader_query_term,
+    "EventWriter" => evt_writer_query_term,
+    "of" => of_term,
+    // Grouping
+    "group" => group_term,
+    "register" => register_term,
+    "after" => after_term,
+    "before" => before_term,
+    // entities
+    "create" => create_term,
+    "remove" => remove_term,
+    "entity" => entity_term,
+    // Entity Events
+    "trigger" => trigger_term,
+
+}
+
+/// Matches a or 1,...,n meaning any comma separated list
+Comma<T>: Vec<T> = { // (0)
+    <mut v:(<T> comma)*> <e:T?> => match e { // (1)
+        None=> v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+/// Matches a or 1,...,n meaning any comma separated list
+CommaNoPrecedence<T>: Vec<T> = { // (0)
+    <mut v:(<T> comma)*> <e:T> =>  { // (1)
+        v.push(e);
+        v
+    }
+};
+
+/// Matches a or 1,...,n meaning any comma separated list
+Dot<T>: Vec<T> = { // (0)
+    <mut v:(<T> dot)*> <e:T> =>  { // (1)
+        v.push(e);
+        v
+    }
+};
+
+/// Matches a or 1 ->... ->n meaning any right_arrow separated list
+Arrow<T>: Vec<T> = { // (0)
+    <mut v:(<T> right_arrow)*> <e:T> =>  { // (1)
+        v.push(e);
+        v
+    }
+};
+
+/// Start point of the grammar
+pub Programm: Vec<AstNode> = {
+    <imports:Import*> <statements:Statement*> => imports.into_iter().chain(statements).collect::<Vec<AstNode>>()
+};
+
+/// Any import, i.e. native ffi import and normal
+Import: AstNode = {
+    <l:@L> import <module:id> <alias:AliasRule?> semicolon <r:@R> => AstNode::new(l..r, AstNodeType::Import(module, alias)),
+    <l:@L> import native <header:string> <lib:string> <alias:AliasRule?> semicolon <r:@R> => AstNode::new(l..r, AstNodeType::ImportNative(header, lib, alias)),
+};
+
+/// Any statement, meaning if, while, for, anything non returnable like function definitions, struct definitions and assignments. Additionally Returnable statements with semicolon
+Statement: AstNode = {
+    #[precedence(level="0")]
+    NonReturnable,
+    If, //Note: das if ist hier nicht zweideutig, wegen dem LR(1)-Lookup von dem Semikolon
+    While,
+    For,
+    #[precedence(level="1")] #[assoc(side="left")]
+    ReturnableStatement,
+};
+
+/// Anything that may return a value, but with a trailing semicolon
+ReturnableStatement: AstNode = {
+    <Returnable> semicolon,
+
+}
+
+/// Anything returnable, like function calls, symbols (return themselves) and primities
+Returnable: AstNode = {
+    Logic,
+};
+
+
+/// Any logic operation, i.e. a && b || c
+Logic: AstNode = {
+    #[precedence(level="0")]
+    Comparison,
+    #[precedence(level="1")] #[assoc(side="left")]
+    <l:@L> <a:Logic> and <b:Logic> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::And, Box::new(b))),
+    #[precedence(level="2")] #[assoc(side="left")]
+    <l:@L> <a:Logic> or <b:Logic> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Or, Box::new(b))),
+}
+
+/// Any comparison like a == b , b < c
+Comparison: AstNode = {
+    #[precedence(level="0")]
+    Math,
+    #[precedence(level="1")] #[assoc(side="left")]
+    <l: @L> <a:Comparison> equals <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Equals, Box::new(b))),
+    <l: @L> <a:Comparison> not_equals <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::NotEquals, Box::new(b))),
+    <l: @L> <a:Comparison> l_angle <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::LessThan, Box::new(b))),
+    <l: @L> <a:Comparison> less_equals <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::LessThanEquals, Box::new(b))),
+    <l: @L> <a:Comparison> r_angle <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::GreaterThan, Box::new(b))),
+    <l: @L> <a:Comparison> greater_equals <b:Comparison> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::GreaterThanEquals, Box::new(b))),
+}
+
+/// Any math operation like a + b * c, additionally, unary operators like !a und -a are supported here
+Math: AstNode = {
+    #[precedence(level="0")]
+    Term,
+    #[precedence(level="1")] #[assoc(side="right")] // Unary
+    <l:@L> exclamation_mark <m:Math> <r:@R> => AstNode::new(l..r, AstNodeType::PrefixCall(PrefixOperator::Not, Box::new(m))),
+    <l:@L> minus <m:Math> <r:@R> => AstNode::new(l..r, AstNodeType::PrefixCall(PrefixOperator::Negate, Box::new(m))),
+    #[precedence(level="2")] #[assoc(side="left")] // Infix
+    <l:@L> <a:Math> asterisk <b:Math> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Multiply, Box::new(b))),
+    <l:@L> <a:Math> slash <b:Math> <r:@R> =>    AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Divide, Box::new(b))),
+    <l:@L> <a:Math> modulo <b:Math> <r:@R> =>   AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Modulo, Box::new(b))),
+    #[precedence(level="3")] #[assoc(side="left")]
+    <l:@L> <a:Math> plus <b:Math> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Plus, Box::new(b))),
+    <l:@L> <a:Math> minus <b:Math> <r:@R> => AstNode::new(l..r, AstNodeType::InfixCall(Box::new(a), InfixOperator::Minus, Box::new(b))),
+}
+
+
+Id: AstNode = {
+    <l:@L> <ma:MemberAccess> <r:@R> => AstNode::new(l..r, AstNodeType::MemberCall{calls: ma}),
+    <l:@L> weak_term <ma:MemberAccess> <r:@R> => AstNode::new(l..r, AstNodeType::Weak(Box::new(AstNode::new(l..r, AstNodeType::MemberCall{calls: ma})))),
+}
+
+/// Anything that is returnable. Is used in all logic and math rules
+Term: AstNode = {
+    Primitive,
+    Id,
+    l_paren <Returnable> r_paren,
+    ListCreate,
+    MapCreate,
+    OptionCreate,
+    ResultCreate,
+}
+
+/// Creates some(v) or none as an option
+OptionCreate: AstNode = {
+    <l:@L> none_term <r:@R> => AstNode::new(l..r, AstNodeType::Option(None)),
+    <l:@L> some_term l_paren <v:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Option(Some(Box::new(v)))),
+}
+
+/// Creates ok(v) or err(v) as a result
+ResultCreate: AstNode = {
+    <l:@L> err_term l_paren <e:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Result(Err(Box::new(e)))),
+    <l:@L> ok_term l_paren <v:Returnable> r_paren <r:@R> => AstNode::new(l..r, AstNodeType::Result(Ok(Box::new(v)))),
+}
+
+/// Creates [a,b,c, ...] as a list ([] also supported)
+ListCreate: AstNode = {
+    <l:@L> l_bracket <elems:Comma<Returnable>> r_bracket <r:@R> => AstNode::new(l..r, AstNodeType::List(elems.into_iter().map(|e| Box::new(e)).collect::<Vec<_>>()))
+}
+
+/// Creates {a -> b, b -> c} as a map
+MapElem: (Box<AstNode>, Box<AstNode>) = {
+    <a:Returnable> right_arrow <b:Returnable> => (Box::new(a), Box::new(b)),
+}
+
+MapCreate: AstNode = {
+    <l:@L> l_brace <mapped:Comma<MapElem>> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::Map(mapped)),
+}
+
+
+/// Is used in member call
+StructAssignmentList: Vec<(Symbol, Box<AstNode>)> = {
+    <p:StructParamRule> <n:FurtherStructAssignment> => vec![p].into_iter().chain(n).collect::<Vec<_>>(),
+}
+
+FurtherStructAssignment: Vec<(Symbol, Box<AstNode>)> = {
+    comma <StructAssignmentList>,
+    comma => vec![],
+}
+
+
+/// Defines any function
+FunctionDefinition: AstNode = {
+    <l:@L> fn_term <name:id> l_paren <args:Comma<TypeParamRule>> r_paren <ret:ReturnTypeRule?> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef {typename: name, typedef: AstTypeDefinition::Function(args, ret), execution_body: body}),
+}
+
+
+SystemDefinition: AstNode = {
+    <l:@L> system_term <name:id> l_paren <args:SystemParams> r_paren <queries:QueryingWithTerm?> l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef {typename: name, typedef: AstTypeDefinition::System(args, queries), execution_body: body}),
+}
+
+SystemParams: Vec<(Symbol, Symbol)> = {
+    Comma<(<id> colon <id>)>
+}
+
+QueryingWithTerm: Vec<Query> = {
+    querying_term <Comma<SystemQuerying>>
+}
+
+SystemQuerying: Query = {
+    <param:id> as_term <type_of:SystemQueryingType> => Query {
+        symbol: param,
+        type_of,
+    }
+}
+
+SystemQueryingType: QueryType = {
+    list_query_term with l_brace <comps:Comma<id>> <cond:(modulo l_brace <QueryCondition> r_brace)?> r_brace => QueryType::List {
+        select: QueryTerm {components: comps},
+        condition: cond,
+    },
+    single_query_term with l_brace <comps:Comma<id>> <cond:(modulo l_brace <QueryCondition> r_brace)?> r_brace => QueryType::Single {
+        select: QueryTerm {components: comps},
+        condition: cond,
+    },
+    world_query_term => QueryType::World,
+    resource_query_term of_term <res:id> => QueryType::Resource(res),
+    evt_reader_query_term for_term <evt:id> => QueryType::EventReader(evt),
+    evt_writer_query_term for_term <evt:id> => QueryType::EventWriter(evt),
+}
+
+QueryCondition: QueryCond = {
+    #[precedence(level="0")]
+    QueryBasicEntity,
+    #[precedence(level="1")] #[assoc(side="left")]
+    exclamation_mark <q:QueryCondition> => QueryCond::Not(Box::new(q)),
+    #[precedence(level="2")] #[assoc(side="left")]
+    <q1:QueryCondition> and <q2:QueryCondition> => QueryCond::And(Box::new(q1), Box::new(q2)),
+    #[precedence(level="3")] #[assoc(side="left")]
+    <q1:QueryCondition> or <q2:QueryCondition> => QueryCond::Or(Box::new(q1), Box::new(q2)),
+}
+
+QueryBasicEntity: QueryCond = {
+    <cond:id> => QueryCond::Component(cond),
+    l_paren <QueryCondition> r_paren,
+}
+
+MemberAccessSegment: MemberAccess = {
+    <l:@L> <name:id> <r:@R> => MemberAccess{member: name , type_of: MemberAccessType::Symbol, range: l..r},
+    <l:@L> <name_self:self_term> <r:@R> => MemberAccess{member: name_self.to_owned(), type_of: MemberAccessType::Symbol, range: l..r},
+    <l:@L> <name:id> l_paren <params:Comma<ReturnableOrIf>> r_paren <r:@R> => MemberAccess{member: name, type_of: MemberAccessType::Function(params.into_iter().map(|p| Box::new(p)).collect::<Vec<_>>()), range: l..r},
+    <l:@L> <name:id> l_brace <params:StructAssignmentList?> r_brace <r:@R> => MemberAccess{member: name, type_of: MemberAccessType::Struct(params.unwrap_or_default()), range: l..r},
+    <l:@L> <name:id> l_bracket <idx:int> r_bracket <r:@R> => MemberAccess{member: name, type_of: MemberAccessType::Index(idx), range: l..r },
+}
+
+MemberAccess: Vec<MemberAccess> = { //a.b.c().e
+    <head:MemberAccessSegment> <tail:(dot <MemberAccessSegment>)*> => {
+        let mut v = vec![head];
+        v.extend(tail.into_iter());
+        v
+    }
+}
+
+/// Any struct definition s {a: float, b: int, fn abc() {} }
+StructDefinition: AstNode = {
+    <l:@L> struct_term <name:id> l_brace <body:StructBlock> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef{typename: name, typedef: AstTypeDefinition::Struct(body.attributes), execution_body: body.functions}),
+}
+
+/// Any component definition s {a: float, b: int }, note, that member functions are NOT allowed!!
+ComponentDefinition: AstNode = {
+    <l:@L> component_term <name:id> l_brace <body:ComponentBlock> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef{typename: name, typedef: AstTypeDefinition::Component(body.attributes), execution_body: vec![]}),
+}
+
+/// Anything that may not return, i.e. struct and function definitions, inclusive assignments
+NonReturnable: AstNode = {
+    <AssignmentOrDeclarationOrRegisterOrEntity> semicolon,
+    FunctionDefinition,
+    SystemDefinition,
+    StructDefinition,
+    ComponentDefinition,
+    GroupDefinition,
+    <l:@L> return <a:ReturnableOrIf> semicolon <r:@R>=> AstNode::new(l..r, AstNodeType::ReturnStatement{return_value: Box::new(a)}),
+};
+
+
+If: AstNode = {
+    <l:@L> if_term l_paren <cond:Returnable> r_paren l_brace <body:Block> r_brace <elif:ElseIf*> <el:Else?> <r:@R> => AstNode::new(l..r, AstNodeType::Branch {cond: Box::new(cond), body, else_if_branches: elif, else_branch: el}),
+}
+
+ElseIf: (Box<AstNode>, Vec<Box<AstNode>>) = {
+    else_term if_term l_paren <cond:Returnable> r_paren l_brace <body:Block> r_brace => (Box::new(cond), body),
+}
+
+Else: Vec<Box<AstNode>> = {
+    else_term l_brace <Block> r_brace,
+}
+
+While: AstNode = {
+    <l:@L> while_term l_paren <cond:Returnable> r_paren l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::While {cond: Box::new(cond), body}),
+}
+
+For: AstNode = {
+    <l:@L> for_term l_paren <s:id> in_term <iter:Returnable> r_paren l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::ForEach {recipient: s, iterable: Box::new(iter), body}),
+    <l:@L> for_term l_paren <d:ForAssignmentOrDeclaration?> semicolon <cond:Returnable?> semicolon <a:ForAssignment?> r_paren l_brace <body:Block> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::For {declaration: d.map(|d| Box::new(d)), condition: cond.map(|cond| Box::new(cond)), assignment: a.map(|a| Box::new(a)), body}),
+}
+
+
+ReturnableOrIf: AstNode = {
+    Returnable,
+    If,
+}
+
+/// let a = b; or a := b;
+Declaration: AstNode = {
+    <l:@L> <s:id> declare <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None}),
+    <l:@L> let_term <st:TypeParamRule> assign <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)}),
+}
+
+ForDeclaration: AstNode = {
+    <l:@L> <s:id> declare <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: s, expression: Box::new(e), assumed_type: None}),
+    <l:@L> let_term <st:TypeParamRule> assign <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::Declaration{new_symbol: st.0, expression: Box::new(e), assumed_type: Some(st.1)}),
+}
+
+/// a = b; also a += b; a -= b; etc.
+Assignment: AstNode = {
+    <l:@L> <s:MemberAccess> assign     <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Identity, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign_add <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Add, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign_sub <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign_mul <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign_div <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Divide, expression: Box::new(e)}),
+    <l:@L> <s:MemberAccess> assign_mod <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: s, operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
+}
+
+ForAssignment: AstNode = {
+    <l:@L> <s:id> assign     <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Identity, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_add <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Add, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_sub <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Subtract, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_mul <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Multiply, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_div <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Divide, expression: Box::new(e)}),
+    <l:@L> <s:id> assign_mod <e:ReturnableOrIf> <r:@R> => AstNode::new(l..r, AstNodeType::AssignmentOp{recipient: vec![MemberAccess{member: s, type_of: MemberAccessType::Symbol, range: l..r}], operation: AssignmentOperations::Modulo, expression: Box::new(e)}),
+}
+
+ForAssignmentOrDeclaration = {
+    ForDeclaration,
+    ForAssignment,
+}
+
+AssignmentOrDeclaration = {
+    Declaration,
+    Assignment,
+}
+
+AssignmentOrDeclarationOrRegister = {
+    Declaration,
+    Assignment,
+    RegisterRule,
+}
+
+AssignmentOrDeclarationOrRegisterOrEntity = {
+    Declaration,
+    Assignment,
+    RegisterRule,
+    CreateEntity,
+}
+
+/// Any block of a list of statements, primarily used in functions, loops and if branches
+/// Additionally, the last statement may be returnable
+Block: Vec<Box<AstNode>> = {
+    <s:Statement*> <r:Returnable?> => {
+            let mut v = s.into_iter().map(|s| Box::new(s)).collect::<Vec<_>>();
+            if let Some(r) = r {
+                v.push(Box::new(r));
+            }
+            v
+        },
+}
+
+
+/// A block specifically for struct definitions
+StructBlock: StructBody = {
+    <func:FunctionDefinition> <body:StructBlock?> => if let Some(body) = body {
+        StructBody {functions: body.functions.into_iter().chain(vec![Box::new(func)]).collect::<Vec<_>>(), attributes: body.attributes}
+    } else {
+        StructBody {functions: vec![Box::new(func)], attributes: Vec::new()}
+    },
+    <attr:TypeParamRule> <body:FurtherStructBlock?> => if let Some(body) = body.flatten() {
+        StructBody {functions: body.functions, attributes: body.attributes.into_iter().chain(vec![attr]).collect::<Vec<_>>()}
+    } else {
+        StructBody {functions: Vec::new(), attributes: vec![attr]}
+    },
+}
+
+/// A block specifically for struct definitions
+ComponentBlock: ComponentBody = {
+    <attr:TypeParamRule> <body:FurtherComponentBlock?> => if let Some(body) = body.flatten() {
+        ComponentBody {attributes: body.attributes.into_iter().chain(vec![attr]).collect::<Vec<_>>()}
+    } else {
+        ComponentBody {attributes: vec![attr]}
+    },
+}
+
+FurtherStructBlock: Option<StructBody> = {
+    comma <StructBlock> => Some(<>),
+    comma => None,
+}
+
+FurtherComponentBlock: Option<ComponentBody> = {
+    comma <ComponentBlock> => Some(<>),
+    comma => None,
+}
+
+
+/// a Type definition. Can be weak. Is only combined within the returnTypeRule.
+ReturnType: TypeSymbol = {
+    #[precedence(level="0")]
+    <t:Dot<id>> => TypeSymbol::strong(TypeSymbolType::Symbol(t.join("."))),
+    l_bracket <r:ReturnType> r_bracket => TypeSymbol::strong(TypeSymbolType::List(Box::new(r))),
+    l_brace <a:ReturnType> right_arrow <b:ReturnType> r_brace => TypeSymbol::strong(TypeSymbolType::Map(Box::new(a), Box::new(b))),
+    weak_term <t:ReturnType> => TypeSymbol::make_weak(t),
+
+    #[precedence(level="1")] #[assoc(side="left")]
+    <a:ReturnType> question_mark => TypeSymbol::strong(TypeSymbolType::Option(Box::new(a))),
+    <a:ReturnType> exclamation_mark <b:ReturnType> => TypeSymbol::strong(TypeSymbolType::Result(Box::new(a), Box::new(b))),
+}
+
+
+GroupDefinition: AstNode = {
+    <l:@L> group_term <name:id> l_brace <systems: GroupSystemsRule> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::GroupDef{systems})
+}
+
+GroupSystemsRule: Vec<GroupSystem> = {
+    Comma<GroupSystemRule>
+}
+
+GroupSystemRule: GroupSystem = {
+    <s:id> => GroupSystem::Single(s),
+    <l:id> right_arrow <r:id> => GroupSystem::Ordered(l, r),
+}
+
+RegisterRule: AstNode = {
+    <l:@L> register_term <ty:RegisterTypeRule> <r:@R> => AstNode::new(l..r, AstNodeType::Register {
+        schedule_entity: ty,
+    })
+}
+
+RegisterTypeRule: RegisterType = {
+    <l:Arrow<id>> => RegisterType::Chain(l),
+    <l:id> after_term <r:id> => RegisterType::After(l, r),
+    <l:id> before_term <r:id> => RegisterType::Before(l, r),
+}
+
+/// Any return type
+ReturnTypeRule: TypeSymbol = {
+    colon <t:ReturnType> => t,
+}
+
+CreateEntity: AstNode = {
+    <l:@L> create_term entity_term <name:id> <default_components:(with <CommaNoPrecedence<Returnable>>)?> <r:@R> => AstNode::new(l..r, AstNodeType::EntityDef {name, default_components})
+}
+
+TypeParamRule: (Symbol, TypeSymbol) = {
+    id ReturnTypeRule,
+    self_term => ("self".to_owned(), TypeSymbol::strong(TypeSymbolType::SelfType)),
+    weak_term self_term => ("self".to_owned(), TypeSymbol::weak(TypeSymbolType::SelfType)),
+}
+
+StructParamRule: (Symbol, Box<AstNode>) = {
+    <n:id> colon <v:ReturnableOrIf> => (n, Box::new(v))
+}
+
+AliasRule: Alias = {
+    as_term <id>,
+}
+
+Primitive: AstNode = {
+    <l:@L> <i:int>     <r:@R> => AstNode::new(l..r, AstNodeType::Int(i)),
+    <l:@L> <f:float>   <r:@R> => AstNode::new(l..r, AstNodeType::Float(f)),
+    <l:@L> <s:string>  <r:@R> => AstNode::new(l..r, AstNodeType::String(s)),
+    <l:@L> <b:Bool>    <r:@R> => AstNode::new(l..r, AstNodeType::Bool(b)),
+}
+
+Bool: bool = {
+    bool_true => true,
+    bool_false => false,
+}
+
+// Datatypes
+int: i64 = {
+    INT => i64::from_str(<>).unwrap()
+}
+float: f64 = {
+    FLOAT => f64::from_str(<>).unwrap()
+}
+bool_true: bool = {
+    BOOLTRUE => true
+}
+bool_false: bool = {
+    BOOLFALSE => false
+}
+
+string: String = {
+    <s:STRING> => apply_string_escapes(&s[1..s.len()-1]),
+}
+
+id: String = {
+    <s:ID> => s.to_owned()
+}

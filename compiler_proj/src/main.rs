@@ -44,7 +44,7 @@ fn my_system2(positions: NamedSingleQuery<PositionComponent>) {
 }
 
 fn main() {
-    let mut world = World::default();
+    let world = World::default();
 
     world.add_system(my_system2);
 

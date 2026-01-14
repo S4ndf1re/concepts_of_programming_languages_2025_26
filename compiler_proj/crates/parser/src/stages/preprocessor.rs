@@ -5,12 +5,9 @@ use std::{
 };
 
 use ecs::World;
+use parser_types::{AstNode, AstNodeType, AstTypeDefinition, BeautifyError, ComponentType, Error, ErrorWithRange, FunctionExecutionStrategy, FunctionType, InterpreterValue, RegisterType, Scope, ScopeLike, StructType, SystemExecutionStrategy, SystemType, TypeSymbol, TypeSymbolType};
 
-use crate::{
-    AstNode, AstNodeType, AstTypeDefinition, BeautifyError, ComponentType, Error, ErrorWithRange,
-    FunctionType, Interpreter, InterpreterValue, RegisterType, Scope, ScopeLike, Stage,
-    StageResult, StructType, SystemType, TypeSymbol, TypeSymbolType, register_buildin,
-};
+use crate::{Interpreter, Stage, StageResult, register_buildin};
 
 pub fn run_system(
     sys_name: String,
@@ -123,7 +120,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                     is_method: false,
                                     params,
                                     return_type: return_type.map(Box::new),
-                                    execution_body: crate::FunctionExecutionStrategy::Interpreted(
+                                    execution_body: FunctionExecutionStrategy::Interpreted(
                                         Rc::new(execution_body),
                                     ),
                                 }));
@@ -163,9 +160,9 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                         params,
                                         return_type: return_type.map(Box::new),
                                         execution_body:
-                                            crate::FunctionExecutionStrategy::Interpreted(
-                                                Rc::new(execution_body),
-                                            ),
+                                            FunctionExecutionStrategy::Interpreted(Rc::new(
+                                                execution_body,
+                                            )),
                                     };
 
                                     if is_method {
@@ -275,7 +272,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                 name: typename.clone(),
                                 params,
                                 queries,
-                                execution_body: crate::SystemExecutionStrategy::Interpreted(
+                                execution_body: SystemExecutionStrategy::Interpreted(
                                     execution_body,
                                 ),
                             }));

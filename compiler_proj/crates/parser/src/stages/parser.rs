@@ -1,8 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
 use ecs::World;
+use parser_types::{Error, ErrorWithRange, ast_grammar};
 
-use crate::{Error, ErrorWithRange, Interpreter, Stage, StageResult, ast_grammar};
+use crate::{Interpreter, Stage, StageResult};
 
 #[derive(Default)]
 pub struct Parser<'w> {
@@ -15,7 +16,7 @@ impl<'w> Stage<'w> for Parser<'w> {
     fn init(
         &mut self,
         prev_stage_result: super::StageResult<'w>,
-    ) -> Result<(), crate::ErrorWithRange> {
+    ) -> Result<(), ErrorWithRange> {
         match prev_stage_result {
             StageResult::PreParse(world, content, interpreter) => {
                 self.main_content = Box::leak(Box::new(content));
@@ -28,7 +29,7 @@ impl<'w> Stage<'w> for Parser<'w> {
         Ok(())
     }
 
-    fn run(self, _world: &'w World, _source: String) -> Result<super::StageResult<'w>, crate::ErrorWithRange> {
+    fn run(self, _world: &'w World, _source: String) -> Result<super::StageResult<'w>, ErrorWithRange> {
         let ast = ast_grammar::ProgrammParser::new()
             .parse(self.main_content)
             .map_err(|err| ErrorWithRange {

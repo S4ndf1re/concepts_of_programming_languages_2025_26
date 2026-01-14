@@ -1,21 +1,5 @@
-pub mod ast;
-pub use ast::*;
-
-pub mod errors;
-pub use errors::*;
-
 pub mod stages;
 pub use stages::*;
-
-pub mod types;
-pub use types::*;
-
-pub mod query;
-pub use query::*;
-
-use lalrpop_util::lalrpop_mod;
-
-lalrpop_mod!(pub ast_grammar);
 
 #[cfg(test)]
 mod tests {
@@ -28,8 +12,7 @@ mod tests {
         exec_dot,
         printer::{DotPrinter, PrinterContext},
     };
-
-    use crate::{AstNodeType, BeautifyError, ToGraphviz, ast_grammar};
+    use parser_types::{AstNodeType, BeautifyError, ToGraphviz, ast_grammar};
 
     #[test]
     fn import_test1() {

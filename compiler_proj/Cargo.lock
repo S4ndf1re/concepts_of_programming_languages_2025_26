@@ -427,20 +427,25 @@ dependencies = [
  "derivative",
  "ecs",
  "graphviz-rust",
- "lalrpop",
- "lalrpop-util",
- "parser_macros",
+ "parser_types",
  "rand 0.10.0-rc.5",
  "thiserror",
  "typed-generational-arena",
 ]
 
 [[package]]
-name = "parser_macros"
+name = "parser_types"
 version = "0.1.0"
 dependencies = [
- "quote",
- "syn 2.0.110",
+ "annotate-snippets",
+ "derivative",
+ "ecs",
+ "graphviz-rust",
+ "lalrpop",
+ "lalrpop-util",
+ "rand 0.10.0-rc.5",
+ "thiserror",
+ "typed-generational-arena",
 ]
 
 [[package]]

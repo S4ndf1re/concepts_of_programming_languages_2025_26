@@ -1,8 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
 use ecs::World;
+use parser_types::{AstNode, ErrorWithRange, Scope};
 
-use crate::{AstNode, ErrorWithRange, Interpreter, Parser, Preprocessor, Scope};
+use crate::{Interpreter, Parser, Preprocessor};
 
 #[allow(clippy::large_enum_variant)]
 pub enum Stages<'w> {

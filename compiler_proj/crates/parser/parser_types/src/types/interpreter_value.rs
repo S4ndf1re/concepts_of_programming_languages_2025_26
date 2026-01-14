@@ -10,6 +10,21 @@ use ecs::{Component, EntityIndex};
 
 use crate::{BuiltinStruct, Error, Scope, Symbol, TypeSymbol, TypeSymbolType};
 
+
+pub enum IsReturn {
+    NoReturn(InterpreterValue),
+    Return(InterpreterValue),
+}
+
+impl IsReturn {
+    pub fn unwrap(self) -> InterpreterValue {
+        match self {
+            IsReturn::NoReturn(v) => v,
+            IsReturn::Return(v) => v,
+        }
+    }
+}
+
 /// ActualTypeValue only represents the concrete value of a type. The actual type def is defined by
 #[derive(Clone, Debug)]
 pub enum InterpreterValue {

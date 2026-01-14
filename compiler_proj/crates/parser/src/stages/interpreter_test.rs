@@ -3,9 +3,10 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use ecs::World;
+    use parser_types::{BeautifyError, ast_grammar};
 
     use crate::{
-        BeautifyError, Interpreter, Parser, Preprocessor, StageResult, Stages, ast_grammar,
+        Interpreter, Parser, Preprocessor, StageResult, Stages,
         run_stages,
     };
 

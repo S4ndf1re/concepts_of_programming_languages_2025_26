@@ -6,13 +6,9 @@ use std::{
 };
 
 use ecs::{Component, PseudoSystemParameter, World};
+use parser_types::{AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy, FunctionType, InfixOperator, Instantiable, InterpreterValue, IsReturn, MemberAccess, MemberAccessType, PrefixOperator, Query, Scope, ScopeLike, Symbol, SystemExecutionStrategy, TypeSymbol, TypeSymbolType};
 
-use crate::{
-    AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy,
-    FunctionType, InfixOperator, Instantiable, InterpreterValue, MemberAccess, MemberAccessType,
-    PrefixOperator, Query, Scope, ScopeLike, Stage, StageResult, Symbol, TypeSymbol,
-    TypeSymbolType,
-};
+use crate::{Stage, StageResult};
 
 macro_rules! scoped {
     ($s:ident, $inner:block) => {{
@@ -52,20 +48,6 @@ macro_rules! return_on_return {
             IsReturn::NoReturn(_) => (),
         }
     };
-}
-
-pub enum IsReturn {
-    NoReturn(InterpreterValue),
-    Return(InterpreterValue),
-}
-
-impl IsReturn {
-    pub fn unwrap(self) -> InterpreterValue {
-        match self {
-            IsReturn::NoReturn(v) => v,
-            IsReturn::Return(v) => v,
-        }
-    }
 }
 
 pub struct Environment {
@@ -1230,9 +1212,9 @@ impl Interpreter {
 
             with_scope!(self, param_scope, {
                 match system_type.execution_body {
-                    crate::SystemExecutionStrategy::Buildin(body) => body(Rc::clone(&param_scope))
+                    SystemExecutionStrategy::Buildin(body) => body(Rc::clone(&param_scope))
                         .map_err(|err| ErrorWithRange { err, range: 0..1 }),
-                    crate::SystemExecutionStrategy::Interpreted(ast_nodes) => {
+                    SystemExecutionStrategy::Interpreted(ast_nodes) => {
                         self.eval_nodes(&ast_nodes, world).map(|_| ())
                     }
                 }

@@ -6,15 +6,8 @@ use graphviz_rust::{
 };
 use rand::distr::{Alphabetic, SampleString};
 
-use crate::{Query, TypeSymbol};
+use crate::{Alias, DyLibName, Header, Module, Query, Symbol, TypeSymbol};
 
-/// Any symbol, that is not a type definition
-pub type Symbol = String;
-
-pub type Module = String;
-pub type Header = String;
-pub type Alias = String;
-pub type DyLibName = String;
 
 pub trait ToGraphviz {
     fn to_graphviz(&self, graph: &mut Graph) -> Node;

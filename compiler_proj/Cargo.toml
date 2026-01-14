@@ -7,11 +7,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-parser = { path = "./crates/parser" }
 ecs = { workspace = true }
+parser = {workspace = true }
 graphviz-rust = "0.9.6"
 
 [workspace.dependencies]
 typed-generational-arena = "0.2"
 ecs = { path = "./crates/ecs" }
+parser = { path = "./crates/parser" }
+parser_macros = { path = "./crates/parser/parser_macros" }
+parser_types = { path = "./crates/parser/parser_types" }
 graphviz-rust = "0.9.6"
