@@ -1,5 +1,10 @@
 pub mod stages;
+use ecs::World;
+use parser_macros::BuiltinStruct;
+use parser_types::{Error, IsReturn, Scope};
 pub use stages::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[cfg(test)]
 mod tests {
@@ -682,5 +687,18 @@ mod tests {
             err.print_error(source);
             panic!("{}", err)
         }
+    }
+}
+
+#[derive(BuiltinStruct, Debug)]
+#[method(a: {a,b,c} -> d)]
+struct TestDerive {
+    #[scope]
+    scope: Rc<RefCell<Scope>>,
+}
+
+impl TestDerive {
+    pub fn a_converted(scope: Rc<RefCell<Scope>>, world: &World) -> Result<IsReturn, Error> {
+        todo!()
     }
 }

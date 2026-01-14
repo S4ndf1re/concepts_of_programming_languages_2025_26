@@ -3,8 +3,8 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 use ecs::World;
 
 use crate::{
-    BuildinCallback, Error, FunctionExecutionStrategy, FunctionType, Instantiable,
-    InterpreterValue, IsReturn, Scope, ScopeLike, StructType, Symbol, TypeSymbol, TypeSymbolType,
+    Error, FunctionExecutionStrategy, FunctionType, Instantiable, InterpreterValue, IsReturn,
+    Scope, ScopeLike, StructType, Symbol, TypeSymbol, TypeSymbolType,
 };
 
 pub trait BuiltinStruct: Debug + ScopeLike + Instantiable {

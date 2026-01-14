@@ -427,10 +427,21 @@ dependencies = [
  "derivative",
  "ecs",
  "graphviz-rust",
+ "parser_macros",
  "parser_types",
  "rand 0.10.0-rc.5",
  "thiserror",
  "typed-generational-arena",
+]
+
+[[package]]
+name = "parser_macros"
+version = "0.1.0"
+dependencies = [
+ "parser_types",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.110",
 ]
 
 [[package]]

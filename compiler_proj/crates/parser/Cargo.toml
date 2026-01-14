@@ -12,3 +12,4 @@ ecs = { workspace = true }
 graphviz-rust = { workspace = true }
 rand = "0.10.0-rc.5"
 parser_types = { workspace = true }
+parser_macros = { workspace = true }
