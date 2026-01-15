@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
@@ -283,6 +285,31 @@ fn build_scope_like(ident: &Ident, scope: &Ident) -> TokenStream {
     }.into()
 }
 
+fn compare_path(ty: &syn::Type, segments: &[&str]) -> bool {
+    let mut buffer = VecDeque::from_iter(segments.iter());
+    if let syn::Type::Path(tp) = ty {
+        while !buffer.is_empty() {
+            if tp.path.segments.len() != buffer.len() {
+                buffer.pop_front();
+            } else {
+                break;
+            }
+        }
+
+        if buffer.is_empty() {
+            return false;
+        }
+
+        tp.path
+            .segments
+            .iter()
+            .zip(buffer.iter())
+            .all(|(a, b)| a.ident == b)
+    } else {
+        false
+    }
+}
+
 #[proc_macro_attribute]
 pub fn expose_funcs(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input_impl = parse_macro_input!(item as ItemImpl);
@@ -323,9 +350,25 @@ pub fn expose_funcs(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         FnArg::Typed(typed_arg) => {
                             if let Pat::Ident(ident) = &*typed_arg.pat {
                                 let ident_str = ident.ident.to_string();
+
+                                let mut current_type = &*typed_arg.ty;
+                                while let syn::Type::Reference(type_ref) = current_type {
+                                    current_type = &*type_ref.elem;
+                                }
+
+                                let is_world = compare_path(current_type, &["ecs", "World"]);
+                                println!("DEBUG: {ident_str}, {is_world}");
+
                                 arg_names.push(&ident.ident);
-                                quote! {
-                                    let #ident = scope.resolve_value(&#ident_str.to_owned())?;
+
+                                if !is_world {
+                                    quote! {
+                                        let #ident = scope.resolve_value(&#ident_str.to_owned())?;
+                                    }
+                                } else {
+                                    quote! {
+                                        let #ident = world;
+                                    }
                                 }
                             } else {
                                 quote! {}
@@ -443,5 +486,6 @@ pub fn expose_funcs(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 vec![#( #allowed_names.to_owned() ),*]
             }
         }
-    }.into()
+    }
+    .into()
 }
