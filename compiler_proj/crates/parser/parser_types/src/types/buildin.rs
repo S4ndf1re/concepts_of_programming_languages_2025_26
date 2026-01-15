@@ -1,6 +1,9 @@
-use std::fmt::Debug;
+use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
-use crate::{Error, Instantiable, ScopeLike, TypeSymbol};
+use ecs::World;
+use parser_macros::{BuiltinStruct, expose_funcs};
+
+use crate::{Error, Instantiable, InterpreterValue, Scope, ScopeLike, TypeSymbol};
 
 pub trait BuiltinStruct: Debug + ScopeLike + Instantiable {
     fn to_type(self) -> Result<TypeSymbol, Error>;
@@ -31,4 +34,19 @@ macro_rules! instantiate_as_t {
             (instance, &mut *obj_casted)
         }
     }};
+}
+
+#[derive(Debug, BuiltinStruct)]
+pub struct WorldObj {
+    #[scope]
+    pub scope: Rc<RefCell<Scope>>,
+}
+
+#[expose_funcs]
+impl WorldObj {
+    #[expose]
+    pub fn stop(&self, world: &World) -> Result<InterpreterValue, Error> {
+        world.stop();
+        Ok(InterpreterValue::Empty)
+    }
 }

@@ -45,8 +45,3 @@ pub fn assert(scope: Rc<RefCell<Scope>>, _world: &World) -> Result<IsReturn, Err
     assert!(attr.as_bool()?);
     Ok(IsReturn::Return(InterpreterValue::Empty))
 }
-
-pub fn stop(_scope: Rc<RefCell<Scope>>, world: &World) -> Result<IsReturn, Error> {
-    world.stop();
-    Ok(IsReturn::Return(InterpreterValue::Empty))
-}

@@ -5,8 +5,13 @@ use std::{
     rc::Rc,
 };
 
-use ecs::{Component, PseudoSystemParameter, World};
-use parser_types::{AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy, FunctionType, InfixOperator, Instantiable, InterpreterValue, IsReturn, MemberAccess, MemberAccessType, PrefixOperator, Query, Scope, ScopeLike, Symbol, SystemExecutionStrategy, TypeSymbol, TypeSymbolType};
+use ecs::{Component, World};
+use parser_types::{
+    AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy,
+    FunctionType, InfixOperator, Instantiable, InterpreterValue, IsReturn, MemberAccess,
+    MemberAccessType, PrefixOperator, PseudoSystemParameter, Query, Scope, ScopeLike, Symbol,
+    SystemExecutionStrategy, TypeSymbol, TypeSymbolType,
+};
 
 use crate::{Stage, StageResult};
 
@@ -1177,7 +1182,8 @@ impl Interpreter {
                     queries.insert(query.symbol.clone(), &query.type_of);
 
                     let mut state = query.instantiate_from_world(world);
-                    let value = Query::get_param(&mut state, world);
+                    let value = Query::get_param(&mut state, world, Rc::clone(call_scope))
+                        .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
                     query_states.insert(query.symbol.clone(), value);
                 }
             }
@@ -1192,12 +1198,7 @@ impl Interpreter {
                     param_scope
                         .declare_variable(
                             param.0,
-                            InterpreterValue::List(
-                                item.components
-                                    .iter()
-                                    .map(|v| InterpreterValue::List(v.clone()))
-                                    .collect::<Vec<_>>(),
-                            ),
+                            item.components.clone(), // NOTE(Jan): this could be moved behind a InterpreterValue::Strong, in order to avoid copying
                             TypeSymbol::strong(TypeSymbolType::List(Box::new(TypeSymbol::strong(
                                 TypeSymbolType::Any,
                             )))),

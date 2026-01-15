@@ -7,3 +7,5 @@ lalrpop_mod!(pub ast_grammar);
 
 /// Reexport of lalrpop parser
 pub use ast_grammar::*;
+
+extern crate self as parser_types;

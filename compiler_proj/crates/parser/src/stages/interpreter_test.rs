@@ -5,10 +5,7 @@ mod tests {
     use ecs::World;
     use parser_types::{BeautifyError, ast_grammar};
 
-    use crate::{
-        Interpreter, Parser, Preprocessor, StageResult, Stages,
-        run_stages,
-    };
+    use crate::{Interpreter, Parser, Preprocessor, StageResult, Stages, run_stages};
 
     #[test]
     fn test_basic_interpretation() {
@@ -38,13 +35,15 @@ mod tests {
 
     #[test]
     fn test_basic_interpretation2() {
-        let source = String::from(r#"
+        let source = String::from(
+            r#"
            fn main() {
             a = 10;
             a += 20;
             println(a);
            }
-           "#);
+           "#,
+        );
 
         let ast = ast_grammar::ProgrammParser::new().parse(&source).unwrap();
         let world = World::default();
@@ -221,8 +220,10 @@ mod tests {
                 x: int,
             }
 
-            system position_add_one(positions: P)
-            querying P as List with {Position1d} {
+            system position_add_one(positions: P, world: W)
+                querying P as List with {Position1d},
+                         W as World
+            {
                 // println("Iterating over components");
                 for (entt in positions) {
                     comp := entt[0];
@@ -230,7 +231,7 @@ mod tests {
                     println(comp.x);
 
                     if (comp.x > 100) {
-                        stop();
+                        world.stop();
                     }
                 }
             }
@@ -277,15 +278,17 @@ mod tests {
                 x: int,
             }
 
-            system position_add_one(positions: P)
-            querying P as List with {Position1d} {
+            system position_add_one(positions: P, world: W)
+                querying P as List with {Position1d},
+                         W as World
+            {
                 // println("Iterating over components");
                 for (entt in positions) {
                     entt[0].x += 1;
                     println(entt[0].x);
 
                     if (entt[0].x > 100) {
-                        stop();
+                        world.stop();
                     }
                 }
             }

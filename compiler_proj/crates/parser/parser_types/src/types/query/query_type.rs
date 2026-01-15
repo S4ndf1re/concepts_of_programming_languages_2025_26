@@ -63,7 +63,7 @@ impl QueryType {
                         .unwrap_or(true)
             }
             // false, because it is not really implemented yet
-            _ => unimplemented!(),
+            _ => false,
         }
     }
 

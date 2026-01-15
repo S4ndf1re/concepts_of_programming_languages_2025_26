@@ -1,4 +1,4 @@
-use parser_types::{BuiltinStruct, Error, Scope, TypeSymbol, TypeSymbolType};
+use parser_types::{BuiltinStruct, Error, Scope, TypeSymbol, TypeSymbolType, WorldObj};
 use std::{cell::RefCell, rc::Rc};
 
 pub mod functions;
@@ -9,9 +9,6 @@ pub use collections::*;
 
 pub mod optionals;
 pub use optionals::*;
-
-
-
 
 pub fn register_buildin_struct<T: BuiltinStruct>(
     scope: Rc<RefCell<Scope>>,
@@ -42,14 +39,6 @@ pub fn register_buildin(scope: Rc<RefCell<Scope>>) -> Result<(), Error> {
     };
     assert_descriptor.add_to_scope(&mut scope.borrow_mut())?;
 
-    let stop_descriptor = BuildinFunctionDescription {
-        name: "stop".to_string(),
-        callback: stop,
-        params: vec![],
-        return_type: None,
-    };
-    stop_descriptor.add_to_scope(&mut scope.borrow_mut())?;
-
     register_buildin_struct(
         Rc::clone(&scope),
         BuiltinList {
@@ -62,6 +51,13 @@ pub fn register_buildin(scope: Rc<RefCell<Scope>>) -> Result<(), Error> {
         Rc::clone(&scope),
         Optional {
             value: None,
+            scope: Rc::clone(&scope),
+        },
+    )?;
+
+    register_buildin_struct(
+        Rc::clone(&scope),
+        WorldObj {
             scope: Rc::clone(&scope),
         },
     )?;

@@ -29,7 +29,7 @@ impl FunctionAttr {
             .collect::<Vec<_>>();
 
         quote! {
-            #( (#inputs_str.to_owned(), parser_types::TypeSymbol::strong(parser_types::TypeSymbolType::Any)) ),*
+            #( (#inputs_str.to_owned(), ::parser_types::TypeSymbol::strong(::parser_types::TypeSymbolType::Any)) ),*
         }
     }
 
@@ -37,7 +37,7 @@ impl FunctionAttr {
         match &self.output {
             Some(_) => {
                 quote! {
-                    Some(std::boxed::Box::new(parser_types::TypeSymbol::strong(parser_types::TypeSymbolType::Any)))
+                    Some(std::boxed::Box::new(::parser_types::TypeSymbol::strong(::parser_types::TypeSymbolType::Any)))
                 }
             }
             None => quote! {None},
@@ -57,12 +57,12 @@ impl FunctionAttr {
         quote! {
            (
              #name_str.to_owned(),
-             parser_types::FunctionType {
+             ::parser_types::FunctionType {
                  name: #name_str.to_owned(),
                  is_method: true,
                  params: vec![#inputs],
                  return_type: #output,
-                 execution_body: parser_types::FunctionExecutionStrategy::Buildin(Self::#ident_converted),
+                 execution_body: ::parser_types::FunctionExecutionStrategy::Buildin(Self::#ident_converted),
              },
            )
         }
@@ -157,26 +157,26 @@ fn build_instantiable(ident: &Ident, scope_field: &Ident, fields: &[&Field]) -> 
         .collect::<Vec<_>>();
 
     quote! {
-        impl parser_types::Instantiable for #ident {
+        impl ::parser_types::Instantiable for #ident {
             fn instantiate(
                 &self,
-                local_scope: Rc<RefCell<parser_types::Scope>>,
-                params: std::collections::HashMap<parser_types::Symbol, Box<parser_types::InterpreterValue>>,
-            ) -> Result<parser_types::InterpreterValue, parser_types::Error> {
+                local_scope: Rc<RefCell<::parser_types::Scope>>,
+                params: std::collections::HashMap<::parser_types::Symbol, Box<::parser_types::InterpreterValue>>,
+            ) -> Result<::parser_types::InterpreterValue, ::parser_types::Error> {
                 let new_value = Self {
                     #scope_field: local_scope,
                     #( #quoted_fields ),*
                 };
 
-                Ok(parser_types::InterpreterValue::Strong(std::rc::Rc::new(std::cell::RefCell::new(
-                    parser_types::InterpreterValue::BuiltinStruct(
+                Ok(::parser_types::InterpreterValue::Strong(std::rc::Rc::new(std::cell::RefCell::new(
+                    ::parser_types::InterpreterValue::BuiltinStruct(
                         #ident_str.to_owned(),
                         std::rc::Rc::new(std::cell::RefCell::new(new_value)),
                     ),
                 ))))
             }
 
-            fn get_required_parameters(&self) -> std::collections::HashMap<parser_types::Symbol, parser_types::TypeSymbol> {
+            fn get_required_parameters(&self) -> std::collections::HashMap<::parser_types::Symbol, ::parser_types::TypeSymbol> {
                 // is emtpy, as no args are required
                 std::collections::HashMap::new()
             }
@@ -188,10 +188,10 @@ fn build_instantiable(ident: &Ident, scope_field: &Ident, fields: &[&Field]) -> 
 fn build_builtin_struct(ident: &Ident, scope: &Ident) -> TokenStream {
     let name_str = ident.to_string();
     quote! {
-        impl parser_types::BuiltinStruct for #ident {
+        impl ::parser_types::BuiltinStruct for #ident {
 
-            fn to_type(self) -> Result<parser_types::TypeSymbol, parser_types::Error> {
-                Ok(parser_types::TypeSymbol::strong(parser_types::TypeSymbolType::Struct(parser_types::StructType {
+            fn to_type(self) -> Result<::parser_types::TypeSymbol, ::parser_types::Error> {
+                Ok(::parser_types::TypeSymbol::strong(::parser_types::TypeSymbolType::Struct(::parser_types::StructType {
                     name: self.name(),
                     methods: Self::__get_type_methods(),
                     statics: Self::__get_type_statics(),
@@ -204,7 +204,7 @@ fn build_builtin_struct(ident: &Ident, scope: &Ident) -> TokenStream {
                 #name_str.to_owned()
             }
 
-            fn resolve_builtin_type(&self) -> Option<parser_types::TypeSymbol> {
+            fn resolve_builtin_type(&self) -> Option<::parser_types::TypeSymbol> {
                 self.#scope
                     .borrow()
                     .resolve_defined_type(&self.name())
@@ -216,37 +216,37 @@ fn build_builtin_struct(ident: &Ident, scope: &Ident) -> TokenStream {
 
 fn build_scope_like(ident: &Ident, scope: &Ident) -> TokenStream {
     quote!{
-        impl parser_types::ScopeLike for #ident {
-                fn resolve_value(&self, name: &parser_types::Symbol) -> Result<parser_types::InterpreterValue, parser_types::Error> {
+        impl ::parser_types::ScopeLike for #ident {
+                fn resolve_value(&self, name: &::parser_types::Symbol) -> Result<::parser_types::InterpreterValue, ::parser_types::Error> {
                     let is_allowed = Self::__get_allowed_names().contains(name);
 
                     if is_allowed {
-                        Ok(parser_types::InterpreterValue::Function(name.clone()))
+                        Ok(::parser_types::InterpreterValue::Function(name.clone()))
                     } else {
-                        Err(parser_types::Error::SymbolNotFound(name.clone()))
+                        Err(::parser_types::Error::SymbolNotFound(name.clone()))
                     }
                 }
 
-                fn set_value(&mut self, name: &parser_types::Symbol, _value: parser_types::InterpreterValue) -> Result<(), parser_types::Error> {
-                    Err(parser_types::Error::SymbolNotFound(name.clone()))
+                fn set_value(&mut self, name: &::parser_types::Symbol, _value: ::parser_types::InterpreterValue) -> Result<(), ::parser_types::Error> {
+                    Err(::parser_types::Error::SymbolNotFound(name.clone()))
                 }
 
-                fn resolve_type(&self, name: &parser_types::Symbol) -> Result<parser_types::TypeSymbol, parser_types::Error> {
+                fn resolve_type(&self, name: &::parser_types::Symbol) -> Result<::parser_types::TypeSymbol, ::parser_types::Error> {
                     let Some(struct_type) = self
                         .#scope
                         .borrow()
-                        .resolve_defined_type(&parser_types::BuiltinStruct::name(self))
+                        .resolve_defined_type(&::parser_types::BuiltinStruct::name(self))
                     else {
-                        return Err(parser_types::Error::SymbolNotFound(parser_types::BuiltinStruct::name(self)));
+                        return Err(::parser_types::Error::SymbolNotFound(::parser_types::BuiltinStruct::name(self)));
                     };
 
                     match &struct_type.type_of {
-                        parser_types::TypeSymbolType::Struct(strct) => {
+                        ::parser_types::TypeSymbolType::Struct(strct) => {
                             let method_result = strct
                                 .methods
                                 .iter()
                                 .find(|f| &f.0 == name)
-                                .map(|v| parser_types::TypeSymbol::strong(parser_types::TypeSymbolType::Function(v.1.clone())));
+                                .map(|v| ::parser_types::TypeSymbol::strong(::parser_types::TypeSymbolType::Function(v.1.clone())));
 
                             if let Some(method) = method_result {
                                 return Ok(method);
@@ -256,7 +256,7 @@ fn build_scope_like(ident: &Ident, scope: &Ident) -> TokenStream {
                                 .statics
                                 .iter()
                                 .find(|f| &f.0 == name)
-                                .map(|v| parser_types::TypeSymbol::strong(parser_types::TypeSymbolType::Function(v.1.clone())));
+                                .map(|v| ::parser_types::TypeSymbol::strong(::parser_types::TypeSymbolType::Function(v.1.clone())));
 
                             if let Some(r#static) = static_result {
                                 return Ok(r#static);
@@ -272,13 +272,13 @@ fn build_scope_like(ident: &Ident, scope: &Ident) -> TokenStream {
                                 return Ok(field);
                             }
 
-                            Err(parser_types::Error::SymbolNotFound(name.clone()))
+                            Err(::parser_types::Error::SymbolNotFound(name.clone()))
                         }
-                        _ => Err(parser_types::Error::SymbolNotFound(name.clone())),
+                        _ => Err(::parser_types::Error::SymbolNotFound(name.clone())),
                     }
                 }
 
-                fn get_outer_scope(&self) -> Result<std::rc::Rc<std::cell::RefCell<parser_types::Scope>>, parser_types::Error> {
+                fn get_outer_scope(&self) -> Result<std::rc::Rc<std::cell::RefCell<::parser_types::Scope>>, ::parser_types::Error> {
                     Ok(Rc::clone(&self.#scope))
                 }
             }
@@ -357,7 +357,6 @@ pub fn expose_funcs(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                 }
 
                                 let is_world = compare_path(current_type, &["ecs", "World"]);
-                                println!("DEBUG: {ident_str}, {is_world}");
 
                                 arg_names.push(&ident.ident);
 
@@ -397,17 +396,17 @@ pub fn expose_funcs(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
                 let new_method_body = if is_method {
                     quote! {
-                        pub fn #ident_converted(scope: std::rc::Rc<std::cell::RefCell<parser_types::Scope>>, world: &ecs::World) -> Result<parser_types::IsReturn, parser_types::Error> {
-                            use parser_types::ScopeLike;
+                        pub fn #ident_converted(scope: std::rc::Rc<std::cell::RefCell<::parser_types::Scope>>, world: &ecs::World) -> Result<::parser_types::IsReturn, ::parser_types::Error> {
+                            use ::parser_types::ScopeLike;
                             #( #let_statements )*
 
                             match &slf.deref_value()? {
-                                parser_types::InterpreterValue::BuiltinStruct(__name, __ptr) => unsafe {
-                                    let __self_val = (&mut *__ptr.borrow_mut() as *mut dyn parser_types::BuiltinStruct as *mut Self);
+                                ::parser_types::InterpreterValue::BuiltinStruct(__name, __ptr) => unsafe {
+                                    let __self_val = (&mut *__ptr.borrow_mut() as *mut dyn ::parser_types::BuiltinStruct as *mut Self);
                                     let result = (*__self_val).#name( #( #arg_names ),* )?;
-                                    Ok(parser_types::IsReturn::Return(result))
+                                    Ok(::parser_types::IsReturn::Return(result))
                                 },
-                                _ => Err(parser_types::Error::OperationUnsupported{
+                                _ => Err(::parser_types::Error::OperationUnsupported{
                                     operation: #name_str.to_owned(),
                                     type_of: "must be Builtin value".to_owned(),
                                 }),
@@ -416,16 +415,16 @@ pub fn expose_funcs(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 } else {
                     quote! {
-                        pub fn #ident_converted(scope: std::rc::Rc<std::cell::RefCell<parser_types::Scope>>, world: &ecs::World) -> Result<parser_types::IsReturn, parser_types::Error> {
-                            use parser_types::ScopeLike;
+                        pub fn #ident_converted(scope: std::rc::Rc<std::cell::RefCell<::parser_types::Scope>>, world: &ecs::World) -> Result<::parser_types::IsReturn, ::parser_types::Error> {
+                            use ::parser_types::ScopeLike;
                             #( #let_statements )*
 
                             match &slf.deref_value()? {
-                                parser_types::InterpreterValue::BuiltinStruct(__name, __ptr) => unsafe {
+                                ::parser_types::InterpreterValue::BuiltinStruct(__name, __ptr) => unsafe {
                                     let result = Self::#name( #( #arg_names ),* )?;
-                                    Ok(parser_types::IsReturn::Return(result))
+                                    Ok(::parser_types::IsReturn::Return(result))
                                 },
-                                _ => Err(parser_types::Error::OperationUnsupported{
+                                _ => Err(::parser_types::Error::OperationUnsupported{
                                     operation: #name_str.to_owned(),
                                     type_of: "must be Builtin value".to_owned(),
                                 }),
@@ -474,11 +473,11 @@ pub fn expose_funcs(_attr: TokenStream, item: TokenStream) -> TokenStream {
         impl #impl_self_type {
             #( #converted_methods )*
 
-            pub fn __get_type_methods() -> Vec<(parser_types::Symbol, parser_types::FunctionType)> {
+            pub fn __get_type_methods() -> Vec<(::parser_types::Symbol, ::parser_types::FunctionType)> {
                 vec![#( #methods_tokenstreamed ),*]
             }
 
-            pub fn __get_type_statics() -> Vec<(parser_types::Symbol, parser_types::FunctionType)> {
+            pub fn __get_type_statics() -> Vec<(::parser_types::Symbol, ::parser_types::FunctionType)> {
                 vec![#( #statics_tokenstreamed ),*]
             }
 

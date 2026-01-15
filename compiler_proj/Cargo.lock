@@ -438,7 +438,6 @@ dependencies = [
 name = "parser_macros"
 version = "0.1.0"
 dependencies = [
- "parser_types",
  "proc-macro2",
  "quote",
  "syn 2.0.110",
@@ -454,6 +453,7 @@ dependencies = [
  "graphviz-rust",
  "lalrpop",
  "lalrpop-util",
+ "parser_macros",
  "rand 0.10.0-rc.5",
  "thiserror",
  "typed-generational-arena",

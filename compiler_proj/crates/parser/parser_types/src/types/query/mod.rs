@@ -1,5 +1,7 @@
 pub mod query_cond;
-use ecs::{EntityIndex, PseudoSystemParameter};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
+use ecs::{EntityIndex, World};
 pub use query_cond::*;
 
 pub mod query_type;
@@ -8,7 +10,27 @@ pub use query_type::*;
 pub mod query_term;
 pub use query_term::*;
 
-use crate::{InterpreterValue, Symbol};
+use crate::{
+    BuiltinStruct, Error, Instantiable, InterpreterValue, Scope, Symbol, TypeSymbolType, WorldObj,
+    instantiate_as_t,
+};
+
+/// This is not an actual system parameter, but one that can be used when access to the world exists.
+/// The main difference is, that instantiate from world takes &self.
+/// This is sometimes needed, when calling systems with completely dynamic system params.
+/// This can still be used with worlds, but not the same way normal systems can be used (using `SystemFn`s)
+pub trait PseudoSystemParameter {
+    type State;
+    type Item<'w>: PseudoSystemParameter<State = Self::State>;
+
+    fn instantiate_from_world(&self, world: &World) -> Self::State;
+
+    fn get_param<'w>(
+        state: &mut Self::State,
+        world: &'w World,
+        scope: Rc<RefCell<Scope>>,
+    ) -> Result<Self::Item<'w>, Error>;
+}
 
 #[derive(Debug, PartialEq, Clone, Hash)]
 pub struct Query {
@@ -20,7 +42,7 @@ pub struct Query {
 pub struct QueryItem {
     symbol: Symbol,
     type_of: QueryType,
-    pub components: Vec<Vec<InterpreterValue>>,
+    pub components: InterpreterValue,
 }
 
 impl PseudoSystemParameter for QueryItem {
@@ -31,7 +53,11 @@ impl PseudoSystemParameter for QueryItem {
         todo!()
     }
 
-    fn get_param<'w>(_state: &mut Self::State, _world: &'w ecs::World) -> Self::Item<'w> {
+    fn get_param<'w>(
+        _state: &mut Self::State,
+        _world: &'w ecs::World,
+        _scope: Rc<RefCell<Scope>>,
+    ) -> Result<Self::Item<'w>, Error> {
         todo!()
     }
 }
@@ -49,10 +75,19 @@ impl PseudoSystemParameter for Query {
     fn instantiate_from_world(&self, world: &ecs::World) -> Self::State {
         let mut entities = Vec::new();
         for entity in world.get_entites() {
-            // println!("DEBUG: Interating entity: {entity:?}");
             if self.type_of.entity_conforms_condition(entity, world) {
-                // println!("DEBUG: Entity {entity:?} fits query");
                 entities.push(entity);
+
+                // If single, only accept the first found entity. this is possibly nondeterministic.
+                if matches!(
+                    self.type_of,
+                    QueryType::Single {
+                        select: _,
+                        condition: _
+                    }
+                ) {
+                    break;
+                }
             }
         }
 
@@ -63,11 +98,25 @@ impl PseudoSystemParameter for Query {
         }
     }
 
-    fn get_param<'w>(state: &mut Self::State, world: &'w ecs::World) -> Self::Item<'w> {
+    fn get_param<'w>(
+        state: &mut Self::State,
+        world: &'w ecs::World,
+        scope: Rc<RefCell<Scope>>,
+    ) -> Result<Self::Item<'w>, Error> {
         let mut components = Vec::new();
 
-        let requested_components = state.type_of.get_components();
+        if matches!(state.type_of, QueryType::World) {
+            let (instance, _world_ref) =
+                instantiate_as_t!(scope, "WorldObj" => WorldObj, HashMap::new());
 
+            return Ok(QueryItem {
+                symbol: state.symbol.clone(),
+                type_of: state.type_of.clone(),
+                components: instance,
+            });
+        }
+
+        let requested_components = state.type_of.get_components();
         for entity in &state.entities {
             let Some(entt) = world.get_entity_mut(*entity) else {
                 continue;
@@ -84,13 +133,13 @@ impl PseudoSystemParameter for Query {
                 }
             }
 
-            components.push(entry_comps);
+            components.push(InterpreterValue::List(entry_comps));
         }
 
-        QueryItem {
+        Ok(QueryItem {
             symbol: state.symbol.clone(),
             type_of: state.type_of.clone(),
-            components,
-        }
+            components: InterpreterValue::List(components),
+        })
     }
 }
