@@ -16,9 +16,6 @@ mod tests {
 
     #[test]
     fn import_test1() {
-        let boxed: Option<Box<i32>> = Some(Box::new(10));
-        let type_of = boxed.ok_or(Error::CantBeEmpty).unwrap().as_ref().clone();
-
         let source = r#"import name as abc;
                             import name2;"#;
         let expr = ast_grammar::ProgrammParser::new().parse(source);
