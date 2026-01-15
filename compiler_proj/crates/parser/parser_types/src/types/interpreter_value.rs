@@ -10,7 +10,6 @@ use ecs::{Component, EntityIndex};
 
 use crate::{BuiltinStruct, Error, Scope, Symbol, TypeSymbol, TypeSymbolType};
 
-
 pub enum IsReturn {
     NoReturn(InterpreterValue),
     Return(InterpreterValue),
@@ -40,8 +39,6 @@ pub enum InterpreterValue {
         HashMap<Symbol, Box<InterpreterValue>>,
     ),
     BuiltinStruct(Symbol, Rc<RefCell<dyn BuiltinStruct>>),
-    Option(Option<Box<InterpreterValue>>),
-    Result(Result<Box<InterpreterValue>, Box<InterpreterValue>>),
     Function(Symbol), // Functions execution body is contained in its type definition,
     Method(Symbol),   // Functions execution body is contained in its type definition,
     // Reference counted values (everything afaik)
@@ -204,44 +201,44 @@ impl InterpreterValue {
                     type_of: format!("{} and {} are not compatible", lval, rval),
                 }),
             },
-            InterpreterValue::Option(l) => match &rval {
-                InterpreterValue::Option(r) => {
-                    if let Some(l) = l.clone()
-                        && let Some(r) = r.clone()
-                    {
-                        l.equals(*r)
-                    } else if let None = l
-                        && let None = r
-                    {
-                        Ok(InterpreterValue::Bool(true))
-                    } else {
-                        Ok(InterpreterValue::Bool(false))
-                    }
-                }
-                _ => Err(Error::OperationUnsupported {
-                    operation: "==".to_string(),
-                    type_of: format!("{} and {} are not compatible", lval, rval),
-                }),
-            },
-            InterpreterValue::Result(l) => match &rval {
-                InterpreterValue::Result(r) => {
-                    if let Ok(l) = l.clone()
-                        && let Ok(r) = r.clone()
-                    {
-                        l.equals(*r)
-                    } else if let Err(l) = l
-                        && let Err(r) = r
-                    {
-                        l.clone().equals((**r).clone())
-                    } else {
-                        Ok(InterpreterValue::Bool(false))
-                    }
-                }
-                _ => Err(Error::OperationUnsupported {
-                    operation: "==".to_string(),
-                    type_of: format!("{} and {} are not compatible", lval, rval),
-                }),
-            },
+            // InterpreterValue::Option(l) => match &rval {
+            //     InterpreterValue::Option(r) => {
+            //         if let Some(l) = l.clone()
+            //             && let Some(r) = r.clone()
+            //         {
+            //             l.equals(*r)
+            //         } else if let None = l
+            //             && let None = r
+            //         {
+            //             Ok(InterpreterValue::Bool(true))
+            //         } else {
+            //             Ok(InterpreterValue::Bool(false))
+            //         }
+            //     }
+            //     _ => Err(Error::OperationUnsupported {
+            //         operation: "==".to_string(),
+            //         type_of: format!("{} and {} are not compatible", lval, rval),
+            //     }),
+            // },
+            // InterpreterValue::Result(l) => match &rval {
+            //     InterpreterValue::Result(r) => {
+            //         if let Ok(l) = l.clone()
+            //             && let Ok(r) = r.clone()
+            //         {
+            //             l.equals(*r)
+            //         } else if let Err(l) = l
+            //             && let Err(r) = r
+            //         {
+            //             l.clone().equals((**r).clone())
+            //         } else {
+            //             Ok(InterpreterValue::Bool(false))
+            //         }
+            //     }
+            //     _ => Err(Error::OperationUnsupported {
+            //         operation: "==".to_string(),
+            //         type_of: format!("{} and {} are not compatible", lval, rval),
+            //     }),
+            // },
             InterpreterValue::Struct(l, _, lfields) => match &rval {
                 InterpreterValue::Struct(r, _, rfields) => {
                     let mut eqls = true;

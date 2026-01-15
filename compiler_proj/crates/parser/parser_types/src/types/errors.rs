@@ -58,6 +58,12 @@ pub enum Error {
     ParseError(ParseError<usize, ast_grammar::Token<'static>, &'static str>),
     #[error("type is not a scope")]
     IsNotAScope,
+    #[error("option value is none, can't get value")]
+    OptionIsNone,
+    #[error("result value is error")]
+    ResultIsErr,
+    #[error("result value is ok")]
+    ResultIsOk,
 }
 
 pub trait BeautifyError: Display {
@@ -393,6 +399,48 @@ impl BeautifyError for ErrorWithRange {
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("should be a scope like type (struct, module, component)"),
+                        ),
+                    )];
+
+                let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
+                println!("{}", renderer.render(report));
+            }
+            Error::OptionIsNone => {
+                let report = &[Level::ERROR
+                    .primary_title(format!("{}", &self.err))
+                    .element(
+                        Snippet::source(source).annotation(
+                            AnnotationKind::Primary
+                                .span(self.range.clone())
+                                .label("option value is none, can't get"),
+                        ),
+                    )];
+
+                let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
+                println!("{}", renderer.render(report));
+            }
+            Error::ResultIsOk => {
+                let report = &[Level::ERROR
+                    .primary_title(format!("{}", &self.err))
+                    .element(
+                        Snippet::source(source).annotation(
+                            AnnotationKind::Primary
+                                .span(self.range.clone())
+                                .label("can't get error value"),
+                        ),
+                    )];
+
+                let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
+                println!("{}", renderer.render(report));
+            }
+            Error::ResultIsErr => {
+                let report = &[Level::ERROR
+                    .primary_title(format!("{}", &self.err))
+                    .element(
+                        Snippet::source(source).annotation(
+                            AnnotationKind::Primary
+                                .span(self.range.clone())
+                                .label("can't get ok value"),
                         ),
                     )];
 

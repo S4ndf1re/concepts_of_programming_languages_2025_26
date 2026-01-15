@@ -75,7 +75,9 @@ impl PseudoSystemParameter for Query {
             let mut entry_comps = Vec::new();
 
             for requested_comp in requested_components {
-                if let Some(interpreter_value) =
+                if requested_comp == "Entity" {
+                    entry_comps.push(InterpreterValue::Entity(entt.id()));
+                } else if let Some(interpreter_value) =
                     entt.get_component_by_name::<InterpreterValue>(requested_comp)
                 {
                     entry_comps.push(interpreter_value.clone());

@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::{
-    Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType, TypeSymbol,
-    TypeSymbolType,
+    Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType,
+    TypeSymbol, TypeSymbolType,
 };
 
 pub trait ScopeLike {

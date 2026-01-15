@@ -1,4 +1,4 @@
-use ecs::{Component, NamedComponent, NamedSingleQuery, SingleQuery, World};
+use ecs::{Component, NamedComponent, NamedSingleQuery, World};
 
 #[derive(Debug, Default)]
 pub struct PositionComponent {
@@ -17,6 +17,7 @@ impl NamedComponent for PositionComponent {
     const NAME: &'static str = "compiler_proj::PositionComponent";
 }
 
+#[allow(unused)]
 fn my_system(world: &World) {
     for entity in world.get_entites() {
         let Some(mut entity) = world.get_entity_mut(entity) else {
@@ -35,11 +36,11 @@ fn my_system(world: &World) {
 
 fn my_system2(positions: NamedSingleQuery<PositionComponent>) {
     for comp in positions.components {
-            comp.x += 10.0;
-            comp.y += 5.0;
-            comp.z -= 5.0;
+        comp.x += 10.0;
+        comp.y += 5.0;
+        comp.z -= 5.0;
 
-            println!("{comp:?}")
+        println!("{comp:?}")
     }
 }
 
