@@ -8,7 +8,6 @@ use rand::distr::{Alphabetic, SampleString};
 
 use crate::{Alias, DyLibName, Header, Module, Query, Symbol, TypeSymbol};
 
-
 pub trait ToGraphviz {
     fn to_graphviz(&self, graph: &mut Graph) -> Node;
     fn new_id(&self) -> String {
@@ -296,11 +295,16 @@ impl ToGraphviz for Vec<MemberAccess> {
 pub struct AstNode {
     pub range: Range<usize>,
     pub type_of: AstNodeType,
+    pub partial_resolve_symbols: bool,
 }
 
 impl AstNode {
     pub fn new(range: Range<usize>, type_of: AstNodeType) -> Self {
-        Self { range, type_of }
+        Self {
+            range,
+            type_of,
+            partial_resolve_symbols: true,
+        }
     }
 }
 
@@ -370,6 +374,9 @@ pub enum AstNodeType {
     EntityDef {
         name: Symbol,
         default_components: Option<Vec<AstNode>>,
+    },
+    EntityDespawn {
+        name: Vec<MemberAccess>,
     },
     Weak(Box<AstNode>),
     // TODO: Break statement in loops,
@@ -452,10 +459,7 @@ impl ToGraphviz for AstNode {
                 let n_child = ast_node.as_ref().to_graphviz(graph);
                 edges.push(edge!(n.id.clone() => n_child.id.clone()));
 
-                vec![attr!(
-                    "label",
-                    &format!("\"assignment(op: {operation:?}\"")
-                )]
+                vec![attr!("label", &format!("\"assignment(op: {operation:?}\""))]
             }
             AstNodeType::TypeDef {
                 typename,

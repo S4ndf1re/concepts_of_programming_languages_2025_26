@@ -5,7 +5,11 @@ use std::{
 };
 
 use ecs::World;
-use parser_types::{AstNode, AstNodeType, AstTypeDefinition, BeautifyError, ComponentType, Error, ErrorWithRange, FunctionExecutionStrategy, FunctionType, InterpreterValue, RegisterType, Scope, ScopeLike, StructType, SystemExecutionStrategy, SystemType, TypeSymbol, TypeSymbolType};
+use parser_types::{
+    AstNode, AstNodeType, AstTypeDefinition, BeautifyError, ComponentType, Error, ErrorWithRange,
+    FunctionExecutionStrategy, FunctionType, InterpreterValue, RegisterType, Scope, ScopeLike,
+    StructType, SystemExecutionStrategy, SystemType, TypeSymbol, TypeSymbolType,
+};
 
 use crate::{Interpreter, Stage, StageResult, register_buildin};
 
@@ -159,10 +163,9 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                         is_method,
                                         params,
                                         return_type: return_type.map(Box::new),
-                                        execution_body:
-                                            FunctionExecutionStrategy::Interpreted(Rc::new(
-                                                execution_body,
-                                            )),
+                                        execution_body: FunctionExecutionStrategy::Interpreted(
+                                            Rc::new(execution_body),
+                                        ),
                                     };
 
                                     if is_method {
@@ -195,6 +198,7 @@ impl<'w> Stage<'w> for Preprocessor<'w> {
                                 TypeSymbol::strong(TypeSymbolType::Component(ComponentType {
                                     name: typename.clone(),
                                     fields: attributes,
+                                    prefab: None,
                                 }));
 
                             self.global_scope

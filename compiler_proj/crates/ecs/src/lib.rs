@@ -55,6 +55,12 @@ impl<'w> EntityCommandsMut<'w> {
         }
     }
 
+    pub fn remove_component_by_name(&mut self, name: &String) {
+        if let Some(e) = self.world.entites.borrow_mut().get_mut(self.entity) {
+            e.components.remove(name);
+        }
+    }
+
     pub fn has_component<C: Component + 'static>(&self) -> bool {
         self.world
             .entites

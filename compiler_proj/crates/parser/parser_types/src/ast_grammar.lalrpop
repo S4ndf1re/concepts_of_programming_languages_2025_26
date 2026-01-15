@@ -84,6 +84,7 @@ match {
     "before" => before_term,
     // entities
     "create" => create_term,
+    "despawn" => despawn_term,
     "remove" => remove_term,
     "entity" => entity_term,
     // Entity Events
@@ -426,6 +427,7 @@ AssignmentOrDeclarationOrRegisterOrEntity = {
     Assignment,
     RegisterRule,
     CreateEntity,
+    DespawnEntity,
 }
 
 /// Any block of a list of statements, primarily used in functions, loops and if branches
@@ -521,6 +523,10 @@ ReturnTypeRule: TypeSymbol = {
 
 CreateEntity: AstNode = {
     <l:@L> create_term entity_term <name:id> <default_components:(with <CommaNoPrecedence<Returnable>>)?> <r:@R> => AstNode::new(l..r, AstNodeType::EntityDef {name, default_components})
+}
+
+DespawnEntity: AstNode = {
+    <l:@L> despawn_term entity_term <name:MemberAccess> <r:@R> => AstNode::new(l..r, AstNodeType::EntityDespawn {name})
 }
 
 TypeParamRule: (Symbol, TypeSymbol) = {

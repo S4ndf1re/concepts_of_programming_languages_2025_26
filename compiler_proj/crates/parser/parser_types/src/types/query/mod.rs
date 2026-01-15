@@ -12,7 +12,7 @@ pub use query_term::*;
 
 use crate::{
     BuiltinStruct, Error, Instantiable, InterpreterValue, Scope, Symbol, TypeSymbolType, WorldObj,
-    instantiate_as_t,
+    instantiate_struct_as_t,
 };
 
 /// This is not an actual system parameter, but one that can be used when access to the world exists.
@@ -107,7 +107,7 @@ impl PseudoSystemParameter for Query {
 
         if matches!(state.type_of, QueryType::World) {
             let (instance, _world_ref) =
-                instantiate_as_t!(scope, "WorldObj" => WorldObj, HashMap::new());
+                instantiate_struct_as_t!(scope, "WorldObj" => WorldObj, HashMap::new());
 
             return Ok(QueryItem {
                 symbol: state.symbol.clone(),

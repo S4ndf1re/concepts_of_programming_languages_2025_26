@@ -92,7 +92,7 @@ impl Parse for FunctionAttr {
     }
 }
 
-#[proc_macro_derive(BuiltinStruct, attributes(scope, method, function))]
+#[proc_macro_derive(BuiltinStruct, attributes(scope))]
 pub fn derive_builtin_struct(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -260,16 +260,6 @@ fn build_scope_like(ident: &Ident, scope: &Ident) -> TokenStream {
 
                             if let Some(r#static) = static_result {
                                 return Ok(r#static);
-                            }
-
-                            let field_result = strct
-                                .fields
-                                .iter()
-                                .find(|f| &f.0 == name)
-                                .map(|v| v.1.clone());
-
-                            if let Some(field) = field_result {
-                                return Ok(field);
                             }
 
                             Err(::parser_types::Error::SymbolNotFound(name.clone()))
@@ -487,4 +477,232 @@ pub fn expose_funcs(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
     .into()
+}
+
+#[proc_macro_derive(BuiltinComponent, attributes(scope))]
+pub fn derive_builtin_component(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    let name = input.ident;
+
+    let Data::Struct(ref data) = input.data else {
+        panic!("is not a struct");
+    };
+
+    let scope_field = data
+        .fields
+        .iter()
+        .filter(|f| f.attrs.iter().any(|a| a.path().is_ident("scope")))
+        .collect::<Vec<_>>();
+
+    let non_scope_fields = data
+        .fields
+        .iter()
+        .filter(|f| !f.attrs.iter().any(|a| a.path().is_ident("scope")))
+        .collect::<Vec<_>>();
+
+    if scope_field.len() != 1 {
+        panic!("exactly one scope field must be present");
+    }
+
+    let Some(scope_field) = scope_field.first() else {
+        panic!("exactly one scope field must be present");
+    };
+    let scope_field_ident = scope_field.ident.as_ref().unwrap();
+
+    let instantiable = proc_macro2::TokenStream::from(build_instantiable_component(
+        &name,
+        scope_field_ident,
+        &non_scope_fields,
+    ));
+    let scope_like = proc_macro2::TokenStream::from(build_scope_like_component(
+        &name,
+        scope_field_ident,
+        &non_scope_fields,
+    ));
+    let builtin_struct = proc_macro2::TokenStream::from(build_builtin_component(
+        &name,
+        scope_field_ident,
+        &non_scope_fields,
+    ));
+
+    let output = quote! {
+        #scope_like
+        #builtin_struct
+        #instantiable
+
+
+        impl ::ecs::Component for #name {
+            fn get_ident(&self) -> String {
+                Self::ident()
+            }
+        }
+    };
+
+    output.into()
+}
+
+fn build_instantiable_component(
+    ident: &Ident,
+    scope_field: &Ident,
+    fields: &[&Field],
+) -> TokenStream {
+    let ident_str = ident.to_string();
+
+    let quoted_fields = fields
+        .iter()
+        .map(|field| {
+            let ident = field.ident.as_ref().unwrap();
+            let ident_string = ident.to_string();
+            // let type_of = &field.ty;
+            quote! {
+                #ident: params.get(#ident_string).ok_or(::parser_types::Error::SymbolNotFound(#ident_string.to_owned()))?.as_ref().clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    quote! {
+        impl ::parser_types::Instantiable for #ident {
+            fn instantiate(
+                &self,
+                local_scope: Rc<RefCell<::parser_types::Scope>>,
+                params: std::collections::HashMap<::parser_types::Symbol, Box<::parser_types::InterpreterValue>>,
+            ) -> Result<::parser_types::InterpreterValue, ::parser_types::Error> {
+                let new_value = Self {
+                    #scope_field: local_scope,
+                    #( #quoted_fields ),*
+                };
+
+                Ok(::parser_types::InterpreterValue::Strong(std::rc::Rc::new(std::cell::RefCell::new(
+                    ::parser_types::InterpreterValue::BuiltinComponent(
+                        #ident_str.to_owned(),
+                        std::rc::Rc::new(std::cell::RefCell::new(new_value)),
+                    ),
+                ))))
+            }
+
+            fn get_required_parameters(&self) -> std::collections::HashMap<::parser_types::Symbol, ::parser_types::TypeSymbol> {
+                // is emtpy, as no args are required
+                std::collections::HashMap::new()
+            }
+        }
+    }
+    .into()
+}
+
+fn build_builtin_component(ident: &Ident, scope: &Ident, fields: &[&Field]) -> TokenStream {
+    let name_str = ident.to_string();
+    let quoted_fields = fields
+        .iter()
+        .map(|field| {
+            let ident = field.ident.as_ref().unwrap();
+            let ident_string = ident.to_string();
+            quote! {
+                (#ident_string.to_owned(), ::parser_types::TypeSymbol::strong(::parser_types::TypeSymbolType::Any))
+            }
+        })
+        .collect::<Vec<_>>();
+    quote! {
+        impl ::parser_types::BuiltinComponent for #ident {
+
+            fn to_type(self) -> Result<::parser_types::TypeSymbol, ::parser_types::Error> {
+                Ok(::parser_types::TypeSymbol::strong(::parser_types::TypeSymbolType::Component(::parser_types::ComponentType {
+                    name: self.name(),
+                    fields: vec![#( #quoted_fields ),*],
+                    prefab: Some(std::rc::Rc::new(self)),
+                })))
+            }
+
+            fn name(&self) -> String {
+                #name_str.to_owned()
+            }
+
+            fn resolve_builtin_type(&self) -> Option<::parser_types::TypeSymbol> {
+                self.#scope
+                    .borrow()
+                    .resolve_defined_type(&self.name())
+            }
+        }
+    }
+    .into()
+}
+
+fn build_scope_like_component(ident: &Ident, scope: &Ident, fields: &[&Field]) -> TokenStream {
+    let quoted_assigns = fields
+        .iter()
+        .map(|field| {
+            let ident = field.ident.as_ref().unwrap();
+            let ident_string = ident.to_string();
+
+            quote! {
+                if name == #ident_string {
+                    self.#ident = value;
+                    assigned = true;
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let quoted_get = fields
+        .iter()
+        .map(|field| {
+            let ident = field.ident.as_ref().unwrap();
+            let ident_string = ident.to_string();
+            quote! {
+                if name == #ident_string {
+                    return Ok(self.#ident.clone())
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+
+    quote!{
+        impl ::parser_types::ScopeLike for #ident {
+                fn resolve_value(&self, name: &::parser_types::Symbol) -> Result<::parser_types::InterpreterValue, ::parser_types::Error> {
+                    #( #quoted_get )*
+                    Err(::parser_types::Error::SymbolNotFound(name.clone()))
+                }
+
+                fn set_value(&mut self, name: &::parser_types::Symbol, value: ::parser_types::InterpreterValue) -> Result<(), ::parser_types::Error> {
+                    let mut assigned = false;
+                    #( #quoted_assigns )*
+                    if !assigned {
+                        Err(::parser_types::Error::SymbolNotFound(name.clone()))
+                    } else {
+                        Ok(())
+                    }
+                }
+
+                fn resolve_type(&self, name: &::parser_types::Symbol) -> Result<::parser_types::TypeSymbol, ::parser_types::Error> {
+                    let Some(struct_type) = self
+                        .#scope
+                        .borrow()
+                        .resolve_defined_type(&::parser_types::BuiltinComponent::name(self))
+                    else {
+                        return Err(::parser_types::Error::SymbolNotFound(::parser_types::BuiltinComponent::name(self)));
+                    };
+
+                    match &struct_type.type_of {
+                        ::parser_types::TypeSymbolType::Component(comp) => {
+                            let field_result = comp
+                                .fields
+                                .iter()
+                                .find(|f| &f.0 == name)
+                                .map(|v| v.1.clone());
+
+                            if let Some(field) = field_result {
+                                return Ok(field);
+                            }
+
+                            Err(::parser_types::Error::SymbolNotFound(name.clone()))
+                        }
+                        _ => Err(::parser_types::Error::SymbolNotFound(name.clone())),
+                    }
+                }
+
+                fn get_outer_scope(&self) -> Result<std::rc::Rc<std::cell::RefCell<::parser_types::Scope>>, ::parser_types::Error> {
+                    Ok(Rc::clone(&self.#scope))
+                }
+            }
+    }.into()
 }

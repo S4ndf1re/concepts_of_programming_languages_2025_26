@@ -1,11 +1,12 @@
-use std::{collections::HashMap, fmt::Display, hash::Hash, iter::zip};
+use std::{collections::HashMap, fmt::Display, hash::Hash, iter::zip, rc::Rc};
 
-use crate::{Instantiable, InterpreterValue, Symbol, TypeSymbol};
+use crate::{BuiltinComponent, Instantiable, InterpreterValue, Symbol, TypeSymbol};
 
 #[derive(Debug, Clone)]
 pub struct ComponentType {
     pub name: Symbol,
     pub fields: Vec<(Symbol, TypeSymbol)>,
+    pub prefab: Option<Rc<dyn BuiltinComponent>>,
 }
 
 impl PartialEq for ComponentType {
@@ -48,19 +49,21 @@ impl Instantiable for ComponentType {
         local_scope: std::rc::Rc<std::cell::RefCell<super::Scope>>,
         params: HashMap<Symbol, Box<super::InterpreterValue>>,
     ) -> Result<super::InterpreterValue, crate::Error> {
-        let is_placeholder = params.is_empty() || self.fields.is_empty();
-
-        let struct_value = if !is_placeholder {
+        let struct_value = if let Some(prefab) = &self.prefab {
+            prefab.instantiate(local_scope, params)
+        } else {
             InterpreterValue::Component(self.name.clone(), local_scope, params)
                 .make_reference_counted()
-        } else {
-            InterpreterValue::ComponentPlaceholder(self.name.clone()).make_reference_counted()
         }?;
 
         Ok(struct_value)
     }
 
     fn get_required_parameters(&self) -> std::collections::HashMap<Symbol, TypeSymbol> {
+        if let Some(prefab) = &self.prefab {
+            return prefab.get_required_parameters();
+        }
+
         self.fields
             .iter()
             .map(|value| (value.0.clone(), value.1.clone()))

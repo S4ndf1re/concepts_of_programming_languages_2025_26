@@ -2,7 +2,9 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use typed_generational_arena::{Index, NonzeroGeneration, StandardArena};
 
-use crate::{Component, Entity, EntityCommandsMut, IntoSystem, System, SystemParameter};
+use crate::{
+    Component, Entity, EntityCommandsMut, EntityIndex, IntoSystem, System, SystemParameter,
+};
 
 pub struct World {
     pub(crate) entites: Rc<RefCell<StandardArena<Entity>>>,
@@ -38,6 +40,10 @@ impl World {
             world: self,
             entity: idx,
         }
+    }
+
+    pub fn despawn(&self, entity: EntityIndex) {
+        self.entites.borrow_mut().remove(entity);
     }
 
     pub fn get_entites(&self) -> Vec<Index<Entity, usize, NonzeroGeneration<usize>>> {

@@ -8,7 +8,7 @@ use std::{
 
 use ecs::{Component, EntityIndex};
 
-use crate::{BuiltinStruct, Error, Scope, Symbol, TypeSymbol, TypeSymbolType};
+use crate::{BuiltinComponent, BuiltinStruct, Error, Scope, Symbol, TypeSymbol, TypeSymbolType};
 
 pub enum IsReturn {
     NoReturn(InterpreterValue),
@@ -52,7 +52,7 @@ pub enum InterpreterValue {
         Rc<RefCell<Scope>>,
         HashMap<Symbol, Box<InterpreterValue>>,
     ),
-    ComponentPlaceholder(Symbol),
+    BuiltinComponent(Symbol, Rc<RefCell<dyn BuiltinComponent>>),
     System(Symbol), // System execution body is contained in its type definition,
 
     // This can be any scope
@@ -60,6 +60,9 @@ pub enum InterpreterValue {
 
     // Represents nothing, i.e. no value is returned
     Empty,
+
+    // Generic name, cannot be used as value, placeholder for ecs operations on components
+    GenericName(Symbol),
 }
 
 impl InterpreterValue {
@@ -690,8 +693,7 @@ impl Component for InterpreterValue {
             InterpreterValue::Strong(_) | InterpreterValue::Weak(_) => {
                 self.deref_value().unwrap().get_ident()
             }
-            InterpreterValue::Component(name, _, _)
-            | InterpreterValue::ComponentPlaceholder(name) => name.clone(),
+            InterpreterValue::Component(name, _, _) | InterpreterValue::GenericName(name)=> name.clone(),
             _ => panic!("is not a componetn"),
         }
     }

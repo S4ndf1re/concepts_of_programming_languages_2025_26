@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use parser_macros::{BuiltinStruct, expose_funcs};
-use parser_types::{BuiltinStruct, Error, Instantiable, InterpreterValue, Scope, TypeSymbolType, instantiate_as_t};
+use parser_types::{BuiltinStruct, Error, Instantiable, InterpreterValue, Scope, TypeSymbolType, instantiate_struct_as_t};
 
 use crate::Optional;
 
@@ -18,7 +18,7 @@ impl BuiltinList {
     pub fn get(&mut self, idx: InterpreterValue) -> Result<InterpreterValue, Error> {
         if let InterpreterValue::Int(idx) = idx.deref_value()? {
             let (instance, optional_ref) =
-                instantiate_as_t!(self.scope, "Optional" => Optional, HashMap::new());
+                instantiate_struct_as_t!(self.scope, "Optional" => Optional, HashMap::new());
 
             let result = self.container.get(idx as usize);
 
