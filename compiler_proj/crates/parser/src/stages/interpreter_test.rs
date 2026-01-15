@@ -333,7 +333,7 @@ mod tests {
                 println("Pre push");
                 list.push(10);
                 println("Post push");
-                println(list.pop());
+                assert(list.pop() == 10);
                 println("Final");
             }
 

@@ -1,8 +1,9 @@
-use std::fmt::Display;
-
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Ident, parse_macro_input};
+use syn::{
+    Data, DeriveInput, Field, FnArg, Ident, ImplItem, ItemImpl, Pat, ReturnType, Visibility,
+    parse_macro_input,
+};
 
 use syn::punctuated::Punctuated;
 use syn::{
@@ -105,6 +106,12 @@ pub fn derive_builtin_struct(input: TokenStream) -> TokenStream {
         .filter(|f| f.attrs.iter().any(|a| a.path().is_ident("scope")))
         .collect::<Vec<_>>();
 
+    let non_scope_fields = data
+        .fields
+        .iter()
+        .filter(|f| !f.attrs.iter().any(|a| a.path().is_ident("scope")))
+        .collect::<Vec<_>>();
+
     if scope_field.len() != 1 {
         panic!("exactly one scope field must be present");
     }
@@ -114,31 +121,14 @@ pub fn derive_builtin_struct(input: TokenStream) -> TokenStream {
     };
     let scope_field_ident = scope_field.ident.as_ref().unwrap();
 
-    let methods = input
-        .attrs
-        .iter()
-        .filter(|attr| attr.path().is_ident("method"))
-        .map(|attr| attr.parse_args::<FunctionAttr>().unwrap())
-        .collect::<Vec<_>>();
-
-    println!("{methods:?}");
-
-    let statics = input
-        .attrs
-        .iter()
-        .filter(|attr| attr.path().is_ident("function"))
-        .map(|attr| attr.parse_args::<FunctionAttr>().unwrap())
-        .collect::<Vec<_>>();
-
-    let instantiable = proc_macro2::TokenStream::from(build_instantiable(&name, scope_field_ident));
-    let scope_like = proc_macro2::TokenStream::from(build_scope_like(
+    let instantiable = proc_macro2::TokenStream::from(build_instantiable(
         &name,
         scope_field_ident,
-        &methods,
-        &statics,
+        &non_scope_fields,
     ));
+    let scope_like = proc_macro2::TokenStream::from(build_scope_like(&name, scope_field_ident));
     let builtin_struct =
-        proc_macro2::TokenStream::from(build_builtin_struct(&name, &methods, &statics));
+        proc_macro2::TokenStream::from(build_builtin_struct(&name, scope_field_ident));
 
     let output = quote! {
         #scope_like
@@ -150,8 +140,19 @@ pub fn derive_builtin_struct(input: TokenStream) -> TokenStream {
     output.into()
 }
 
-fn build_instantiable(ident: &Ident, scope_field: &Ident) -> TokenStream {
+fn build_instantiable(ident: &Ident, scope_field: &Ident, fields: &[&Field]) -> TokenStream {
     let ident_str = ident.to_string();
+
+    let quoted_fields = fields
+        .iter()
+        .map(|field| {
+            let ident = field.ident.as_ref().unwrap();
+            // let type_of = &field.ty;
+            quote! {
+                #ident: Default::default(),
+            }
+        })
+        .collect::<Vec<_>>();
 
     quote! {
         impl parser_types::Instantiable for #ident {
@@ -162,7 +163,7 @@ fn build_instantiable(ident: &Ident, scope_field: &Ident) -> TokenStream {
             ) -> Result<parser_types::InterpreterValue, parser_types::Error> {
                 let new_value = Self {
                     #scope_field: local_scope,
-                    // TODO: apply more args
+                    #( #quoted_fields ),*
                 };
 
                 Ok(parser_types::InterpreterValue::Strong(std::rc::Rc::new(std::cell::RefCell::new(
@@ -182,34 +183,16 @@ fn build_instantiable(ident: &Ident, scope_field: &Ident) -> TokenStream {
     .into()
 }
 
-fn build_builtin_struct(
-    ident: &Ident,
-    methods: &[FunctionAttr],
-    statics: &[FunctionAttr],
-) -> TokenStream {
+fn build_builtin_struct(ident: &Ident, scope: &Ident) -> TokenStream {
     let name_str = ident.to_string();
-
-    let methods_tokenstreamed = methods
-        .iter()
-        .map(|m| m.to_function_tuple())
-        .collect::<Vec<_>>();
-    let statics_tokenstreamed = statics
-        .iter()
-        .map(|m| m.to_function_tuple())
-        .collect::<Vec<_>>();
-
     quote! {
         impl parser_types::BuiltinStruct for #ident {
 
             fn to_type(self) -> Result<parser_types::TypeSymbol, parser_types::Error> {
                 Ok(parser_types::TypeSymbol::strong(parser_types::TypeSymbolType::Struct(parser_types::StructType {
                     name: self.name(),
-                    methods: vec![
-                        #( #methods_tokenstreamed ),*
-                    ],
-                    statics: vec![
-                        #( #statics_tokenstreamed ),*
-                    ],
+                    methods: Self::__get_type_methods(),
+                    statics: Self::__get_type_statics(),
                     fields: vec![],
                     prefab: Some(std::rc::Rc::new(self)),
                 })))
@@ -220,39 +203,20 @@ fn build_builtin_struct(
             }
 
             fn resolve_builtin_type(&self) -> Option<parser_types::TypeSymbol> {
-                todo!()
-                // self.defining_scope
-                //     .borrow()
-                //     .resolve_defined_type(&self.name())
+                self.#scope
+                    .borrow()
+                    .resolve_defined_type(&self.name())
             }
         }
     }
     .into()
 }
 
-fn build_scope_like(
-    ident: &Ident,
-    scope: &Ident,
-    methods: &[FunctionAttr],
-    statics: &[FunctionAttr],
-) -> TokenStream {
-    let mut allowed_names = Vec::with_capacity(methods.len() + statics.len());
-
-    for method in methods {
-        allowed_names.push(method.name.to_string());
-    }
-
-    for method in statics {
-        allowed_names.push(method.name.to_string());
-    }
-
+fn build_scope_like(ident: &Ident, scope: &Ident) -> TokenStream {
     quote!{
         impl parser_types::ScopeLike for #ident {
                 fn resolve_value(&self, name: &parser_types::Symbol) -> Result<parser_types::InterpreterValue, parser_types::Error> {
-                    let is_allowed = match name.as_str() {
-                        #( #allowed_names )|* => true,
-                        _ => false,
-                    };
+                    let is_allowed = Self::__get_allowed_names().contains(name);
 
                     if is_allowed {
                         Ok(parser_types::InterpreterValue::Function(name.clone()))
@@ -313,9 +277,171 @@ fn build_scope_like(
                 }
 
                 fn get_outer_scope(&self) -> Result<std::rc::Rc<std::cell::RefCell<parser_types::Scope>>, parser_types::Error> {
-                    todo!()
-                    // Ok(Rc::clone(&self.defining_scope))
+                    Ok(Rc::clone(&self.#scope))
                 }
             }
+    }.into()
+}
+
+#[proc_macro_attribute]
+pub fn expose_funcs(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut input_impl = parse_macro_input!(item as ItemImpl);
+    let impl_self_type = &input_impl.self_ty;
+
+    let mut converted_methods = Vec::new();
+    let mut function_attrs_methods = Vec::new();
+    let mut function_attrs_statics = Vec::new();
+
+    for item in &mut input_impl.items {
+        if let ImplItem::Fn(method) = item {
+            let fitting_attributes = method
+                .attrs
+                .iter()
+                .filter(|attr| attr.path().is_ident("expose"))
+                .collect::<Vec<_>>();
+
+            let signature = &method.sig;
+            if !fitting_attributes.is_empty() && matches!(method.vis, Visibility::Public(_)) {
+                let name = &signature.ident;
+                let name_str = name.to_string();
+                let name_converted = format!("{}_converted", name);
+                let ident_converted = Ident::new(&name_converted, name.span());
+
+                let is_method = signature.receiver().is_some();
+
+                let args = &signature.inputs;
+                let return_value = &signature.output;
+
+                let mut let_statements = Vec::new();
+                let mut arg_names = Vec::new();
+
+                for arg in args {
+                    let quoted_arg = match arg {
+                        FnArg::Receiver(_) => quote! {
+                            let slf = scope.resolve_value(&"self".to_owned())?;
+                        },
+                        FnArg::Typed(typed_arg) => {
+                            if let Pat::Ident(ident) = &*typed_arg.pat {
+                                let ident_str = ident.ident.to_string();
+                                arg_names.push(&ident.ident);
+                                quote! {
+                                    let #ident = scope.resolve_value(&#ident_str.to_owned())?;
+                                }
+                            } else {
+                                quote! {}
+                            }
+                        }
+                    };
+                    let_statements.push(quoted_arg);
+                }
+
+                let function_attr = FunctionAttr {
+                    name: name.clone(),
+                    inputs: arg_names
+                        .iter()
+                        .map(|ident| (*ident).clone())
+                        .collect::<Vec<_>>(),
+                    output: match return_value {
+                        ReturnType::Default => None,
+                        ReturnType::Type(_, _) => Some(Ident::new("any_type", name.span())),
+                    },
+                };
+                if is_method {
+                    function_attrs_methods.push(function_attr);
+                } else {
+                    function_attrs_statics.push(function_attr);
+                }
+
+                let new_method_body = if is_method {
+                    quote! {
+                        pub fn #ident_converted(scope: std::rc::Rc<std::cell::RefCell<parser_types::Scope>>, world: &ecs::World) -> Result<parser_types::IsReturn, parser_types::Error> {
+                            use parser_types::ScopeLike;
+                            #( #let_statements )*
+
+                            match &slf.deref_value()? {
+                                parser_types::InterpreterValue::BuiltinStruct(__name, __ptr) => unsafe {
+                                    let __self_val = (&mut *__ptr.borrow_mut() as *mut dyn parser_types::BuiltinStruct as *mut Self);
+                                    let result = (*__self_val).#name( #( #arg_names ),* )?;
+                                    Ok(parser_types::IsReturn::Return(result))
+                                },
+                                _ => Err(parser_types::Error::OperationUnsupported{
+                                    operation: #name_str.to_owned(),
+                                    type_of: "must be Builtin value".to_owned(),
+                                }),
+                            }
+                        }
+                    }
+                } else {
+                    quote! {
+                        pub fn #ident_converted(scope: std::rc::Rc<std::cell::RefCell<parser_types::Scope>>, world: &ecs::World) -> Result<parser_types::IsReturn, parser_types::Error> {
+                            use parser_types::ScopeLike;
+                            #( #let_statements )*
+
+                            match &slf.deref_value()? {
+                                parser_types::InterpreterValue::BuiltinStruct(__name, __ptr) => unsafe {
+                                    let result = Self::#name( #( #arg_names ),* )?;
+                                    Ok(parser_types::IsReturn::Return(result))
+                                },
+                                _ => Err(parser_types::Error::OperationUnsupported{
+                                    operation: #name_str.to_owned(),
+                                    type_of: "must be Builtin value".to_owned(),
+                                }),
+                            }
+                        }
+                    }
+                };
+
+                converted_methods.push(new_method_body);
+            }
+
+            // remove all expose attributes
+            method.attrs = method
+                .attrs
+                .iter()
+                .filter(|attr| !attr.path().is_ident("expose"))
+                .cloned()
+                .collect::<Vec<_>>();
+        }
+    }
+
+    // build metadata for function helpers
+    let methods_tokenstreamed = function_attrs_methods
+        .iter()
+        .map(|m| m.to_function_tuple())
+        .collect::<Vec<_>>();
+    let statics_tokenstreamed = function_attrs_statics
+        .iter()
+        .map(|m| m.to_function_tuple())
+        .collect::<Vec<_>>();
+
+    let mut allowed_names =
+        Vec::with_capacity(function_attrs_methods.len() + function_attrs_statics.len());
+
+    for method in &function_attrs_methods {
+        allowed_names.push(method.name.to_string());
+    }
+
+    for method in &function_attrs_statics {
+        allowed_names.push(method.name.to_string());
+    }
+
+    quote! {
+        #input_impl
+
+        impl #impl_self_type {
+            #( #converted_methods )*
+
+            pub fn __get_type_methods() -> Vec<(parser_types::Symbol, parser_types::FunctionType)> {
+                vec![#( #methods_tokenstreamed ),*]
+            }
+
+            pub fn __get_type_statics() -> Vec<(parser_types::Symbol, parser_types::FunctionType)> {
+                vec![#( #statics_tokenstreamed ),*]
+            }
+
+            pub fn __get_allowed_names() -> Vec<String> {
+                vec![#( #allowed_names.to_owned() ),*]
+            }
+        }
     }.into()
 }
