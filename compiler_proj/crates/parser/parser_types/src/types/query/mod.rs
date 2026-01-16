@@ -198,6 +198,20 @@ macro_rules! build_query {
             }
         }
     };
+    (single { $( $names:literal ),* $(,)? $( % $($query:tt)* )? } ) => {
+        {
+            Query {
+                symbol: "".to_owned(),
+                type_of:
+                    QueryType::Single {
+                        select: QueryTerm {
+                            components: vec![$($names.to_owned()),*]
+                        },
+                        condition: build_query! { @inner $( parse_or! { $($query)* } )? }
+                    }
+            }
+        }
+    };
     (@inner $e:expr) => { Some($e) };
     (@inner) => { None };
 }
