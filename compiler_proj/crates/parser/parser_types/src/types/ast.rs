@@ -6,7 +6,7 @@ use graphviz_rust::{
 };
 use rand::distr::{Alphabetic, SampleString};
 
-use crate::{Alias, DyLibName, Header, Module, Query, Symbol, TypeSymbol};
+use crate::{Alias, Module, Query, Symbol, TypeSymbol};
 
 pub trait ToGraphviz {
     fn to_graphviz(&self, graph: &mut Graph) -> Node;
@@ -311,7 +311,6 @@ impl AstNode {
 #[derive(Debug, Clone)]
 pub enum AstNodeType {
     Import(Module, Option<Alias>),
-    ImportNative(Header, DyLibName, Option<Alias>),
     Int(i64),
     Float(f64),
     String(String),
@@ -390,7 +389,6 @@ impl ToGraphviz for AstNode {
 
         let attrs = match &self.type_of {
             AstNodeType::Import(_, _) => vec![attr!("label", "\"import\"")],
-            AstNodeType::ImportNative(_, _, _) => vec![attr!("label", "\"import_native\"")],
             AstNodeType::Int(i) => vec![attr!("label", &format!("\"int({i})\""))],
             AstNodeType::Float(f) => vec![attr!("label", &format!("\"float({f})\""))],
             AstNodeType::String(s) => {

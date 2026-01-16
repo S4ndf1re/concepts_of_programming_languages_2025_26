@@ -31,51 +31,18 @@ mod tests {
     }
 
     #[test]
-    fn import_test2() {
-        let source = r#"import native "module" "file";
-                            import native "module" "file" as my_module;"#;
-        let expr = ast_grammar::ProgrammParser::new().parse(source);
-
-        if let Err(expr) = expr {
-            expr.print_error(source);
-            panic!("{}", expr);
-        } else if let Ok(expr) = expr {
-            assert!(expr.len() == 2);
-
-            assert!(matches!(
-                expr[0].type_of,
-                AstNodeType::ImportNative(_, _, _)
-            ));
-            assert!(matches!(
-                expr[1].type_of,
-                AstNodeType::ImportNative(_, _, _)
-            ));
-        }
-    }
-
-    #[test]
     fn import_test3() {
         let expr = ast_grammar::ProgrammParser::new()
             .parse(
                 r#"import name as abc;
-                            import native "module" "file";
-                            import name2 as abc;
-                            import native "module" "file" as my_module;"#,
+                            import name2 as abc;"#,
             )
             .unwrap();
 
-        assert!(expr.len() == 4);
+        assert!(expr.len() == 2);
 
         assert!(matches!(expr[0].type_of, AstNodeType::Import(_, _)));
-        assert!(matches!(
-            expr[1].type_of,
-            AstNodeType::ImportNative(_, _, _)
-        ));
-        assert!(matches!(expr[2].type_of, AstNodeType::Import(_, _)));
-        assert!(matches!(
-            expr[3].type_of,
-            AstNodeType::ImportNative(_, _, _)
-        ));
+        assert!(matches!(expr[1].type_of, AstNodeType::Import(_, _)));
     }
 
     #[test]

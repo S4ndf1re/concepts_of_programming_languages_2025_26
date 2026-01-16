@@ -135,7 +135,6 @@ pub Programm: Vec<AstNode> = {
 /// Any import, i.e. native ffi import and normal
 Import: AstNode = {
     <l:@L> import <module:id> <alias:AliasRule?> semicolon <r:@R> => AstNode::new(l..r, AstNodeType::Import(module, alias)),
-    <l:@L> import native <header:string> <lib:string> <alias:AliasRule?> semicolon <r:@R> => AstNode::new(l..r, AstNodeType::ImportNative(header, lib, alias)),
 };
 
 /// Any statement, meaning if, while, for, anything non returnable like function definitions, struct definitions and assignments. Additionally Returnable statements with semicolon
