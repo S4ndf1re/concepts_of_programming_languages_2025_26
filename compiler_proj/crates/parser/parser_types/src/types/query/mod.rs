@@ -144,6 +144,7 @@ impl PseudoSystemParameter for Query {
     }
 }
 
+#[macro_export]
 macro_rules! parse_or {
     ( $left:tt || $($rest:tt)+ ) => {
         {
@@ -155,6 +156,7 @@ macro_rules! parse_or {
     };
 }
 
+#[macro_export]
 macro_rules! parse_and {
     ( $left:tt && $($rest:tt)+ ) => {
         {
@@ -166,6 +168,7 @@ macro_rules! parse_and {
     };
 }
 
+#[macro_export]
 macro_rules! parse_primary {
     ( $lit:literal ) => {
         {
@@ -179,6 +182,7 @@ macro_rules! parse_primary {
     };
 }
 
+#[macro_export]
 macro_rules! build_query {
     (list { $( $names:literal ),* $(,)? $( % $($query:tt)* )? } ) => {
         {
@@ -199,23 +203,23 @@ macro_rules! build_query {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::{QueryCond, QueryTerm, QueryType, Query};
 
     #[test]
-    fn test_query_build1() {
+    pub fn test_query_build1() {
         let query = build_query!(list { "hallo" % "a" || "b" });
         println!("{query:?}");
     }
 
     #[test]
-    fn test_query_build2() {
+    pub fn test_query_build2() {
         let query = build_query!(list { "hallo" % "a" || "b" && "c" });
         println!("{query:?}");
     }
 
     #[test]
-    fn test_query_build3() {
+    pub fn test_query_build3() {
         let query = build_query!(list { "hallo" % ("a" || "b") && "c" });
         println!("{query:?}");
     }
