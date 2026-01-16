@@ -1,8 +1,10 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use ecs::World;
 use parser_macros::{BuiltinStruct, expose_funcs};
-use parser_types::{BuiltinStruct, Error, Instantiable, InterpreterValue, Scope, TypeSymbolType, instantiate_struct_as_t};
+use parser_types::{
+    BuiltinStruct, Error, Instantiable, InterpreterValue, Scope, TypeSymbolType,
+    instantiate_struct_as_t,
+};
 
 use crate::Optional;
 

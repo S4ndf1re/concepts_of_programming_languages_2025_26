@@ -12,7 +12,7 @@ mod tests {
         exec_dot,
         printer::{DotPrinter, PrinterContext},
     };
-    use parser_types::{AstNodeType, BeautifyError, Error, ToGraphviz, ast_grammar};
+    use parser_types::{AstNodeType, BeautifyError, ToGraphviz, ast_grammar};
 
     #[test]
     fn import_test1() {
