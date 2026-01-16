@@ -1,4 +1,4 @@
-use ecs::{Component, NamedComponent, NamedSingleQuery, World};
+use ecs::{Component, SingleQuery, World};
 
 #[derive(Debug, Default)]
 pub struct PositionComponent {
@@ -11,10 +11,6 @@ impl Component for PositionComponent {
     fn get_ident(&self) -> String {
         Self::ident()
     }
-}
-
-impl NamedComponent for PositionComponent {
-    const NAME: &'static str = "compiler_proj::PositionComponent";
 }
 
 #[allow(unused)]
@@ -34,7 +30,7 @@ fn my_system(world: &World) {
     }
 }
 
-fn my_system2(positions: NamedSingleQuery<PositionComponent>) {
+fn my_system2(positions: SingleQuery<PositionComponent>) {
     for comp in positions.components {
         comp.x += 10.0;
         comp.y += 5.0;

@@ -143,3 +143,80 @@ impl PseudoSystemParameter for Query {
         })
     }
 }
+
+macro_rules! parse_or {
+    ( $left:tt || $($rest:tt)+ ) => {
+        {
+            QueryCond::Or(Box::new(parse_or!{ $left }), Box::new(parse_or! { $($rest)+ }))
+        }
+    };
+    ( $($single:tt)* ) => {
+        parse_and! { $($single)* }
+    };
+}
+
+macro_rules! parse_and {
+    ( $left:tt && $($rest:tt)+ ) => {
+        {
+            QueryCond::And(Box::new(parse_and!{ $left }), Box::new(parse_and! { $($rest)+ }))
+        }
+    };
+    ( $($single:tt)* ) => {
+        parse_primary! { $($single)* }
+    };
+}
+
+macro_rules! parse_primary {
+    ( $lit:literal ) => {
+        {
+            QueryCond::Component($lit.to_owned())
+        }
+    };
+    ( ( $($inner:tt)* ) ) => {
+        {
+            parse_or! { $($inner)* }
+        }
+    };
+}
+
+macro_rules! build_query {
+    (list { $( $names:literal ),* $(,)? $( % $($query:tt)* )? } ) => {
+        {
+            Query {
+                symbol: "".to_owned(),
+                type_of:
+                    QueryType::List {
+                        select: QueryTerm {
+                            components: vec![$($names.to_owned()),*]
+                        },
+                        condition: build_query! { @inner $( parse_or! { $($query)* } )? }
+                    }
+            }
+        }
+    };
+    (@inner $e:expr) => { Some($e) };
+    (@inner) => { None };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{QueryCond, QueryTerm, QueryType, Query};
+
+    #[test]
+    fn test_query_build1() {
+        let query = build_query!(list { "hallo" % "a" || "b" });
+        println!("{query:?}");
+    }
+
+    #[test]
+    fn test_query_build2() {
+        let query = build_query!(list { "hallo" % "a" || "b" && "c" });
+        println!("{query:?}");
+    }
+
+    #[test]
+    fn test_query_build3() {
+        let query = build_query!(list { "hallo" % ("a" || "b") && "c" });
+        println!("{query:?}");
+    }
+}
