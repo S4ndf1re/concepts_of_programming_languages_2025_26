@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
 use ecs::{Component, World};
-use parser_macros::{BuiltinStruct, expose_funcs};
+use parser_macros::{BuiltinComponent, BuiltinStruct, expose_funcs};
 
 use crate::{Error, Instantiable, InterpreterValue, Scope, ScopeLike, TypeSymbol};
 
@@ -80,4 +80,14 @@ impl WorldObj {
         world.stop();
         Ok(InterpreterValue::Empty)
     }
+}
+
+#[derive(Debug, BuiltinComponent)]
+pub struct TestComponent {
+    #[scope]
+    pub scope: Rc<RefCell<Scope>>,
+
+    // fields:
+    pub a: InterpreterValue,
+    pub b: InterpreterValue,
 }

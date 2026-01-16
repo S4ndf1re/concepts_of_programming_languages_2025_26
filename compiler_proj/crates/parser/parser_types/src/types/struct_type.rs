@@ -8,7 +8,7 @@ pub trait Instantiable {
         local_scope: Rc<RefCell<Scope>>,
         params: HashMap<Symbol, Box<InterpreterValue>>,
     ) -> Result<InterpreterValue, Error>;
-    fn get_required_parameters(&self) -> HashMap<Symbol, TypeSymbol>;
+    fn get_required_parameters(&self) -> Result<HashMap<Symbol, TypeSymbol>, Error>;
 }
 
 #[derive(Debug, Clone)]
@@ -94,14 +94,15 @@ impl Instantiable for StructType {
         Ok(struct_value)
     }
 
-    fn get_required_parameters(&self) -> HashMap<Symbol, TypeSymbol> {
+    fn get_required_parameters(&self) -> Result<HashMap<Symbol, TypeSymbol>, Error> {
         if let Some(prefab) = &self.prefab {
             return prefab.get_required_parameters();
         }
 
-        self.fields
+        Ok(self
+            .fields
             .iter()
             .map(|value| (value.0.clone(), value.1.clone()))
-            .collect::<HashMap<_, _>>()
+            .collect::<HashMap<_, _>>())
     }
 }

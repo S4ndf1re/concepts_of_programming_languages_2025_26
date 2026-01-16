@@ -1,5 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+use ecs::World;
 use parser_macros::{BuiltinStruct, expose_funcs};
 use parser_types::{BuiltinStruct, Error, Instantiable, InterpreterValue, Scope, TypeSymbolType, instantiate_struct_as_t};
 
@@ -23,7 +24,7 @@ impl BuiltinList {
             let result = self.container.get(idx as usize);
 
             if let Some(value) = result {
-                (*optional_ref).set(value.clone())?;
+                optional_ref.set(value.clone())?;
             }
             Ok(instance)
         } else {

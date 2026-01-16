@@ -831,8 +831,12 @@ impl Interpreter {
                     if let Some(struct_type) = struct_type {
                         match &struct_type.type_of {
                             TypeSymbolType::Struct(struct_type_def) => {
-                                let fields_of_struct_type =
-                                    struct_type_def.get_required_parameters();
+                                let fields_of_struct_type = struct_type_def
+                                    .get_required_parameters()
+                                    .map_err(|err| ErrorWithRange {
+                                        err,
+                                        range: call.range.clone(),
+                                    })?;
 
                                 let mut assigned_fields = HashSet::<&String>::new();
                                 let mut field_values = HashMap::new();
@@ -867,8 +871,12 @@ impl Interpreter {
                                 struct_value
                             }
                             TypeSymbolType::Component(struct_type_def) => {
-                                let fields_of_struct_type =
-                                    struct_type_def.get_required_parameters();
+                                let fields_of_struct_type = struct_type_def
+                                    .get_required_parameters()
+                                    .map_err(|err| ErrorWithRange {
+                                        err,
+                                        range: call.range.clone(),
+                                    })?;
 
                                 let mut assigned_fields = HashSet::<&String>::new();
                                 let mut field_values = HashMap::new();

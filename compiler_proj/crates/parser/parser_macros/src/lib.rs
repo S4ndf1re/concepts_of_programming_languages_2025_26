@@ -176,9 +176,9 @@ fn build_instantiable(ident: &Ident, scope_field: &Ident, fields: &[&Field]) -> 
                 ))))
             }
 
-            fn get_required_parameters(&self) -> std::collections::HashMap<::parser_types::Symbol, ::parser_types::TypeSymbol> {
+            fn get_required_parameters(&self) -> Result<std::collections::HashMap<::parser_types::Symbol, ::parser_types::TypeSymbol>, ::parser_types::Error> {
                 // is emtpy, as no args are required
-                std::collections::HashMap::new()
+                Ok(std::collections::HashMap::new())
             }
         }
     }
@@ -556,7 +556,7 @@ fn build_instantiable_component(
             let ident_string = ident.to_string();
             // let type_of = &field.ty;
             quote! {
-                #ident: params.get(#ident_string).ok_or(::parser_types::Error::SymbolNotFound(#ident_string.to_owned()))?.as_ref().clone(),
+                #ident: params.get(#ident_string).ok_or(::parser_types::Error::SymbolNotFound(#ident_string.to_owned()))?.as_ref().clone()
             }
         })
         .collect::<Vec<_>>();
@@ -581,9 +581,27 @@ fn build_instantiable_component(
                 ))))
             }
 
-            fn get_required_parameters(&self) -> std::collections::HashMap<::parser_types::Symbol, ::parser_types::TypeSymbol> {
-                // is emtpy, as no args are required
-                std::collections::HashMap::new()
+            fn get_required_parameters(&self) -> Result<std::collections::HashMap<::parser_types::Symbol, ::parser_types::TypeSymbol>, ::parser_types::Error> {
+                let Some(struct_type) = self
+                    .#scope_field
+                    .borrow()
+                    .resolve_defined_type(&::parser_types::BuiltinComponent::name(self))
+                else {
+                    return Err(::parser_types::Error::SymbolNotFound(::parser_types::BuiltinComponent::name(self)));
+                };
+
+                match &struct_type.type_of {
+                    ::parser_types::TypeSymbolType::Component(comp) => {
+                        let field_result = comp
+                            .fields
+                            .iter()
+                            .map(|v| (v.0.clone(), v.1.clone()))
+                            .collect::<std::collections::HashMap<_, _>>();
+
+                        Ok(field_result)
+                    }
+                    _ => Err(::parser_types::Error::SymbolNotFound(::parser_types::BuiltinComponent::name(self))),
+                }
             }
         }
     }
@@ -637,7 +655,7 @@ fn build_scope_like_component(ident: &Ident, scope: &Ident, fields: &[&Field]) -
             quote! {
                 if name == #ident_string {
                     self.#ident = value;
-                    assigned = true;
+                    return Ok(())
                 }
             }
         })
@@ -664,13 +682,8 @@ fn build_scope_like_component(ident: &Ident, scope: &Ident, fields: &[&Field]) -
                 }
 
                 fn set_value(&mut self, name: &::parser_types::Symbol, value: ::parser_types::InterpreterValue) -> Result<(), ::parser_types::Error> {
-                    let mut assigned = false;
                     #( #quoted_assigns )*
-                    if !assigned {
-                        Err(::parser_types::Error::SymbolNotFound(name.clone()))
-                    } else {
-                        Ok(())
-                    }
+                    Err(::parser_types::Error::SymbolNotFound(name.clone()))
                 }
 
                 fn resolve_type(&self, name: &::parser_types::Symbol) -> Result<::parser_types::TypeSymbol, ::parser_types::Error> {
