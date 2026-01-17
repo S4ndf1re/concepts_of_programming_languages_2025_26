@@ -133,3 +133,13 @@ impl<'s> SourceLoader<'s> for FileSourceLoader<'s> {
         }
     }
 }
+
+impl<'s> Drop for FileSourceLoader<'s> {
+    fn drop(&mut self) {
+        for file in self.buffered.borrow().iter() {
+            unsafe {
+                drop(Box::from_raw(*file.1 as *const String as *mut String));
+            }
+        }
+    }
+}
