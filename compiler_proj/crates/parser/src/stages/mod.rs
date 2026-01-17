@@ -19,7 +19,7 @@ mod tests {
     use ecs::World;
     use parser_types::BeautifyError;
 
-    use crate::{Interpreter, StaticSourceLoader, preprocess};
+    use crate::{Interpreter, Preprocessor, StaticSourceLoader};
 
     #[test]
     fn test_preprocessing() {
@@ -37,7 +37,8 @@ mod tests {
 
         let loader = StaticSourceLoader::from(source.clone());
 
-        if let Err(expr) = preprocess(&loader, interpreter, &world) {
+        let preprocessor = Preprocessor::new(&loader);
+        if let Err(expr) = preprocessor.preprocess(interpreter, &world) {
             expr.panic_error(&source);
         }
     }

@@ -1,4 +1,6 @@
-use parser_types::{BuiltinComponent, BuiltinStruct, Error, Scope, TypeSymbol, TypeSymbolType, WorldObj};
+use parser_types::{
+    BuiltinComponent, BuiltinStruct, Error, Scope, TypeSymbol, TypeSymbolType, WorldObj,
+};
 use std::{cell::RefCell, rc::Rc};
 
 pub mod functions;
@@ -51,6 +53,10 @@ pub fn register_buildin_functions(scope: Rc<RefCell<Scope>>) -> Result<(), Error
     };
     assert_descriptor.add_to_scope(&mut scope.borrow_mut())?;
 
+    Ok(())
+}
+
+pub fn register_buildin_structs_and_comps(scope: Rc<RefCell<Scope>>) -> Result<(), Error> {
     register_buildin_struct(
         Rc::clone(&scope),
         BuiltinList {

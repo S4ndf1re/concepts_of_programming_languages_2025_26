@@ -5,7 +5,7 @@ mod tests {
     use ecs::World;
     use parser_types::BeautifyError;
 
-    use crate::{Interpreter, StaticSourceLoader, preprocess};
+    use crate::{Interpreter, Preprocessor, StaticSourceLoader};
 
     #[test]
     fn test_basic_interpretation() {
@@ -23,7 +23,8 @@ mod tests {
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
         let source_loader = StaticSourceLoader::from(source.clone());
 
-        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let preprocessor = Preprocessor::new(&source_loader);
+        let preprocessed = preprocessor.preprocess(Rc::clone(&interpreter), &world);
         let Ok((ast, global_scope)) = preprocessed else {
             preprocessed.unwrap_err().panic_error(&source);
         };
@@ -54,7 +55,8 @@ mod tests {
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
         let source_loader = StaticSourceLoader::from(source.clone());
 
-        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let preprocessor = Preprocessor::new(&source_loader);
+        let preprocessed = preprocessor.preprocess(Rc::clone(&interpreter), &world);
         let Ok((ast, global_scope)) = preprocessed else {
             preprocessed.unwrap_err().panic_error(&source);
         };
@@ -83,7 +85,8 @@ mod tests {
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
         let source_loader = StaticSourceLoader::from(source.clone());
 
-        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let preprocessor = Preprocessor::new(&source_loader);
+        let preprocessed = preprocessor.preprocess(Rc::clone(&interpreter), &world);
         let Ok((ast, global_scope)) = preprocessed else {
             preprocessed.unwrap_err().panic_error(&source);
         };
@@ -110,7 +113,8 @@ mod tests {
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
         let source_loader = StaticSourceLoader::from(source.clone());
 
-        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let preprocessor = Preprocessor::new(&source_loader);
+        let preprocessed = preprocessor.preprocess(Rc::clone(&interpreter), &world);
         let Ok((ast, global_scope)) = preprocessed else {
             preprocessed.unwrap_err().panic_error(&source);
         };
@@ -148,7 +152,8 @@ mod tests {
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
         let source_loader = StaticSourceLoader::from(source.clone());
 
-        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let preprocessor = Preprocessor::new(&source_loader);
+        let preprocessed = preprocessor.preprocess(Rc::clone(&interpreter), &world);
         let Ok((ast, global_scope)) = preprocessed else {
             preprocessed.unwrap_err().panic_error(&source);
         };
@@ -202,7 +207,8 @@ mod tests {
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
         let source_loader = StaticSourceLoader::from(source.clone());
 
-        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let preprocessor = Preprocessor::new(&source_loader);
+        let preprocessed = preprocessor.preprocess(Rc::clone(&interpreter), &world);
         let Ok((ast, global_scope)) = preprocessed else {
             preprocessed.unwrap_err().panic_error(&source);
         };
@@ -257,7 +263,8 @@ mod tests {
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
         let source_loader = StaticSourceLoader::from(source.clone());
 
-        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let preprocessor = Preprocessor::new(&source_loader);
+        let preprocessed = preprocessor.preprocess(Rc::clone(&interpreter), &world);
         let Ok((ast, global_scope)) = preprocessed else {
             preprocessed.unwrap_err().panic_error(&source);
         };
@@ -291,7 +298,8 @@ mod tests {
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
         let source_loader = StaticSourceLoader::from(source.clone());
 
-        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let preprocessor = Preprocessor::new(&source_loader);
+        let preprocessed = preprocessor.preprocess(Rc::clone(&interpreter), &world);
         let Ok((ast, global_scope)) = preprocessed else {
             preprocessed.unwrap_err().panic_error(&source);
         };

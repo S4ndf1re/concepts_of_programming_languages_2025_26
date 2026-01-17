@@ -7,12 +7,16 @@ use std::{
 
 use ecs::World;
 use parser_types::{
-    AstNode, AstNodeType, AstTypeDefinition, BeautifyError, ComponentType, Error, ErrorWithRange,
-    FunctionExecutionStrategy, FunctionType, InterpreterValue, RegisterType, Scope, ScopeLike,
-    StructType, SystemExecutionStrategy, SystemType, TypeSymbol, TypeSymbolType,
+    AstNode, AstNodeType, AstTypeDefinition, BeautifyError, BuiltinComponent, BuiltinStruct,
+    ComponentType, Error, ErrorWithRange, FunctionExecutionStrategy, FunctionType,
+    InterpreterValue, RegisterType, Scope, ScopeLike, StructType, SystemExecutionStrategy,
+    SystemType, TypeSymbol, TypeSymbolType,
 };
 
-use crate::{Interpreter, SourceLoader, parse_content, register_buildin_functions};
+use crate::{
+    Interpreter, SourceLoader, parse_content, register_buildin_component,
+    register_buildin_functions, register_buildin_struct, register_buildin_structs_and_comps,
+};
 
 pub fn run_system(
     sys_name: String,
@@ -30,161 +34,155 @@ pub fn run_system(
     }
 }
 
-fn register_builtins(scope: Rc<RefCell<Scope>>) -> Result<(), ErrorWithRange> {
-    scope
-        .borrow_mut()
-        .declare_type(
-            "int".to_owned(),
-            TypeSymbol::strong(TypeSymbolType::Int),
-            false,
-            0..1,
-        )
-        .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
-    scope
-        .borrow_mut()
-        .declare_type(
-            "float".to_owned(),
-            TypeSymbol::strong(TypeSymbolType::Float),
-            false,
-            0..1,
-        )
-        .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
-
-    scope
-        .borrow_mut()
-        .declare_type(
-            "bool".to_owned(),
-            TypeSymbol::strong(TypeSymbolType::Bool),
-            false,
-            0..1,
-        )
-        .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
-
-    scope
-        .borrow_mut()
-        .declare_type(
-            "string".to_owned(),
-            TypeSymbol::strong(TypeSymbolType::String),
-            false,
-            0..1,
-        )
-        .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
-
-    register_buildin_functions(scope).map_err(|err| ErrorWithRange { err, range: 0..1 })?;
-    Ok(())
-}
-
-pub fn preprocess<'s, T: SourceLoader<'s>>(
+pub struct Preprocessor<'s, T> {
+    global_scope: Rc<RefCell<Scope>>,
     source_loader: &'s T,
-    interpreter: Rc<RefCell<Interpreter>>,
-    world: &World,
-) -> Result<(Vec<AstNode>, Rc<RefCell<Scope>>), ErrorWithRange> {
-    let main_file = source_loader
-        .load_main_file()
-        .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
-    let global_scope = Rc::new(RefCell::new(Scope::default()));
-
-    register_builtins(Rc::clone(&global_scope))?;
-
-    let rest = eval_scope_and_file(
-        Rc::clone(&global_scope),
-        source_loader,
-        main_file,
-        world,
-        Rc::clone(&interpreter),
-    )?;
-
-    Ok((rest, global_scope))
 }
 
-fn eval_scope_and_file<'s, T: SourceLoader<'s>>(
-    scope: Rc<RefCell<Scope>>,
-    loader: &'s T,
-    file: &'s str,
-    world: &World,
-    interpreter: Rc<RefCell<Interpreter>>,
-) -> Result<Vec<AstNode>, ErrorWithRange> {
-    let mut other_nodes = Vec::new();
-    let nodes = parse_content(file);
+impl<'s, T> Preprocessor<'s, T>
+where
+    T: SourceLoader<'s>,
+{
+    pub fn new(source_loader: &'s T) -> Self {
+        Self {
+            global_scope: Rc::new(RefCell::new(Scope::default())),
+            source_loader,
+        }
+    }
 
-    for node in nodes {
-        match node.type_of {
-            AstNodeType::Import(module, alias) => {
-                let content = loader
-                    .load_file(Path::new(&format!("{module}.eij")))
-                    .map_err(|err| ErrorWithRange {
-                        err,
-                        range: node.range.clone(),
-                    })?;
+    pub fn register_builtin_struct<S: BuiltinStruct>(&self, strct: S) -> Result<(), Error> {
+        register_buildin_struct(Rc::clone(&self.global_scope), strct)
+    }
 
-                // NOTE(Jan): must not be parented, as its a self contained module
-                let local_scope = Rc::new(RefCell::new(Scope::default()));
-                let _ = eval_scope_and_file(
-                    Rc::clone(&local_scope),
-                    loader,
-                    content,
-                    world,
-                    Rc::clone(&interpreter),
-                )?;
+    pub fn register_builtin_component<C: BuiltinComponent>(&self, strct: C) -> Result<(), Error> {
+        register_buildin_component(Rc::clone(&self.global_scope), strct)
+    }
 
-                if let Some(alias) = alias {
-                    scope
-                        .borrow_mut()
-                        .declare_variable(
-                            alias,
-                            InterpreterValue::Module(local_scope),
-                            TypeSymbol::strong(TypeSymbolType::Any),
-                            false,
-                            false,
-                            node.range.clone(),
-                        )
+    fn register_builtins(&self) -> Result<(), ErrorWithRange> {
+        self.global_scope
+            .borrow_mut()
+            .declare_type(
+                "int".to_owned(),
+                TypeSymbol::strong(TypeSymbolType::Int),
+                false,
+                0..1,
+            )
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+        self.global_scope
+            .borrow_mut()
+            .declare_type(
+                "float".to_owned(),
+                TypeSymbol::strong(TypeSymbolType::Float),
+                false,
+                0..1,
+            )
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+
+        self.global_scope
+            .borrow_mut()
+            .declare_type(
+                "bool".to_owned(),
+                TypeSymbol::strong(TypeSymbolType::Bool),
+                false,
+                0..1,
+            )
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+
+        self.global_scope
+            .borrow_mut()
+            .declare_type(
+                "string".to_owned(),
+                TypeSymbol::strong(TypeSymbolType::String),
+                false,
+                0..1,
+            )
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+
+        register_buildin_functions(Rc::clone(&self.global_scope))
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+        register_buildin_structs_and_comps(Rc::clone(&self.global_scope))
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+
+        Ok(())
+    }
+
+    pub fn preprocess(
+        &self,
+        interpreter: Rc<RefCell<Interpreter>>,
+        world: &World,
+    ) -> Result<(Vec<AstNode>, Rc<RefCell<Scope>>), ErrorWithRange> {
+        let main_file = self
+            .source_loader
+            .load_main_file()
+            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+
+        self.register_builtins()?;
+
+        let rest = Self::eval_scope_and_file(
+            Rc::clone(&self.global_scope),
+            self.source_loader,
+            main_file,
+            world,
+            Rc::clone(&interpreter),
+        )?;
+
+        Ok((rest, Rc::clone(&self.global_scope)))
+    }
+
+    fn eval_scope_and_file(
+        scope: Rc<RefCell<Scope>>,
+        loader: &'s T,
+        file: &'s str,
+        world: &World,
+        interpreter: Rc<RefCell<Interpreter>>,
+    ) -> Result<Vec<AstNode>, ErrorWithRange> {
+        let mut other_nodes = Vec::new();
+        let nodes = parse_content(file);
+
+        for node in nodes {
+            match node.type_of {
+                AstNodeType::Import(module, alias) => {
+                    let content = loader
+                        .load_file(Path::new(&format!("{module}.eij")))
                         .map_err(|err| ErrorWithRange {
                             err,
                             range: node.range.clone(),
                         })?;
-                } else {
-                    scope
-                        .borrow_mut()
-                        .declare_variable(
-                            module,
-                            InterpreterValue::Module(local_scope),
-                            TypeSymbol::strong(TypeSymbolType::Any),
-                            false,
-                            false,
-                            node.range.clone(),
-                        )
-                        .map_err(|err| ErrorWithRange {
-                            err,
-                            range: node.range.clone(),
-                        })?;
-                }
-            }
-            AstNodeType::TypeDef {
-                typename,
-                typedef,
-                execution_body,
-            } => {
-                match typedef {
-                    AstTypeDefinition::Function(params, return_type) => {
-                        let fun = InterpreterValue::Function(typename.clone());
-                        let fun_type = TypeSymbol::strong(TypeSymbolType::Function(FunctionType {
-                            name: typename.clone(),
-                            is_method: false,
-                            params,
-                            return_type: return_type.map(Box::new),
-                            execution_body: FunctionExecutionStrategy::Interpreted(Rc::new(
-                                execution_body,
-                            )),
-                        }));
-                        // SAFETY: Is always initialized
+
+                    // NOTE(Jan): must not be parented, as its a self contained module
+                    let local_scope = Rc::new(RefCell::new(Scope::default()));
+                    let _ = Self::eval_scope_and_file(
+                        Rc::clone(&local_scope),
+                        loader,
+                        content,
+                        world,
+                        Rc::clone(&interpreter),
+                    )?;
+
+                    if let Some(alias) = alias {
                         scope
                             .borrow_mut()
-                            .declare_function(
-                                typename,
-                                fun,
-                                fun_type,
+                            .declare_variable(
+                                alias,
+                                InterpreterValue::Module(local_scope),
+                                TypeSymbol::strong(TypeSymbolType::Any),
                                 false,
-                                true,
+                                false,
+                                node.range.clone(),
+                            )
+                            .map_err(|err| ErrorWithRange {
+                                err,
+                                range: node.range.clone(),
+                            })?;
+                    } else {
+                        scope
+                            .borrow_mut()
+                            .declare_variable(
+                                module,
+                                InterpreterValue::Module(local_scope),
+                                TypeSymbol::strong(TypeSymbolType::Any),
+                                false,
+                                false,
                                 node.range.clone(),
                             )
                             .map_err(|err| ErrorWithRange {
@@ -192,190 +190,236 @@ fn eval_scope_and_file<'s, T: SourceLoader<'s>>(
                                 range: node.range.clone(),
                             })?;
                     }
-                    AstTypeDefinition::Struct(attributes) => {
-                        let mut methods = Vec::new();
-                        let mut statics = Vec::new();
-
-                        for node in execution_body {
-                            if let AstNodeType::TypeDef {
-                                typename: methodname,
-                                typedef: AstTypeDefinition::Function(params, return_type),
-                                execution_body,
-                            } = node.type_of
-                            {
-                                let is_method = !params.is_empty()
-                                    && params[0].1.type_of == TypeSymbolType::SelfType;
-
-                                let fun_type = FunctionType {
-                                    name: methodname.clone(),
-                                    is_method,
+                }
+                AstNodeType::TypeDef {
+                    typename,
+                    typedef,
+                    execution_body,
+                } => {
+                    match typedef {
+                        AstTypeDefinition::Function(params, return_type) => {
+                            let fun = InterpreterValue::Function(typename.clone());
+                            let fun_type =
+                                TypeSymbol::strong(TypeSymbolType::Function(FunctionType {
+                                    name: typename.clone(),
+                                    is_method: false,
                                     params,
                                     return_type: return_type.map(Box::new),
                                     execution_body: FunctionExecutionStrategy::Interpreted(
                                         Rc::new(execution_body),
                                     ),
-                                };
-
-                                if is_method {
-                                    methods.push((methodname, fun_type));
-                                } else {
-                                    statics.push((methodname, fun_type));
-                                }
-                            }
+                                }));
+                            // SAFETY: Is always initialized
+                            scope
+                                .borrow_mut()
+                                .declare_function(
+                                    typename,
+                                    fun,
+                                    fun_type,
+                                    false,
+                                    true,
+                                    node.range.clone(),
+                                )
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: node.range.clone(),
+                                })?;
                         }
+                        AstTypeDefinition::Struct(attributes) => {
+                            let mut methods = Vec::new();
+                            let mut statics = Vec::new();
 
-                        let struct_def = TypeSymbol::strong(TypeSymbolType::Struct(StructType {
-                            name: typename.clone(),
-                            fields: attributes,
-                            methods,
-                            statics,
-                            prefab: None,
-                        }));
+                            for node in execution_body {
+                                if let AstNodeType::TypeDef {
+                                    typename: methodname,
+                                    typedef: AstTypeDefinition::Function(params, return_type),
+                                    execution_body,
+                                } = node.type_of
+                                {
+                                    let is_method = !params.is_empty()
+                                        && params[0].1.type_of == TypeSymbolType::SelfType;
 
-                        scope
-                            .borrow_mut()
-                            .declare_type(typename, struct_def, true, node.range.clone())
-                            .map_err(|err| ErrorWithRange {
-                                err,
-                                range: node.range.clone(),
-                            })?;
-                    }
-                    AstTypeDefinition::Component(attributes) => {
-                        let struct_def =
-                            TypeSymbol::strong(TypeSymbolType::Component(ComponentType {
-                                name: typename.clone(),
-                                fields: attributes,
-                                prefab: None,
-                            }));
+                                    let fun_type = FunctionType {
+                                        name: methodname.clone(),
+                                        is_method,
+                                        params,
+                                        return_type: return_type.map(Box::new),
+                                        execution_body: FunctionExecutionStrategy::Interpreted(
+                                            Rc::new(execution_body),
+                                        ),
+                                    };
 
-                        scope
-                            .borrow_mut()
-                            .declare_type(typename, struct_def, true, node.range.clone())
-                            .map_err(|err| ErrorWithRange {
-                                err,
-                                range: node.range.clone(),
-                            })?;
-                    }
-                    AstTypeDefinition::System(params, queries) => {
-                        // first, validate the params, if all params have a matching query
-                        if !params.is_empty() && queries.is_none()
-                            || params.is_empty()
-                                && queries.is_some()
-                                && !queries.as_ref().expect("already checked").is_empty()
-                        {
-                            Err(ErrorWithRange {
-                                err: Error::OperationUnsupported {
-                                    operation: "system definition".to_owned(),
-                                    type_of:
-                                        "non matching param list in query and system parameters"
-                                            .to_owned(),
-                                },
-                                range: node.range.clone(),
-                            })?;
-                        }
-
-                        if !params.is_empty()
-                            && let Some(queries) = &queries
-                        {
-                            let mut query_resolver = HashMap::new();
-                            for query in queries {
-                                query_resolver.insert(query.symbol.clone(), query.clone());
-                            }
-                            let mut visited_queries = HashSet::new();
-
-                            for param in &params {
-                                if query_resolver.contains_key(&param.1) {
-                                    visited_queries.insert(param.1.clone());
-                                } else {
-                                    Err(ErrorWithRange {
-                                        err: Error::OperationUnsupported {
-                                            operation: "system definition".to_owned(),
-                                            type_of: format!(
-                                                "missing query for parameter {}, expected {}",
-                                                param.0, param.1
-                                            ),
-                                        },
-                                        range: node.range.clone(),
-                                    })?;
+                                    if is_method {
+                                        methods.push((methodname, fun_type));
+                                    } else {
+                                        statics.push((methodname, fun_type));
+                                    }
                                 }
                             }
 
-                            if visited_queries.len() < query_resolver.len() {
-                                for query in &query_resolver {
-                                    if !visited_queries.contains(query.0) {
+                            let struct_def =
+                                TypeSymbol::strong(TypeSymbolType::Struct(StructType {
+                                    name: typename.clone(),
+                                    fields: attributes,
+                                    methods,
+                                    statics,
+                                    prefab: None,
+                                }));
+
+                            scope
+                                .borrow_mut()
+                                .declare_type(typename, struct_def, true, node.range.clone())
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: node.range.clone(),
+                                })?;
+                        }
+                        AstTypeDefinition::Component(attributes) => {
+                            let struct_def =
+                                TypeSymbol::strong(TypeSymbolType::Component(ComponentType {
+                                    name: typename.clone(),
+                                    fields: attributes,
+                                    prefab: None,
+                                }));
+
+                            scope
+                                .borrow_mut()
+                                .declare_type(typename, struct_def, true, node.range.clone())
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: node.range.clone(),
+                                })?;
+                        }
+                        AstTypeDefinition::System(params, queries) => {
+                            // first, validate the params, if all params have a matching query
+                            if !params.is_empty() && queries.is_none()
+                                || params.is_empty()
+                                    && queries.is_some()
+                                    && !queries.as_ref().expect("already checked").is_empty()
+                            {
+                                Err(ErrorWithRange {
+                                    err: Error::OperationUnsupported {
+                                        operation: "system definition".to_owned(),
+                                        type_of:
+                                            "non matching param list in query and system parameters"
+                                                .to_owned(),
+                                    },
+                                    range: node.range.clone(),
+                                })?;
+                            }
+
+                            if !params.is_empty()
+                                && let Some(queries) = &queries
+                            {
+                                let mut query_resolver = HashMap::new();
+                                for query in queries {
+                                    query_resolver.insert(query.symbol.clone(), query.clone());
+                                }
+                                let mut visited_queries = HashSet::new();
+
+                                for param in &params {
+                                    if query_resolver.contains_key(&param.1) {
+                                        visited_queries.insert(param.1.clone());
+                                    } else {
                                         Err(ErrorWithRange {
                                             err: Error::OperationUnsupported {
                                                 operation: "system definition".to_owned(),
                                                 type_of: format!(
-                                                    "non used query parameter {}",
-                                                    query.0
+                                                    "missing query for parameter {}, expected {}",
+                                                    param.0, param.1
                                                 ),
                                             },
                                             range: node.range.clone(),
                                         })?;
                                     }
                                 }
+
+                                if visited_queries.len() < query_resolver.len() {
+                                    for query in &query_resolver {
+                                        if !visited_queries.contains(query.0) {
+                                            Err(ErrorWithRange {
+                                                err: Error::OperationUnsupported {
+                                                    operation: "system definition".to_owned(),
+                                                    type_of: format!(
+                                                        "non used query parameter {}",
+                                                        query.0
+                                                    ),
+                                                },
+                                                range: node.range.clone(),
+                                            })?;
+                                        }
+                                    }
+                                }
                             }
+
+                            let sys = InterpreterValue::System(typename.clone());
+                            let sys_type = TypeSymbol::strong(TypeSymbolType::System(SystemType {
+                                name: typename.clone(),
+                                params,
+                                queries,
+                                execution_body: SystemExecutionStrategy::Interpreted(
+                                    execution_body,
+                                ),
+                            }));
+                            // SAFETY: Is always initialized
+                            scope
+                                .borrow_mut()
+                                .declare_system(
+                                    typename,
+                                    sys,
+                                    sys_type,
+                                    true,
+                                    true,
+                                    node.range.clone(),
+                                )
+                                .map_err(|err| ErrorWithRange {
+                                    err,
+                                    range: node.range.clone(),
+                                })?;
+                        }
+                        _ => (),
+                    }
+                }
+                AstNodeType::Register { schedule_entity } => match schedule_entity {
+                    RegisterType::Chain(chain) => {
+                        if chain.len() > 1 {
+                            Err(ErrorWithRange {
+                                err: Error::OperationUnsupported {
+                                    operation: "register".to_owned(),
+                                    type_of: "other than chain".to_owned(),
+                                },
+                                range: node.range.clone(),
+                            })?
+                        } else if chain.is_empty() {
+                            Err(ErrorWithRange {
+                                err: Error::OperationUnsupported {
+                                    operation: "register".to_owned(),
+                                    type_of: "at least one register required".to_owned(),
+                                },
+                                range: node.range.clone(),
+                            })?
                         }
 
-                        let sys = InterpreterValue::System(typename.clone());
-                        let sys_type = TypeSymbol::strong(TypeSymbolType::System(SystemType {
-                            name: typename.clone(),
-                            params,
-                            queries,
-                            execution_body: SystemExecutionStrategy::Interpreted(execution_body),
-                        }));
-                        // SAFETY: Is always initialized
-                        scope
-                            .borrow_mut()
-                            .declare_system(typename, sys, sys_type, true, true, node.range.clone())
-                            .map_err(|err| ErrorWithRange {
-                                err,
-                                range: node.range.clone(),
-                            })?;
+                        let sys_reg = chain[0].clone();
+
+                        world.add_system(run_system(
+                            sys_reg,
+                            Rc::clone(&interpreter),
+                            // TODO: Performace optimiziation
+                            file.to_owned(),
+                        ));
                     }
-                    _ => (),
-                }
+                    _ => Err(ErrorWithRange {
+                        err: Error::OperationUnsupported {
+                            operation: "register".to_owned(),
+                            type_of: "other than chain".to_owned(),
+                        },
+                        range: node.range.clone(),
+                    })?,
+                },
+                _ => other_nodes.push(node),
             }
-            AstNodeType::Register { schedule_entity } => match schedule_entity {
-                RegisterType::Chain(chain) => {
-                    if chain.len() > 1 {
-                        Err(ErrorWithRange {
-                            err: Error::OperationUnsupported {
-                                operation: "register".to_owned(),
-                                type_of: "other than chain".to_owned(),
-                            },
-                            range: node.range.clone(),
-                        })?
-                    } else if chain.is_empty() {
-                        Err(ErrorWithRange {
-                            err: Error::OperationUnsupported {
-                                operation: "register".to_owned(),
-                                type_of: "at least one register required".to_owned(),
-                            },
-                            range: node.range.clone(),
-                        })?
-                    }
-
-                    let sys_reg = chain[0].clone();
-
-                    world.add_system(run_system(
-                        sys_reg,
-                        Rc::clone(&interpreter),
-                        // TODO: Performace optimiziation
-                        file.to_owned(),
-                    ));
-                }
-                _ => Err(ErrorWithRange {
-                    err: Error::OperationUnsupported {
-                        operation: "register".to_owned(),
-                        type_of: "other than chain".to_owned(),
-                    },
-                    range: node.range.clone(),
-                })?,
-            },
-            _ => other_nodes.push(node),
         }
+        Ok(other_nodes)
     }
-    Ok(other_nodes)
 }
