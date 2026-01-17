@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::{
-    Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType,
-    TypeSymbol, TypeSymbolType,
+    Error, FunctionType, InterpreterValue, StructType, Symbol, SystemType, TypeSymbol,
+    TypeSymbolType,
 };
 
 pub trait ScopeLike {
@@ -333,7 +333,7 @@ impl ScopeLike for Rc<RefCell<Scope>> {
 impl ScopeLike for InterpreterValue {
     fn resolve_value(&self, name: &Symbol) -> Result<InterpreterValue, Error> {
         match self {
-            InterpreterValue::Module(slf) => slf.resolve_value(name),
+            InterpreterValue::Module(slf, _) => slf.resolve_value(name),
             InterpreterValue::Struct(_, _, attributes) => attributes
                 .get(name)
                 .map(Box::deref)
@@ -355,7 +355,7 @@ impl ScopeLike for InterpreterValue {
 
     fn set_value(&mut self, name: &Symbol, value: InterpreterValue) -> Result<(), Error> {
         match self {
-            InterpreterValue::Module(slf) => slf.set_value(name, value),
+            InterpreterValue::Module(slf, _) => slf.set_value(name, value),
             InterpreterValue::Struct(_, _, attributes) => {
                 if !attributes.contains_key(name) {
                     Err(Error::SymbolNotFound(name.clone()))
@@ -382,7 +382,7 @@ impl ScopeLike for InterpreterValue {
 
     fn resolve_type(&self, name: &Symbol) -> Result<TypeSymbol, Error> {
         match self {
-            InterpreterValue::Module(slf) => slf.resolve_type(name),
+            InterpreterValue::Module(slf, _) => slf.resolve_type(name),
             InterpreterValue::Struct(struct_name, outer_scope, _) => {
                 let struct_type = outer_scope
                     .borrow()
@@ -441,7 +441,7 @@ impl ScopeLike for InterpreterValue {
 
     fn get_outer_scope(&self) -> Result<Rc<RefCell<Scope>>, Error> {
         match self {
-            InterpreterValue::Module(slf) => Ok(Rc::clone(slf)),
+            InterpreterValue::Module(slf, _) => Ok(Rc::clone(slf)),
             InterpreterValue::Struct(_, outer_scope, _) => Ok(Rc::clone(outer_scope)),
             InterpreterValue::Component(_, outer_scope, _) => Ok(Rc::clone(outer_scope)),
             InterpreterValue::Strong(inner) => inner.borrow().get_outer_scope(),

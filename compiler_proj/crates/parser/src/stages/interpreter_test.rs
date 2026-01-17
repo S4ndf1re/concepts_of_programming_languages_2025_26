@@ -5,7 +5,7 @@ mod tests {
     use ecs::World;
     use parser_types::BeautifyError;
 
-    use crate::{Interpreter, Preprocessor, StaticSourceLoader};
+    use crate::{Interpreter, Preprocessor, SourceLoader, StaticSourceLoader};
 
     #[test]
     fn test_basic_interpretation() {
@@ -32,7 +32,10 @@ mod tests {
         interpreter
             .borrow_mut()
             .initialize_pre_run(ast, global_scope);
-        if let Err(err) = interpreter.borrow_mut().run(&world) {
+        if let Err(err) = interpreter
+            .borrow_mut()
+            .run(&world, source_loader.load_main_file().unwrap())
+        {
             err.panic_error(&source)
         }
     }
@@ -64,7 +67,10 @@ mod tests {
         interpreter
             .borrow_mut()
             .initialize_pre_run(ast, global_scope);
-        if let Err(err) = interpreter.borrow_mut().run(&world) {
+        if let Err(err) = interpreter
+            .borrow_mut()
+            .run(&world, source_loader.load_main_file().unwrap())
+        {
             err.panic_error(&source)
         }
     }
@@ -94,7 +100,10 @@ mod tests {
         interpreter
             .borrow_mut()
             .initialize_pre_run(ast, global_scope);
-        if let Err(err) = interpreter.borrow_mut().run(&world) {
+        if let Err(err) = interpreter
+            .borrow_mut()
+            .run(&world, source_loader.load_main_file().unwrap())
+        {
             err.panic_error(&source)
         }
     }
@@ -122,7 +131,10 @@ mod tests {
         interpreter
             .borrow_mut()
             .initialize_pre_run(ast, global_scope);
-        if let Err(err) = interpreter.borrow_mut().run(&world) {
+        if let Err(err) = interpreter
+            .borrow_mut()
+            .run(&world, source_loader.load_main_file().unwrap())
+        {
             err.panic_error(&source)
         }
     }
@@ -161,7 +173,10 @@ mod tests {
         interpreter
             .borrow_mut()
             .initialize_pre_run(ast, global_scope);
-        if let Err(err) = interpreter.borrow_mut().run(&world) {
+        if let Err(err) = interpreter
+            .borrow_mut()
+            .run(&world, source_loader.load_main_file().unwrap())
+        {
             err.panic_error(&source)
         }
     }
@@ -216,7 +231,10 @@ mod tests {
         interpreter
             .borrow_mut()
             .initialize_pre_run(ast, global_scope);
-        if let Err(err) = interpreter.borrow_mut().run(&world) {
+        if let Err(err) = interpreter
+            .borrow_mut()
+            .run(&world, source_loader.load_main_file().unwrap())
+        {
             err.panic_error(&source)
         }
 
@@ -272,7 +290,10 @@ mod tests {
         interpreter
             .borrow_mut()
             .initialize_pre_run(ast, global_scope);
-        if let Err(err) = interpreter.borrow_mut().run(&world) {
+        if let Err(err) = interpreter
+            .borrow_mut()
+            .run(&world, source_loader.load_main_file().unwrap())
+        {
             err.panic_error(&source)
         }
 
@@ -307,7 +328,10 @@ mod tests {
         interpreter
             .borrow_mut()
             .initialize_pre_run(ast, global_scope);
-        if let Err(err) = interpreter.borrow_mut().run(&world) {
+        if let Err(err) = interpreter
+            .borrow_mut()
+            .run(&world, source_loader.load_main_file().unwrap())
+        {
             err.panic_error(&source)
         }
 

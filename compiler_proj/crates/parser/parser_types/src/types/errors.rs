@@ -10,6 +10,7 @@ use crate::Symbol;
 pub struct ErrorWithRange {
     pub err: Error,
     pub range: std::ops::Range<usize>,
+    pub file: &'static str,
 }
 
 impl std::fmt::Display for ErrorWithRange {
@@ -145,7 +146,7 @@ impl<T: Display, E: Display> BeautifyError for ParseError<usize, T, E> {
 }
 
 impl BeautifyError for ErrorWithRange {
-    fn print_error(&self, source: &str) {
+    fn print_error(&self, _source: &str) {
         match &self.err {
             Error::OperationUnsupported {
                 operation: _,
@@ -154,7 +155,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label(type_of),
@@ -168,7 +169,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("unknown"),
@@ -182,7 +183,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("must not be empty"),
@@ -196,7 +197,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label(format!("can't cast to {}", type_of)),
@@ -210,7 +211,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("is weak, and cannot be dereferenced"),
@@ -224,7 +225,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("can't be downcast to weak"),
@@ -238,7 +239,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("can't upgrade to strong"),
@@ -252,7 +253,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label(format!("expected {value}")),
@@ -266,7 +267,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("no main function"),
@@ -280,7 +281,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("missing return"),
@@ -294,7 +295,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label(format!("expected stage {should}, got stage {is}")),
@@ -308,7 +309,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label(format!("{type_of} already exists")),
@@ -322,7 +323,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("wrong type deducted"),
@@ -336,7 +337,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("does not exist"),
@@ -350,7 +351,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label(format!("{type_of} != value_of")),
@@ -364,7 +365,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("already declared"),
@@ -378,7 +379,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label(format!("should be of type {expected}")),
@@ -392,7 +393,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("should be a scope like type (struct, module, component)"),
@@ -406,7 +407,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("option value is none, can't get"),
@@ -420,7 +421,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("can't get error value"),
@@ -434,7 +435,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("can't get ok value"),
@@ -448,7 +449,7 @@ impl BeautifyError for ErrorWithRange {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
                     .element(
-                        Snippet::source(source).annotation(
+                        Snippet::source(self.file).annotation(
                             AnnotationKind::Primary
                                 .span(self.range.clone())
                                 .label("can't perform io operation"),

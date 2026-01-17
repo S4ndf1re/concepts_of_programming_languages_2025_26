@@ -9,7 +9,9 @@ edition = "2024"
 [dependencies]
 ecs = { workspace = true }
 parser = {workspace = true }
+parser_types = { workspace = true }
 graphviz-rust = "0.9.6"
+clap = {version = "4.5.54", features=["derive"]}
 
 [workspace.dependencies]
 typed-generational-arena = "0.2"

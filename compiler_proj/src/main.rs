@@ -1,56 +1,50 @@
-use ecs::{Component, SingleQuery, World};
+use std::{
+    cell::RefCell,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
-#[derive(Debug, Default)]
-pub struct PositionComponent {
-    x: f32,
-    y: f32,
-    z: f32,
-}
+use clap::Parser;
+use ecs::World;
+use parser::{FileSourceLoader, Interpreter, Preprocessor, SourceLoader, StaticSourceLoader};
+use parser_types::BeautifyError;
 
-impl Component for PositionComponent {
-    fn get_ident(&self) -> String {
-        Self::ident()
-    }
-}
-
-#[allow(unused)]
-fn my_system(world: &World) {
-    for entity in world.get_entites() {
-        let Some(mut entity) = world.get_entity_mut(entity) else {
-            continue;
-        };
-
-        if let Some(component) = entity.get_component_mut::<PositionComponent>() {
-            component.x += 10.0;
-            component.y += 5.0;
-            component.z -= 5.0;
-
-            println!("{component:?}")
-        }
-    }
-}
-
-fn my_system2(positions: SingleQuery<PositionComponent>) {
-    for comp in positions.components {
-        comp.x += 10.0;
-        comp.y += 5.0;
-        comp.z -= 5.0;
-
-        println!("{comp:?}")
-    }
+/// Run a simple file as an interpreted script
+#[derive(Debug, Parser)]
+#[command(version, about, long_about = None)]
+struct FileArgs {
+    /// Filename of the file to run
+    #[arg(index = 1)]
+    mainfile: String,
 }
 
 fn main() {
+    let args = FileArgs::parse();
+
+    let path = Path::new(&args.mainfile);
+    let filename = PathBuf::from(path.file_name().unwrap());
+    let file_prefix = PathBuf::from(path.parent().unwrap());
+
     let world = World::default();
+    let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+    let source_loader = FileSourceLoader::new(file_prefix, filename);
+    // let source_loader = StaticSourceLoader::from("".to_string());
+    let main_file_source = source_loader.load_main_file().unwrap();
 
-    world.add_system(my_system2);
+    {
+        let preprocessor = Preprocessor::new(&source_loader);
 
-    let mut entity = world.spawn();
-    entity.add_component(PositionComponent {
-        x: 0.0,
-        y: 0.0,
-        z: 0.0,
-    });
+        let preprocessed = preprocessor.preprocess(Rc::clone(&interpreter), &world);
+        let Ok((ast, global_scope)) = preprocessed else {
+            preprocessed.unwrap_err().panic_error(main_file_source);
+        };
 
-    world.run();
+        interpreter
+            .borrow_mut()
+            .initialize_pre_run(ast, global_scope);
+
+        if let Err(err) = interpreter.borrow_mut().run(&world, main_file_source) {
+            err.panic_error(main_file_source)
+        }
+    }
 }

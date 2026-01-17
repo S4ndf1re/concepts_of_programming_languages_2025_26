@@ -56,7 +56,7 @@ pub enum InterpreterValue {
     System(Symbol), // System execution body is contained in its type definition,
 
     // This can be any scope
-    Module(Rc<RefCell<Scope>>),
+    Module(Rc<RefCell<Scope>>, &'static str),
 
     // Represents nothing, i.e. no value is returned
     Empty,
@@ -458,6 +458,15 @@ impl InterpreterValue {
             }),
         }
     }
+
+    pub fn get_file(&self) -> Option<&'static str> {
+        match self {
+            Self::Strong(inner) => inner.borrow().get_file(),
+            Self::Weak(inner) => inner.upgrade().and_then(|inner| inner.borrow().get_file()),
+            Self::Module(_, file) => Some(*file),
+            _ => None,
+        }
+    }
 }
 
 impl Add for InterpreterValue {
@@ -693,7 +702,9 @@ impl Component for InterpreterValue {
             InterpreterValue::Strong(_) | InterpreterValue::Weak(_) => {
                 self.deref_value().unwrap().get_ident()
             }
-            InterpreterValue::Component(name, _, _) | InterpreterValue::GenericName(name)=> name.clone(),
+            InterpreterValue::Component(name, _, _) | InterpreterValue::GenericName(name) => {
+                name.clone()
+            }
             _ => panic!("is not a componetn"),
         }
     }

@@ -21,15 +21,15 @@ use crate::{
 pub fn run_system(
     sys_name: String,
     interpreter: Rc<RefCell<Interpreter>>,
-    source: String,
+    source: &'static str,
 ) -> impl FnMut(&World) {
     let interpreter = Rc::clone(&interpreter);
     move |world: &World| {
         let mut interp = interpreter.borrow_mut();
         let scope = interp.get_current_scope();
         let type_of = scope.borrow_mut().resolve_type(&sys_name).unwrap();
-        if let Err(err) = interp.call_system(&sys_name, world, &scope, type_of) {
-            err.panic_error(&source);
+        if let Err(err) = interp.call_system(&sys_name, world, &scope, type_of, source) {
+            err.panic_error(source);
         }
     }
 }
@@ -41,7 +41,7 @@ pub struct Preprocessor<'s, T> {
 
 impl<'s, T> Preprocessor<'s, T>
 where
-    T: SourceLoader<'s>,
+    T: SourceLoader,
 {
     pub fn new(source_loader: &'s T) -> Self {
         Self {
@@ -58,7 +58,7 @@ where
         register_buildin_component(Rc::clone(&self.global_scope), strct)
     }
 
-    fn register_builtins(&self) -> Result<(), ErrorWithRange> {
+    fn register_builtins(&self, file: &'static str) -> Result<(), ErrorWithRange> {
         self.global_scope
             .borrow_mut()
             .declare_type(
@@ -67,7 +67,11 @@ where
                 false,
                 0..1,
             )
-            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+            .map_err(|err| ErrorWithRange {
+                err,
+                range: 0..1,
+                file,
+            })?;
         self.global_scope
             .borrow_mut()
             .declare_type(
@@ -76,7 +80,11 @@ where
                 false,
                 0..1,
             )
-            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+            .map_err(|err| ErrorWithRange {
+                err,
+                range: 0..1,
+                file,
+            })?;
 
         self.global_scope
             .borrow_mut()
@@ -86,7 +94,11 @@ where
                 false,
                 0..1,
             )
-            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+            .map_err(|err| ErrorWithRange {
+                err,
+                range: 0..1,
+                file,
+            })?;
 
         self.global_scope
             .borrow_mut()
@@ -96,12 +108,26 @@ where
                 false,
                 0..1,
             )
-            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+            .map_err(|err| ErrorWithRange {
+                err,
+                range: 0..1,
+                file,
+            })?;
 
-        register_buildin_functions(Rc::clone(&self.global_scope))
-            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
-        register_buildin_structs_and_comps(Rc::clone(&self.global_scope))
-            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+        register_buildin_functions(Rc::clone(&self.global_scope)).map_err(|err| {
+            ErrorWithRange {
+                err,
+                range: 0..1,
+                file,
+            }
+        })?;
+        register_buildin_structs_and_comps(Rc::clone(&self.global_scope)).map_err(|err| {
+            ErrorWithRange {
+                err,
+                range: 0..1,
+                file,
+            }
+        })?;
 
         Ok(())
     }
@@ -111,12 +137,17 @@ where
         interpreter: Rc<RefCell<Interpreter>>,
         world: &World,
     ) -> Result<(Vec<AstNode>, Rc<RefCell<Scope>>), ErrorWithRange> {
+        let empty_static = self.source_loader.empty_string();
         let main_file = self
             .source_loader
             .load_main_file()
-            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+            .map_err(|err| ErrorWithRange {
+                err,
+                range: 0..1,
+                file: empty_static,
+            })?;
 
-        self.register_builtins()?;
+        self.register_builtins(main_file)?;
 
         let rest = Self::eval_scope_and_file(
             Rc::clone(&self.global_scope),
@@ -132,7 +163,7 @@ where
     fn eval_scope_and_file(
         scope: Rc<RefCell<Scope>>,
         loader: &'s T,
-        file: &'s str,
+        file: &'static str,
         world: &World,
         interpreter: Rc<RefCell<Interpreter>>,
     ) -> Result<Vec<AstNode>, ErrorWithRange> {
@@ -147,6 +178,7 @@ where
                         .map_err(|err| ErrorWithRange {
                             err,
                             range: node.range.clone(),
+                            file,
                         })?;
 
                     // NOTE(Jan): must not be parented, as its a self contained module
@@ -164,7 +196,7 @@ where
                             .borrow_mut()
                             .declare_variable(
                                 alias,
-                                InterpreterValue::Module(local_scope),
+                                InterpreterValue::Module(local_scope, content),
                                 TypeSymbol::strong(TypeSymbolType::Any),
                                 false,
                                 false,
@@ -173,13 +205,14 @@ where
                             .map_err(|err| ErrorWithRange {
                                 err,
                                 range: node.range.clone(),
+                                file,
                             })?;
                     } else {
                         scope
                             .borrow_mut()
                             .declare_variable(
                                 module,
-                                InterpreterValue::Module(local_scope),
+                                InterpreterValue::Module(local_scope, content),
                                 TypeSymbol::strong(TypeSymbolType::Any),
                                 false,
                                 false,
@@ -188,6 +221,7 @@ where
                             .map_err(|err| ErrorWithRange {
                                 err,
                                 range: node.range.clone(),
+                                file,
                             })?;
                     }
                 }
@@ -223,6 +257,7 @@ where
                                 .map_err(|err| ErrorWithRange {
                                     err,
                                     range: node.range.clone(),
+                                    file,
                                 })?;
                         }
                         AstTypeDefinition::Struct(attributes) => {
@@ -272,6 +307,7 @@ where
                                 .map_err(|err| ErrorWithRange {
                                     err,
                                     range: node.range.clone(),
+                                    file,
                                 })?;
                         }
                         AstTypeDefinition::Component(attributes) => {
@@ -288,6 +324,7 @@ where
                                 .map_err(|err| ErrorWithRange {
                                     err,
                                     range: node.range.clone(),
+                                    file,
                                 })?;
                         }
                         AstTypeDefinition::System(params, queries) => {
@@ -305,6 +342,7 @@ where
                                                 .to_owned(),
                                     },
                                     range: node.range.clone(),
+                                    file,
                                 })?;
                             }
 
@@ -330,6 +368,7 @@ where
                                                 ),
                                             },
                                             range: node.range.clone(),
+                                            file,
                                         })?;
                                     }
                                 }
@@ -346,6 +385,7 @@ where
                                                     ),
                                                 },
                                                 range: node.range.clone(),
+                                                file,
                                             })?;
                                         }
                                     }
@@ -375,6 +415,7 @@ where
                                 .map_err(|err| ErrorWithRange {
                                     err,
                                     range: node.range.clone(),
+                                    file,
                                 })?;
                         }
                         _ => (),
@@ -389,6 +430,7 @@ where
                                     type_of: "other than chain".to_owned(),
                                 },
                                 range: node.range.clone(),
+                                file,
                             })?
                         } else if chain.is_empty() {
                             Err(ErrorWithRange {
@@ -397,6 +439,7 @@ where
                                     type_of: "at least one register required".to_owned(),
                                 },
                                 range: node.range.clone(),
+                                file,
                             })?
                         }
 
@@ -406,7 +449,7 @@ where
                             sys_reg,
                             Rc::clone(&interpreter),
                             // TODO: Performace optimiziation
-                            file.to_owned(),
+                            file,
                         ));
                     }
                     _ => Err(ErrorWithRange {
@@ -415,6 +458,7 @@ where
                             type_of: "other than chain".to_owned(),
                         },
                         range: node.range.clone(),
+                        file,
                     })?,
                 },
                 _ => other_nodes.push(node),

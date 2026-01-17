@@ -3,35 +3,38 @@ use std::{
     collections::HashMap,
     fs::File,
     io,
-    marker::PhantomData,
     path::{Path, PathBuf},
     rc::Rc,
 };
 
 use parser_types::Error;
 
-pub trait SourceLoader<'s> {
+pub trait SourceLoader {
     /// load the main file of a source object
-    fn load_main_file(&self) -> Result<&'s str, Error>;
+    fn load_main_file(&self) -> Result<&'static str, Error>;
     /// Load a single file by name
-    fn load_file(&self, filename: &Path) -> Result<&'s str, Error>;
+    fn load_file(&self, filename: &Path) -> Result<&'static str, Error>;
+
+    fn empty_string(&self) -> &'static str {
+        ""
+    }
 }
 
-pub struct StaticSourceLoader<'s> {
-    content: &'s String,
+pub struct StaticSourceLoader {
+    content: &'static String,
 }
 
-impl<'s> SourceLoader<'s> for StaticSourceLoader<'s> {
-    fn load_main_file(&self) -> Result<&'s str, Error> {
+impl SourceLoader for StaticSourceLoader {
+    fn load_main_file(&self) -> Result<&'static str, Error> {
         Ok(self.content)
     }
 
-    fn load_file(&self, _filename: &Path) -> Result<&'s str, Error> {
+    fn load_file(&self, _filename: &Path) -> Result<&'static str, Error> {
         Err(Error::IoError("File not found".to_owned()))
     }
 }
 
-impl<'s> From<String> for StaticSourceLoader<'s> {
+impl From<String> for StaticSourceLoader {
     fn from(content: String) -> Self {
         let content_ref = Box::into_raw(Box::new(content));
         unsafe {
@@ -42,7 +45,7 @@ impl<'s> From<String> for StaticSourceLoader<'s> {
     }
 }
 
-impl<'s> Drop for StaticSourceLoader<'s> {
+impl Drop for StaticSourceLoader {
     fn drop(&mut self) {
         unsafe {
             drop(Box::from_raw(self.content as *const String as *mut String));
@@ -50,34 +53,32 @@ impl<'s> Drop for StaticSourceLoader<'s> {
     }
 }
 
-pub struct FileSourceLoader<'s> {
+pub struct FileSourceLoader {
     root: PathBuf,
     main_file: PathBuf,
-    buffered: Rc<RefCell<HashMap<String, &'s String>>>,
-    _data: PhantomData<&'s ()>,
+    buffered: Rc<RefCell<HashMap<String, &'static String>>>,
 }
 
-impl<'s> FileSourceLoader<'s> {
+impl FileSourceLoader {
     pub fn new(root: PathBuf, main_file: PathBuf) -> Self {
         Self {
             root,
             main_file,
             buffered: Rc::new(RefCell::new(HashMap::new())),
-            _data: PhantomData,
         }
     }
 
-    fn add_buffered(&self, path: String, value: &'s String) {
+    fn add_buffered(&self, path: String, value: &'static String) {
         self.buffered.borrow_mut().insert(path, value);
     }
 
-    fn resolve_buffered(&self, path: &str) -> Option<&'s String> {
+    fn resolve_buffered(&self, path: &str) -> Option<&'static String> {
         self.buffered.borrow().get(path).copied()
     }
 }
 
-impl<'s> SourceLoader<'s> for FileSourceLoader<'s> {
-    fn load_main_file(&self) -> Result<&'s str, Error> {
+impl SourceLoader for FileSourceLoader {
+    fn load_main_file(&self) -> Result<&'static str, Error> {
         let mut complete_main_path = PathBuf::new();
         complete_main_path.push(&self.root);
         complete_main_path.push(&self.main_file);
@@ -105,7 +106,7 @@ impl<'s> SourceLoader<'s> for FileSourceLoader<'s> {
         }
     }
 
-    fn load_file(&self, filename: &Path) -> Result<&'s str, Error> {
+    fn load_file(&self, filename: &Path) -> Result<&'static str, Error> {
         let mut complete_path = PathBuf::new();
         complete_path.push(&self.root);
         complete_path.push(filename);
@@ -134,7 +135,7 @@ impl<'s> SourceLoader<'s> for FileSourceLoader<'s> {
     }
 }
 
-impl<'s> Drop for FileSourceLoader<'s> {
+impl Drop for FileSourceLoader {
     fn drop(&mut self) {
         for file in self.buffered.borrow().iter() {
             unsafe {

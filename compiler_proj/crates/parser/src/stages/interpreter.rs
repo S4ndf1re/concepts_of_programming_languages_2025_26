@@ -98,9 +98,10 @@ impl Interpreter {
         op: &InfixOperator,
         right: &AstNode,
         world: &World,
+        file: &'static str,
     ) -> Result<InterpreterValue, ErrorWithRange> {
-        let lval = self.eval_node(left, world)?.unwrap();
-        let rval = self.eval_node(right, world)?.unwrap();
+        let lval = self.eval_node(left, world, file)?.unwrap();
+        let rval = self.eval_node(right, world, file)?.unwrap();
 
         let new_val = match op {
             InfixOperator::Plus => lval + rval,
@@ -122,12 +123,14 @@ impl Interpreter {
             Ok(v.make_reference_counted().map_err(|e| ErrorWithRange {
                 err: e,
                 range: left.range.clone(),
+                file,
             })?)
         } else {
             let e = new_val.unwrap_err();
             Err(ErrorWithRange {
                 err: e,
                 range: left.range.clone(),
+                file,
             })
         }
     }
@@ -137,8 +140,9 @@ impl Interpreter {
         op: &PrefixOperator,
         right: &AstNode,
         world: &World,
+        file: &'static str,
     ) -> Result<InterpreterValue, ErrorWithRange> {
-        let rval = self.eval_node(right, world)?.unwrap();
+        let rval = self.eval_node(right, world, file)?.unwrap();
 
         let new_val = match op {
             PrefixOperator::Not => rval.negate_bool(),
@@ -149,12 +153,14 @@ impl Interpreter {
             Ok(v.make_reference_counted().map_err(|e| ErrorWithRange {
                 err: e,
                 range: right.range.clone(),
+                file,
             })?)
         } else {
             let e = new_val.unwrap_err();
             Err(ErrorWithRange {
                 err: e,
                 range: right.range.clone(),
+                file,
             })
         }
     }
@@ -164,12 +170,14 @@ impl Interpreter {
         node: &AstNode,
         world: &World,
         calls: &[MemberAccess],
+        file: &'static str,
     ) -> Result<(), ErrorWithRange> {
-        let (_, _, (_, value)) = self.eval_member_call_helper(node, calls, world)?;
+        let (_, _, (_, value)) = self.eval_member_call_helper(node, calls, world, file)?;
         if let InterpreterValue::Entity(entity) =
             value.deref_value().map_err(|err| ErrorWithRange {
                 err,
                 range: node.range.clone(),
+                file,
             })?
         {
             world.despawn(entity);
@@ -183,6 +191,7 @@ impl Interpreter {
         node: &AstNode,
         world: &World,
         new_symbol: &Symbol,
+        file: &'static str,
     ) -> Result<(), ErrorWithRange> {
         let entity = world.spawn().id();
 
@@ -201,6 +210,7 @@ impl Interpreter {
             .map_err(|err| ErrorWithRange {
                 err,
                 range: node.range.clone(),
+                file,
             })?;
 
         Ok(())
@@ -213,12 +223,14 @@ impl Interpreter {
         expression: &AstNode,
         assumed_type: &Option<TypeSymbol>,
         world: &World,
+        file: &'static str,
     ) -> Result<(), ErrorWithRange> {
-        let value = self.eval_node(expression, world)?.unwrap();
+        let value = self.eval_node(expression, world, file)?.unwrap();
         if let InterpreterValue::Empty = value {
             return Err(ErrorWithRange {
                 err: Error::CantBeEmpty,
                 range: expression.range.clone(),
+                file,
             });
         }
 
@@ -242,6 +254,7 @@ impl Interpreter {
                 return Err(ErrorWithRange {
                     err: e,
                     range: expression.range.clone(),
+                    file,
                 });
             }
         } else {
@@ -264,12 +277,14 @@ impl Interpreter {
                     return Err(ErrorWithRange {
                         err: e,
                         range: expression.range.clone(),
+                        file,
                     });
                 }
             } else {
                 return Err(ErrorWithRange {
                     err: Error::TypeDeductionError,
                     range: expression.range.clone(),
+                    file,
                 });
             }
         }
@@ -284,23 +299,26 @@ impl Interpreter {
         op: &AssignmentOperations,
         expression: &AstNode,
         world: &World,
+        file: &'static str,
     ) -> Result<(), ErrorWithRange> {
         let (mut scope, list_like, (recipient, old_value)) =
-            self.eval_member_call_helper(node, recipient, world)?;
+            self.eval_member_call_helper(node, recipient, world, file)?;
 
         // NOTE: When we have an Entity we have a different definition of assignment operations. only assign add and subtract are supported
         if let InterpreterValue::Entity(entity) =
             old_value.deref_value().map_err(|err| ErrorWithRange {
                 err,
                 range: expression.range.clone(),
+                file,
             })?
         {
             if matches!(op, AssignmentOperations::Add) {
-                let value = self.eval_node(expression, world)?.unwrap();
+                let value = self.eval_node(expression, world, file)?.unwrap();
                 // SAFETY: it can be assumed, that this is always reference counted, and possibly never weak
                 let value_deref = value.deref_value().map_err(|err| ErrorWithRange {
                     err,
                     range: expression.range.clone(),
+                    file,
                 })?;
                 if matches!(value_deref, InterpreterValue::Component(_, _, _)) {
                     if let Some(mut entt) = world.get_entity_mut(entity) {
@@ -313,16 +331,18 @@ impl Interpreter {
                             type_of: "must assign component to entity".to_owned(),
                         },
                         range: expression.range.clone(),
+                        file,
                     })?;
                 }
             } else if matches!(op, AssignmentOperations::Subtract) {
                 let mut expression = expression.clone();
                 expression.partial_resolve_symbols = false;
-                let value = self.eval_node(&expression, world)?.unwrap();
+                let value = self.eval_node(&expression, world, file)?.unwrap();
                 // SAFETY: it can be assumed, that this is always reference counted, and possibly never weak
                 let value_deref = value.deref_value().map_err(|err| ErrorWithRange {
                     err,
                     range: expression.range.clone(),
+                    file,
                 })?;
                 if matches!(value_deref, InterpreterValue::Component(_, _, _))
                     || matches!(value_deref, InterpreterValue::GenericName(_))
@@ -337,6 +357,7 @@ impl Interpreter {
                             type_of: "must assign component to entity".to_owned(),
                         },
                         range: expression.range.clone(),
+                        file,
                     })?;
                 }
             } else {
@@ -346,14 +367,16 @@ impl Interpreter {
                         type_of: "must assign component to entity".to_owned(),
                     },
                     range: expression.range.clone(),
+                    file,
                 })?;
             }
         } else {
-            let value = self.eval_node(expression, world)?.unwrap();
+            let value = self.eval_node(expression, world, file)?.unwrap();
             if let InterpreterValue::Empty = value {
                 return Err(ErrorWithRange {
                     err: Error::CantBeEmpty,
                     range: expression.range.clone(),
+                    file,
                 });
             }
 
@@ -368,6 +391,7 @@ impl Interpreter {
             .map_err(|err| ErrorWithRange {
                 err,
                 range: expression.range.clone(),
+                file,
             });
 
             let new_value = new_value?;
@@ -375,6 +399,7 @@ impl Interpreter {
                 *list_value.index_mut(idx).map_err(|err| ErrorWithRange {
                     err,
                     range: node.range.clone(),
+                    file,
                 })? = new_value;
 
                 scope
@@ -385,11 +410,13 @@ impl Interpreter {
                             .map_err(|err| ErrorWithRange {
                                 err,
                                 range: expression.range.clone(),
+                                file,
                             })?,
                     )
                     .map_err(|err| ErrorWithRange {
                         err,
                         range: expression.range.clone(),
+                        file,
                     })?;
             } else {
                 scope
@@ -397,6 +424,7 @@ impl Interpreter {
                     .map_err(|err| ErrorWithRange {
                         err,
                         range: expression.range.clone(),
+                        file,
                     })?;
             }
         }
@@ -408,14 +436,16 @@ impl Interpreter {
         &mut self,
         inner: &AstNode,
         world: &World,
+        file: &'static str,
     ) -> Result<InterpreterValue, ErrorWithRange> {
-        let val = self.eval_node(inner, world)?.unwrap();
+        let val = self.eval_node(inner, world, file)?.unwrap();
         if let InterpreterValue::Strong(rc) = &val {
             Ok(InterpreterValue::Weak(Rc::downgrade(rc)))
         } else {
             Err(ErrorWithRange {
                 err: Error::MainNotFound,
                 range: inner.range.clone(),
+                file,
             })
         }
     }
@@ -427,15 +457,17 @@ impl Interpreter {
         else_ifs: &Vec<(Box<AstNode>, Vec<Box<AstNode>>)>,
         else_branch: &Option<Vec<Box<AstNode>>>,
         world: &World,
+        file: &'static str,
     ) -> Result<IsReturn, ErrorWithRange> {
         // NOTE: Cannot be return, hence safe to unwrap
         let cond1 = self
-            .eval_node(cond, world)?
+            .eval_node(cond, world, file)?
             .unwrap()
             .deref_value()
             .map_err(|err| ErrorWithRange {
                 err,
                 range: cond.range.clone(),
+                file,
             })?;
 
         let InterpreterValue::Bool(cond1) = cond1 else {
@@ -445,11 +477,12 @@ impl Interpreter {
                     type_of: "must be bool".to_owned(),
                 },
                 range: cond.range.clone(),
+                file,
             });
         };
 
         if cond1 {
-            let res = scoped!(self, { self.eval_nodes(body, world)? });
+            let res = scoped!(self, { self.eval_nodes(body, world, file)? });
 
             return_on_return!(res);
         } else {
@@ -457,12 +490,13 @@ impl Interpreter {
 
             for elif in else_ifs {
                 let cond = self
-                    .eval_node(elif.0.as_ref(), world)?
+                    .eval_node(elif.0.as_ref(), world, file)?
                     .unwrap()
                     .deref_value()
                     .map_err(|err| ErrorWithRange {
                         err,
                         range: cond.range.clone(),
+                        file,
                     })?;
 
                 let InterpreterValue::Bool(cond) = cond else {
@@ -472,11 +506,12 @@ impl Interpreter {
                             type_of: "must be bool".to_owned(),
                         },
                         range: elif.0.range.clone(),
+                        file,
                     });
                 };
 
                 if cond {
-                    let res = scoped!(self, { self.eval_nodes(&elif.1, world)? });
+                    let res = scoped!(self, { self.eval_nodes(&elif.1, world, file)? });
 
                     return_on_return!(res);
                     executed_case = true;
@@ -487,7 +522,7 @@ impl Interpreter {
             if !executed_case && else_branch.is_some() {
                 let else_branch = else_branch.as_ref().expect("checked");
 
-                let res = scoped!(self, { self.eval_nodes(else_branch, world)? });
+                let res = scoped!(self, { self.eval_nodes(else_branch, world, file)? });
                 return_on_return!(res);
             }
         }
@@ -500,15 +535,17 @@ impl Interpreter {
         cond: &AstNode,
         body: &Vec<Box<AstNode>>,
         world: &World,
+        file: &'static str,
     ) -> Result<IsReturn, ErrorWithRange> {
         loop {
             let cond1 = self
-                .eval_node(cond, world)?
+                .eval_node(cond, world, file)?
                 .unwrap()
                 .deref_value()
                 .map_err(|err| ErrorWithRange {
                     err,
                     range: cond.range.clone(),
+                    file,
                 })?;
 
             let InterpreterValue::Bool(cond) = cond1 else {
@@ -518,6 +555,7 @@ impl Interpreter {
                         type_of: "must be bool".to_owned(),
                     },
                     range: cond.range.clone(),
+                    file,
                 });
             };
 
@@ -525,7 +563,7 @@ impl Interpreter {
                 break;
             }
 
-            let res = scoped!(self, { self.eval_nodes(body, world)? });
+            let res = scoped!(self, { self.eval_nodes(body, world, file)? });
             return_on_return!(res);
         }
 
@@ -539,6 +577,7 @@ impl Interpreter {
         step: &Option<Box<AstNode>>,
         body: &Vec<Box<AstNode>>,
         world: &World,
+        file: &'static str,
     ) -> Result<IsReturn, ErrorWithRange> {
         scoped!(self, {
             // Init condition
@@ -549,7 +588,7 @@ impl Interpreter {
                         expression: _,
                         assumed_type: _,
                     } => {
-                        self.eval_node(init.as_ref(), world)?;
+                        self.eval_node(init.as_ref(), world, file)?;
                     }
                     _ => {
                         return Err(ErrorWithRange {
@@ -558,6 +597,7 @@ impl Interpreter {
                                 type_of: "must be declaration".to_owned(),
                             },
                             range: init.range.clone(),
+                            file,
                         });
                     }
                 }
@@ -566,12 +606,13 @@ impl Interpreter {
             loop {
                 if let Some(cond) = cond.as_ref() {
                     let cond1 = self
-                        .eval_node(cond, world)?
+                        .eval_node(cond, world, file)?
                         .unwrap()
                         .deref_value()
                         .map_err(|err| ErrorWithRange {
                             err,
                             range: cond.range.clone(),
+                            file,
                         })?;
 
                     let InterpreterValue::Bool(cond) = cond1 else {
@@ -581,6 +622,7 @@ impl Interpreter {
                                 type_of: "must be bool".to_owned(),
                             },
                             range: cond.range.clone(),
+                            file,
                         });
                     };
 
@@ -589,7 +631,7 @@ impl Interpreter {
                     }
                 }
 
-                let res = scoped!(self, { self.eval_nodes(body, world)? });
+                let res = scoped!(self, { self.eval_nodes(body, world, file)? });
                 return_on_return!(res);
 
                 if let Some(step) = step.as_ref() {
@@ -599,7 +641,7 @@ impl Interpreter {
                             operation: _,
                             expression: _,
                         } => {
-                            self.eval_node(step.as_ref(), world)?;
+                            self.eval_node(step.as_ref(), world, file)?;
                         }
                         _ => {
                             return Err(ErrorWithRange {
@@ -608,6 +650,7 @@ impl Interpreter {
                                     type_of: "must be assignment".to_owned(),
                                 },
                                 range: step.range.clone(),
+                                file,
                             });
                         }
                     }
@@ -625,12 +668,14 @@ impl Interpreter {
         iterable: &AstNode,
         body: &Vec<Box<AstNode>>,
         world: &World,
+        file: &'static str,
     ) -> Result<IsReturn, ErrorWithRange> {
-        let iterable1 = self.eval_node(iterable, world)?.unwrap();
+        let iterable1 = self.eval_node(iterable, world, file)?.unwrap();
 
         for entry in iterable1.as_list().map_err(|e| ErrorWithRange {
             err: e,
             range: iterable.range.clone(),
+            file,
         })? {
             scoped!(self, {
                 let Some(type_of) = entry.clone().into() else {
@@ -640,6 +685,7 @@ impl Interpreter {
                             type_of: "non list type".to_owned(),
                         },
                         range: iterable.range.clone(),
+                        file,
                     });
                 };
 
@@ -656,10 +702,11 @@ impl Interpreter {
                     .map_err(|e| ErrorWithRange {
                         err: e,
                         range: iterable.range.clone(),
+                        file,
                     })?;
 
                 scoped!(self, {
-                    let res = self.eval_nodes(body, world)?;
+                    let res = self.eval_nodes(body, world, file)?;
                     return_on_return!(res);
                 });
             });
@@ -672,11 +719,12 @@ impl Interpreter {
         &mut self,
         values: &Vec<Box<AstNode>>,
         world: &World,
+        file: &'static str,
     ) -> Result<InterpreterValue, ErrorWithRange> {
         let mut list_elems = Vec::new();
 
         for value in values {
-            list_elems.push(self.eval_node(value.as_ref(), world)?.unwrap());
+            list_elems.push(self.eval_node(value.as_ref(), world, file)?.unwrap());
         }
 
         Ok(InterpreterValue::List(list_elems))
@@ -706,6 +754,7 @@ impl Interpreter {
         node: &AstNode,
         calls: &[MemberAccess],
         world: &World,
+        file: &'static str,
     ) -> Result<
         (
             InterpreterValue,
@@ -715,9 +764,10 @@ impl Interpreter {
         ErrorWithRange,
     > {
         // mutably borrow here, to allow for more complex pointer casting;
+        let mut current_file = file;
         let mut last_scope: Option<InterpreterValue> = None;
         let mut current_scope: InterpreterValue =
-            InterpreterValue::Module(Rc::clone(&self.get_current_scope()));
+            InterpreterValue::Module(Rc::clone(&self.get_current_scope()), current_file);
         let mut last_type: Option<TypeSymbol> = None;
 
         let mut pre_last_res: Option<(i64, InterpreterValue)> = None;
@@ -728,6 +778,7 @@ impl Interpreter {
                     type_of: "must be at least one member call".to_owned(),
                 },
                 range: node.range.clone(),
+                file,
             });
 
         for call in calls {
@@ -744,6 +795,7 @@ impl Interpreter {
                     .map_err(|err| ErrorWithRange {
                         err,
                         range: call.range.clone(),
+                        file,
                     })?;
 
                     if let TypeSymbolType::Function(fn_typedef) = &fn_type.type_of {
@@ -758,9 +810,11 @@ impl Interpreter {
                                     .map_err(|err| ErrorWithRange {
                                         err,
                                         range: call.range.clone(),
+                                        file,
                                     })?,
                                 fn_type,
                                 world,
+                                current_file,
                             )
                         } else {
                             self.call_function(
@@ -771,9 +825,11 @@ impl Interpreter {
                                     .map_err(|err| ErrorWithRange {
                                         err,
                                         range: call.range.clone(),
+                                        file,
                                     })?,
                                 fn_type,
                                 world,
+                                current_file,
                             )
                         }?;
                         // Set current scope here. it must be checked before every execution
@@ -785,6 +841,7 @@ impl Interpreter {
                         Err(ErrorWithRange {
                             err: Error::SymbolNotFound(call.member.clone()),
                             range: call.range.clone(),
+                            file,
                         })?
                     }
                 }
@@ -796,6 +853,7 @@ impl Interpreter {
                             ErrorWithRange {
                                 err,
                                 range: call.range.clone(),
+                                file,
                             }
                         })?;
                         current_scope = res.clone();
@@ -821,6 +879,7 @@ impl Interpreter {
                             .map_err(|err| ErrorWithRange {
                                 err,
                                 range: call.range.clone(),
+                                file,
                             })?
                             .borrow()
                             .resolve_defined_type(&call.member)
@@ -834,6 +893,7 @@ impl Interpreter {
                                     .map_err(|err| ErrorWithRange {
                                         err,
                                         range: call.range.clone(),
+                                        file,
                                     })?;
 
                                 let mut assigned_fields = HashSet::<&String>::new();
@@ -842,7 +902,8 @@ impl Interpreter {
                                 for (field, value_node) in fields_to_assign {
                                     if fields_of_struct_type.contains_key(field) {
                                         assigned_fields.insert(field);
-                                        let value = self.eval_node(value_node, world)?.unwrap();
+                                        let value =
+                                            self.eval_node(value_node, world, file)?.unwrap();
                                         field_values.insert(field.clone(), Box::new(value));
                                     } else {
                                         todo!("throw error here, as field does not exist")
@@ -855,6 +916,7 @@ impl Interpreter {
                                             |err| ErrorWithRange {
                                                 err,
                                                 range: call.range.clone(),
+                                                file,
                                             },
                                         )?),
                                         field_values,
@@ -862,6 +924,7 @@ impl Interpreter {
                                     .map_err(|err| ErrorWithRange {
                                         err,
                                         range: call.range.clone(),
+                                        file,
                                     })?;
 
                                 current_scope = struct_value.clone();
@@ -874,6 +937,7 @@ impl Interpreter {
                                     .map_err(|err| ErrorWithRange {
                                         err,
                                         range: call.range.clone(),
+                                        file,
                                     })?;
 
                                 let mut assigned_fields = HashSet::<&String>::new();
@@ -882,7 +946,8 @@ impl Interpreter {
                                 for (field, value_node) in fields_to_assign {
                                     if fields_of_struct_type.contains_key(field) {
                                         assigned_fields.insert(field);
-                                        let value = self.eval_node(value_node, world)?.unwrap();
+                                        let value =
+                                            self.eval_node(value_node, world, file)?.unwrap();
                                         field_values.insert(field.clone(), Box::new(value));
                                     } else {
                                         todo!("throw error here, as field does not exist")
@@ -895,6 +960,7 @@ impl Interpreter {
                                             |err| ErrorWithRange {
                                                 err,
                                                 range: call.range.clone(),
+                                                file,
                                             },
                                         )?),
                                         field_values,
@@ -902,6 +968,7 @@ impl Interpreter {
                                     .map_err(|err| ErrorWithRange {
                                         err,
                                         range: call.range.clone(),
+                                        file,
                                     })?;
 
                                 current_scope = struct_value.clone();
@@ -914,6 +981,7 @@ impl Interpreter {
                         Err(ErrorWithRange {
                             err: Error::SymbolNotFound(call.member.clone()),
                             range: call.range.clone(),
+                            file,
                         })?
                     }
                 }
@@ -926,6 +994,7 @@ impl Interpreter {
                             .map_err(|err| ErrorWithRange {
                                 err,
                                 range: call.range.clone(),
+                                file,
                             })?;
 
                     pre_last_res = Some((*idx, res.clone()));
@@ -934,6 +1003,7 @@ impl Interpreter {
                         .map_err(|err| ErrorWithRange {
                             err,
                             range: call.range.clone(),
+                            file,
                         })?
                         .clone();
 
@@ -942,6 +1012,9 @@ impl Interpreter {
                     res
                 }
             };
+            if let Some(file) = res.get_file() {
+                current_file = file;
+            }
             last_res = Ok((call.member.clone(), res));
         }
 
@@ -954,6 +1027,7 @@ impl Interpreter {
                     type_of: "must be at least one call".to_owned(),
                 },
                 range: node.range.clone(),
+                file,
             })
         }
     }
@@ -964,45 +1038,55 @@ impl Interpreter {
         node: &AstNode,
         calls: &[MemberAccess],
         world: &World,
+        file: &'static str,
     ) -> Result<IsReturn, ErrorWithRange> {
-        let (_, _, (_, res)) = self.eval_member_call_helper(node, calls, world)?;
+        let (_, _, (_, res)) = self.eval_member_call_helper(node, calls, world, file)?;
         Ok(IsReturn::NoReturn(res))
     }
 
-    pub fn eval_node(&mut self, node: &AstNode, world: &World) -> Result<IsReturn, ErrorWithRange> {
+    pub fn eval_node(
+        &mut self,
+        node: &AstNode,
+        world: &World,
+        file: &'static str,
+    ) -> Result<IsReturn, ErrorWithRange> {
         let evaluated = match &node.type_of {
             // Primitives
             AstNodeType::Bool(b) => IsReturn::NoReturn(InterpreterValue::Bool(*b)),
             AstNodeType::Int(i) => IsReturn::NoReturn(InterpreterValue::Int(*i)),
             AstNodeType::Float(f) => IsReturn::NoReturn(InterpreterValue::Float(*f)),
             AstNodeType::String(s) => IsReturn::NoReturn(InterpreterValue::String(s.clone())),
-            AstNodeType::List(values) => IsReturn::NoReturn(self.eval_list(values, world)?),
+            AstNodeType::List(values) => IsReturn::NoReturn(self.eval_list(values, world, file)?),
             AstNodeType::Map(values) => {
                 IsReturn::NoReturn(self.eval_map(values).map_err(|e| ErrorWithRange {
                     err: e,
                     range: node.range.clone(),
+                    file,
                 })?)
             }
-            AstNodeType::Weak(inner) => IsReturn::NoReturn(self.eval_weak(inner.as_ref(), world)?),
+            AstNodeType::Weak(inner) => {
+                IsReturn::NoReturn(self.eval_weak(inner.as_ref(), world, file)?)
+            }
             // Infix call and prefix calls
             AstNodeType::InfixCall(left, op, right) => IsReturn::NoReturn(self.eval_infix_call(
                 left.as_ref(),
                 op,
                 right.as_ref(),
                 world,
+                file,
             )?),
             AstNodeType::PrefixCall(prefix, right) => {
-                IsReturn::NoReturn(self.eval_prefix_call(prefix, right.as_ref(), world)?)
+                IsReturn::NoReturn(self.eval_prefix_call(prefix, right.as_ref(), world, file)?)
             }
             AstNodeType::EntityDef {
                 name,
                 default_components: _,
             } => {
-                self.eval_entity_declaration(node, world, name)?;
+                self.eval_entity_declaration(node, world, name, file)?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             AstNodeType::EntityDespawn { name } => {
-                self.eval_entity_despawn(node, world, name)?;
+                self.eval_entity_despawn(node, world, name, file)?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             // Assignent and declaration
@@ -1011,7 +1095,14 @@ impl Interpreter {
                 expression,
                 assumed_type,
             } => {
-                self.eval_declaration(node, new_symbol, expression.as_ref(), assumed_type, world)?;
+                self.eval_declaration(
+                    node,
+                    new_symbol,
+                    expression.as_ref(),
+                    assumed_type,
+                    world,
+                    file,
+                )?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             AstNodeType::AssignmentOp {
@@ -1019,32 +1110,48 @@ impl Interpreter {
                 operation,
                 expression,
             } => {
-                self.eval_assignment_op(node, recipient, operation, expression.as_ref(), world)?;
+                self.eval_assignment_op(
+                    node,
+                    recipient,
+                    operation,
+                    expression.as_ref(),
+                    world,
+                    file,
+                )?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             // Member call can be anything that is of the form a.b.c.d(a,b).c etc. a() and a are also member calls with length 1
-            AstNodeType::MemberCall { calls } => self.eval_member_call(node, calls, world)?,
+            AstNodeType::MemberCall { calls } => self.eval_member_call(node, calls, world, file)?,
             AstNodeType::ReturnStatement { return_value } => {
-                IsReturn::Return(self.eval_node(return_value.as_ref(), world)?.unwrap())
+                IsReturn::Return(self.eval_node(return_value.as_ref(), world, file)?.unwrap())
             }
             AstNodeType::Branch {
                 cond,
                 body,
                 else_if_branches,
                 else_branch,
-            } => self.eval_branch(cond.as_ref(), body, else_if_branches, else_branch, world)?,
-            AstNodeType::While { cond, body } => self.eval_while(cond.as_ref(), body, world)?,
+            } => self.eval_branch(
+                cond.as_ref(),
+                body,
+                else_if_branches,
+                else_branch,
+                world,
+                file,
+            )?,
+            AstNodeType::While { cond, body } => {
+                self.eval_while(cond.as_ref(), body, world, file)?
+            }
             AstNodeType::For {
                 declaration,
                 condition,
                 assignment,
                 body,
-            } => self.eval_for(declaration, condition, assignment, body, world)?,
+            } => self.eval_for(declaration, condition, assignment, body, world, file)?,
             AstNodeType::ForEach {
                 recipient,
                 iterable,
                 body,
-            } => self.eval_for_each(node, recipient, iterable, body, world)?,
+            } => self.eval_for_each(node, recipient, iterable, body, world, file)?,
             _ => Err(Error::OperationUnsupported {
                 operation: format!("{:?}", &node.type_of),
                 type_of: "".to_owned(),
@@ -1052,6 +1159,7 @@ impl Interpreter {
             .map_err(|err| ErrorWithRange {
                 err,
                 range: node.range.clone(),
+                file,
             })?,
         };
 
@@ -1062,9 +1170,10 @@ impl Interpreter {
         &mut self,
         nodes: &Vec<Box<AstNode>>,
         world: &World,
+        file: &'static str,
     ) -> Result<IsReturn, ErrorWithRange> {
         for node in nodes {
-            let res = self.eval_node(node.as_ref(), world)?;
+            let res = self.eval_node(node.as_ref(), world, file)?;
 
             // Early exit until function call is reached
             return_on_return!(res);
@@ -1080,12 +1189,13 @@ impl Interpreter {
         call_scope: &Rc<RefCell<Scope>>,
         fn_signature: TypeSymbol,
         world: &World,
+        file: &'static str,
     ) -> Result<InterpreterValue, ErrorWithRange> {
         if let TypeSymbolType::Function(fn_type) = &fn_signature.type_of {
             let mut evaled_params = Vec::new();
 
             for param in params {
-                evaled_params.push((param, self.eval_node(param.as_ref(), world)?));
+                evaled_params.push((param, self.eval_node(param.as_ref(), world, file)?));
             }
 
             let param_scope = {
@@ -1097,6 +1207,7 @@ impl Interpreter {
                         return Err(ErrorWithRange {
                             err: Error::ExpectedValue(param.to_owned()),
                             range: 1..2,
+                            file,
                         });
                     }
 
@@ -1112,6 +1223,7 @@ impl Interpreter {
                         .map_err(|e| ErrorWithRange {
                             err: e,
                             range: param_node.range.clone(),
+                            file,
                         })?;
                 }
                 Rc::new(RefCell::new(param_scope))
@@ -1119,11 +1231,14 @@ impl Interpreter {
 
             let result = with_scope!(self, param_scope, {
                 match &fn_type.execution_body {
-                    FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body, world)?,
+                    FunctionExecutionStrategy::Interpreted(body) => {
+                        self.eval_nodes(body, world, file)?
+                    }
                     FunctionExecutionStrategy::Buildin(callback) => {
                         callback(self.get_current_scope(), world).map_err(|e| ErrorWithRange {
                             err: e,
                             range: 1..2,
+                            file,
                         })?
                     }
                 }
@@ -1135,6 +1250,7 @@ impl Interpreter {
                 _ => Err(ErrorWithRange {
                     err: Error::MissingReturn(fn_name.clone()),
                     range: 1..2,
+                    file,
                 }),
             }
         } else {
@@ -1152,12 +1268,13 @@ impl Interpreter {
         call_scope: &Rc<RefCell<Scope>>,
         fn_signature: TypeSymbol,
         world: &World,
+        file: &'static str,
     ) -> Result<InterpreterValue, ErrorWithRange> {
         if let TypeSymbolType::Function(fn_type) = &fn_signature.type_of {
             let mut evaled_params = Vec::new();
 
             for param in params {
-                evaled_params.push((param, self.eval_node(param.as_ref(), world)?));
+                evaled_params.push((param, self.eval_node(param.as_ref(), world, file)?));
             }
 
             let param_scope = {
@@ -1169,6 +1286,7 @@ impl Interpreter {
                         return Err(ErrorWithRange {
                             err: Error::ExpectedValue(param.to_owned()),
                             range: 1..2,
+                            file,
                         });
                     }
 
@@ -1184,6 +1302,7 @@ impl Interpreter {
                         .map_err(|e| ErrorWithRange {
                             err: e,
                             range: param_node.range.clone(),
+                            file,
                         })?;
                 }
 
@@ -1192,6 +1311,7 @@ impl Interpreter {
                     .map_err(|e| ErrorWithRange {
                         err: e,
                         range: 1..2,
+                        file,
                     })?;
 
                 Rc::new(RefCell::new(param_scope))
@@ -1199,11 +1319,14 @@ impl Interpreter {
 
             let result = with_scope!(self, param_scope, {
                 match &fn_type.execution_body {
-                    FunctionExecutionStrategy::Interpreted(body) => self.eval_nodes(body, world)?,
+                    FunctionExecutionStrategy::Interpreted(body) => {
+                        self.eval_nodes(body, world, file)?
+                    }
                     FunctionExecutionStrategy::Buildin(callback) => {
                         callback(self.get_current_scope(), world).map_err(|e| ErrorWithRange {
                             err: e,
                             range: 1..2,
+                            file,
                         })?
                     }
                 }
@@ -1215,6 +1338,7 @@ impl Interpreter {
                 _ => Err(ErrorWithRange {
                     err: Error::MissingReturn(fn_name.clone()),
                     range: 1..2,
+                    file,
                 }),
             }
         } else {
@@ -1228,6 +1352,7 @@ impl Interpreter {
         world: &World,
         call_scope: &Rc<RefCell<Scope>>,
         fn_signature: TypeSymbol,
+        file: &'static str,
     ) -> Result<(), ErrorWithRange> {
         if let TypeSymbolType::System(system_type) = fn_signature.type_of {
             // assume already validated sytems
@@ -1239,8 +1364,14 @@ impl Interpreter {
                 for query in sys_queries {
                     queries.insert(query.symbol.clone(), &query.type_of);
 
-                    let value = apply_pseudo_system_param!(world, query, call_scope)
-                        .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+                    let value =
+                        apply_pseudo_system_param!(world, query, call_scope).map_err(|err| {
+                            ErrorWithRange {
+                                err,
+                                range: 0..1,
+                                file,
+                            }
+                        })?;
                     query_states.insert(query.symbol.clone(), value);
                 }
             }
@@ -1263,7 +1394,11 @@ impl Interpreter {
                             false,
                             0..1,
                         )
-                        .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+                        .map_err(|err| ErrorWithRange {
+                            err,
+                            range: 0..1,
+                            file,
+                        })?;
                 }
             }
             let param_scope = Rc::new(RefCell::new(param_scope));
@@ -1271,9 +1406,13 @@ impl Interpreter {
             with_scope!(self, param_scope, {
                 match system_type.execution_body {
                     SystemExecutionStrategy::Buildin(body) => body(Rc::clone(&param_scope))
-                        .map_err(|err| ErrorWithRange { err, range: 0..1 }),
+                        .map_err(|err| ErrorWithRange {
+                            err,
+                            range: 0..1,
+                            file,
+                        }),
                     SystemExecutionStrategy::Interpreted(ast_nodes) => {
-                        self.eval_nodes(&ast_nodes, world).map(|_| ())
+                        self.eval_nodes(&ast_nodes, world, file).map(|_| ())
                     }
                 }
             })?;
@@ -1286,6 +1425,7 @@ impl Interpreter {
                     type_of: "must be a system".to_owned(),
                 },
                 range: 0..1,
+                file,
             })
         }
     }
@@ -1297,13 +1437,17 @@ impl Interpreter {
         }];
     }
 
-    pub fn run(&mut self, world: &World) -> Result<(), ErrorWithRange> {
+    pub fn run(&mut self, world: &World, file: &'static str) -> Result<(), ErrorWithRange> {
         let entrypoint_fn = self.entrypoint_fn.clone();
         let main_fn = self
             .get_current_scope()
             .borrow()
             .resolve_value(&entrypoint_fn)
-            .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
+            .map_err(|err| ErrorWithRange {
+                err,
+                range: 0..1,
+                file,
+            })?;
 
         if let InterpreterValue::Function(_) = main_fn {
             let main_fn = self
@@ -1312,7 +1456,14 @@ impl Interpreter {
                 .resolve_type(&entrypoint_fn)
                 .expect("must be present if value is present");
             let current_scope = self.get_current_scope();
-            self.call_function(&entrypoint_fn, &vec![], &current_scope, main_fn, world)?;
+            self.call_function(
+                &entrypoint_fn,
+                &vec![],
+                &current_scope,
+                main_fn,
+                world,
+                file,
+            )?;
         } else {
             return Err(ErrorWithRange {
                 err: Error::WrongType(
@@ -1332,6 +1483,7 @@ impl Interpreter {
                         .to_string(),
                 ),
                 range: 0..1,
+                file,
             });
         }
 
