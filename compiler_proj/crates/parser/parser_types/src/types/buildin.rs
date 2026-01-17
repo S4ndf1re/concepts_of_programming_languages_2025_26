@@ -43,6 +43,42 @@ macro_rules! instantiate_struct_as_t {
 }
 
 #[macro_export]
+macro_rules! interpreter_struct_instance_as_t {
+    ($instance:expr => $type_as:ty) => {{
+        let InterpreterValue::BuiltinStruct(_, obj) = $instance.deref_value()? else {
+            return Err(Error::OperationUnsupported {
+                operation: "builtin casting".to_owned(),
+                type_of: "is not a builtin struct".to_owned(),
+            });
+        };
+
+        unsafe {
+            let obj_casted =
+                &mut *(&mut *obj.borrow_mut() as *mut dyn BuiltinStruct as *mut $type_as);
+            ($instance, &mut *obj_casted)
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! interpreter_component_instance_as_t {
+    ($instance:expr => $type_as:ty) => {{
+        let ::parser_types::InterpreterValue::BuiltinComponent(_, obj) = $instance.deref_value()? else {
+            return Err(::parser_types::Error::OperationUnsupported {
+                operation: "builtin casting".to_owned(),
+                type_of: "is not a builtin struct".to_owned(),
+            });
+        };
+
+        unsafe {
+            let obj_casted =
+                &mut *(&mut *obj.borrow_mut() as *mut dyn ::parser_types::BuiltinComponent as *mut $type_as);
+            ($instance, &mut *obj_casted)
+        }
+    }};
+}
+
+#[macro_export]
 macro_rules! instantiate_component_as_t {
     ($s:expr, $name:expr => $type_as:ty, $params:expr) => {{
         let type_of = $s

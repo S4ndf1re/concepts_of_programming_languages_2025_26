@@ -3,9 +3,9 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use ecs::World;
-    use parser_types::{BeautifyError, ast_grammar};
+    use parser_types::BeautifyError;
 
-    use crate::{Interpreter, Parser, Preprocessor, StageResult, Stages, run_stages};
+    use crate::{Interpreter, StaticSourceLoader, preprocess};
 
     #[test]
     fn test_basic_interpretation() {
@@ -14,59 +14,31 @@ mod tests {
            fn main() {
             a := 10;
             a += 20;
+            assert(a == 30)
            }
            "#,
         );
 
-        let ast = ast_grammar::ProgrammParser::new().parse(&source).unwrap();
-
         let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+        let source_loader = StaticSourceLoader::from(source.clone());
 
-        let stages = vec![
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Rc::clone(&interpreter)),
-        ];
+        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let Ok((ast, global_scope)) = preprocessed else {
+            preprocessed.unwrap_err().panic_error(&source);
+        };
 
-        let state = StageResult::Parsing(&world, ast, Rc::clone(&interpreter));
-
-        let _ = run_stages(stages, state, &world, source).unwrap();
-    }
-
-    #[test]
-    fn test_basic_interpretation2() {
-        let source = String::from(
-            r#"
-           fn main() {
-            a = 10;
-            a += 20;
-            println(a);
-           }
-           "#,
-        );
-
-        let ast = ast_grammar::ProgrammParser::new().parse(&source).unwrap();
-        let world = World::default();
-
-        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
-        let stages = vec![
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Rc::clone(&interpreter)),
-        ];
-
-        let state = StageResult::Parsing(&world, ast, Rc::clone(&interpreter));
-
-        let result = run_stages(stages, state, &world, source.clone());
-
-        if let Err(err) = result {
-            err.print_error(&source);
+        interpreter
+            .borrow_mut()
+            .initialize_pre_run(ast, global_scope);
+        if let Err(err) = interpreter.borrow_mut().run(&world) {
+            err.panic_error(&source)
         }
     }
 
     #[test]
     fn function_definition_and_returning() {
         let source = r#"
-
            fn test(a: int): int {
             return a + 10;
            }
@@ -80,15 +52,19 @@ mod tests {
 
         let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Rc::clone(&interpreter)),
-        ];
+        let source_loader = StaticSourceLoader::from(source.clone());
 
-        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
+        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let Ok((ast, global_scope)) = preprocessed else {
+            preprocessed.unwrap_err().panic_error(&source);
+        };
 
-        let _ = run_stages(stages, state, &world, source).unwrap();
+        interpreter
+            .borrow_mut()
+            .initialize_pre_run(ast, global_scope);
+        if let Err(err) = interpreter.borrow_mut().run(&world) {
+            err.panic_error(&source)
+        }
     }
 
     #[test]
@@ -105,16 +81,19 @@ mod tests {
 
         let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+        let source_loader = StaticSourceLoader::from(source.clone());
 
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Rc::clone(&interpreter)),
-        ];
+        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let Ok((ast, global_scope)) = preprocessed else {
+            preprocessed.unwrap_err().panic_error(&source);
+        };
 
-        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
-
-        let _ = run_stages(stages, state, &world, source).unwrap();
+        interpreter
+            .borrow_mut()
+            .initialize_pre_run(ast, global_scope);
+        if let Err(err) = interpreter.borrow_mut().run(&world) {
+            err.panic_error(&source)
+        }
     }
 
     #[test]
@@ -129,47 +108,18 @@ mod tests {
 
         let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+        let source_loader = StaticSourceLoader::from(source.clone());
 
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Rc::clone(&interpreter)),
-        ];
+        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let Ok((ast, global_scope)) = preprocessed else {
+            preprocessed.unwrap_err().panic_error(&source);
+        };
 
-        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
-
-        let _ = run_stages(stages, state, &world, source).unwrap();
-    }
-
-    #[test]
-    fn loop3() {
-        let source = r#"
-           fn main() {
-                res := 0;
-                for (a in [10, 20, 30, 40]) {
-                    res += a;
-                }
-                assert(res == true);
-           }
-           "#
-        .to_owned();
-
-        let source_safe = source.clone();
-
-        let world = World::default();
-        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
-
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Rc::clone(&interpreter)),
-        ];
-
-        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
-
-        let result = run_stages(stages, state, &world, source);
-        if let Err(occured_error) = result {
-            occured_error.print_error(&source_safe);
+        interpreter
+            .borrow_mut()
+            .initialize_pre_run(ast, global_scope);
+        if let Err(err) = interpreter.borrow_mut().run(&world) {
+            err.panic_error(&source)
         }
     }
 
@@ -194,22 +144,20 @@ mod tests {
            "#
         .to_owned();
 
-        let source_safe = source.clone();
-
         let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+        let source_loader = StaticSourceLoader::from(source.clone());
 
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Rc::clone(&interpreter)),
-        ];
+        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let Ok((ast, global_scope)) = preprocessed else {
+            preprocessed.unwrap_err().panic_error(&source);
+        };
 
-        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
-
-        let result = run_stages(stages, state, &world, source);
-        if let Err(occured_error) = result {
-            occured_error.panic_error(&source_safe);
+        interpreter
+            .borrow_mut()
+            .initialize_pre_run(ast, global_scope);
+        if let Err(err) = interpreter.borrow_mut().run(&world) {
+            err.panic_error(&source)
         }
     }
 
@@ -250,22 +198,20 @@ mod tests {
            "#
         .to_owned();
 
-        let source_safe = source.clone();
-
         let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+        let source_loader = StaticSourceLoader::from(source.clone());
 
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Rc::clone(&interpreter)),
-        ];
+        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let Ok((ast, global_scope)) = preprocessed else {
+            preprocessed.unwrap_err().panic_error(&source);
+        };
 
-        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
-
-        let result = run_stages(stages, state, &world, source);
-        if let Err(occured_error) = result {
-            occured_error.panic_error(&source_safe);
+        interpreter
+            .borrow_mut()
+            .initialize_pre_run(ast, global_scope);
+        if let Err(err) = interpreter.borrow_mut().run(&world) {
+            err.panic_error(&source)
         }
 
         world.run();
@@ -307,22 +253,20 @@ mod tests {
            "#
         .to_owned();
 
-        let source_safe = source.clone();
-
         let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+        let source_loader = StaticSourceLoader::from(source.clone());
 
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Rc::clone(&interpreter)),
-        ];
+        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let Ok((ast, global_scope)) = preprocessed else {
+            preprocessed.unwrap_err().panic_error(&source);
+        };
 
-        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
-
-        let result = run_stages(stages, state, &world, source);
-        if let Err(occured_error) = result {
-            occured_error.panic_error(&source_safe);
+        interpreter
+            .borrow_mut()
+            .initialize_pre_run(ast, global_scope);
+        if let Err(err) = interpreter.borrow_mut().run(&world) {
+            err.panic_error(&source)
         }
 
         world.run();
@@ -343,22 +287,20 @@ mod tests {
            "#
         .to_owned();
 
-        let source_safe = source.clone();
-
         let world = World::default();
         let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+        let source_loader = StaticSourceLoader::from(source.clone());
 
-        let stages = vec![
-            Stages::Parser(Parser::default()),
-            Stages::Preprocessor(Preprocessor::new().unwrap()),
-            Stages::Interpreter(Rc::clone(&interpreter)),
-        ];
+        let preprocessed = preprocess(&source_loader, Rc::clone(&interpreter), &world);
+        let Ok((ast, global_scope)) = preprocessed else {
+            preprocessed.unwrap_err().panic_error(&source);
+        };
 
-        let state = StageResult::PreParse(&world, source.clone(), Rc::clone(&interpreter));
-
-        let result = run_stages(stages, state, &world, source);
-        if let Err(occured_error) = result {
-            occured_error.panic_error(&source_safe);
+        interpreter
+            .borrow_mut()
+            .initialize_pre_run(ast, global_scope);
+        if let Err(err) = interpreter.borrow_mut().run(&world) {
+            err.panic_error(&source)
         }
 
         world.run();

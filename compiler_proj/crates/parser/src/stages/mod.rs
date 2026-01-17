@@ -1,6 +1,3 @@
-pub mod stage;
-pub use stage::*;
-
 pub mod parser;
 pub use parser::*;
 
@@ -20,9 +17,9 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use ecs::World;
-    use parser_types::{BeautifyError, ast_grammar};
+    use parser_types::BeautifyError;
 
-    use crate::{Interpreter, Preprocessor, Stage, StageResult};
+    use crate::{Interpreter, StaticSourceLoader, preprocess};
 
     #[test]
     fn test_preprocessing() {
@@ -34,20 +31,14 @@ mod tests {
                                 "#,
         );
 
-        let expr = ast_grammar::ProgrammParser::new().parse(&source);
+        let world = World::default();
 
-        if let Err(expr) = expr {
+        let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
+
+        let loader = StaticSourceLoader::from(source.clone());
+
+        if let Err(expr) = preprocess(&loader, interpreter, &world) {
             expr.panic_error(&source);
-        } else {
-            let expr = expr.unwrap();
-
-            let world = World::default();
-            let interpreter = Rc::new(RefCell::new(Interpreter::new("main".to_owned())));
-            let s0 = StageResult::Parsing(&world, expr, interpreter);
-
-            let mut processor = Preprocessor::new().unwrap();
-            processor.init(s0).unwrap();
-            processor.run(&world, source).unwrap();
         }
     }
 }

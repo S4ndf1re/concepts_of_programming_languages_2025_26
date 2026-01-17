@@ -1,4 +1,4 @@
-use parser_types::{BuiltinStruct, Error, Scope, TypeSymbol, TypeSymbolType, WorldObj};
+use parser_types::{BuiltinComponent, BuiltinStruct, Error, Scope, TypeSymbol, TypeSymbolType, WorldObj};
 use std::{cell::RefCell, rc::Rc};
 
 pub mod functions;
@@ -22,7 +22,19 @@ pub fn register_buildin_struct<T: BuiltinStruct>(
     Ok(())
 }
 
-pub fn register_buildin(scope: Rc<RefCell<Scope>>) -> Result<(), Error> {
+pub fn register_buildin_component<T: BuiltinComponent>(
+    scope: Rc<RefCell<Scope>>,
+    strct: T,
+) -> Result<(), Error> {
+    let name = strct.name();
+    let type_of = strct.to_type()?;
+    scope
+        .borrow_mut()
+        .declare_type(name, type_of, false, 0..1)?;
+    Ok(())
+}
+
+pub fn register_buildin_functions(scope: Rc<RefCell<Scope>>) -> Result<(), Error> {
     let println_descriptor = BuildinFunctionDescription {
         name: "println".to_string(),
         callback: println,

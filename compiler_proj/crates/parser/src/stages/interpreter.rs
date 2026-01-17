@@ -9,11 +9,9 @@ use ecs::World;
 use parser_types::{
     AssignmentOperations, AstNode, AstNodeType, Error, ErrorWithRange, FunctionExecutionStrategy,
     FunctionType, InfixOperator, Instantiable, InterpreterValue, IsReturn, MemberAccess,
-    MemberAccessType, PrefixOperator, PseudoSystemParameter, Query, Scope, ScopeLike, Symbol,
-    SystemExecutionStrategy, TypeSymbol, TypeSymbolType,
+    MemberAccessType, PrefixOperator, PseudoSystemParameter, Scope, ScopeLike, Symbol,
+    SystemExecutionStrategy, TypeSymbol, TypeSymbolType, apply_pseudo_system_param,
 };
-
-use crate::{Stage, StageResult};
 
 macro_rules! scoped {
     ($s:ident, $inner:block) => {{
@@ -69,7 +67,7 @@ impl Interpreter {
     pub fn new(entrypoint_fn: Symbol) -> Self {
         Self {
             environments: vec![],
-            ast: Vec::new(),
+            ast: vec![],
             entrypoint_fn,
         }
     }
@@ -1241,8 +1239,7 @@ impl Interpreter {
                 for query in sys_queries {
                     queries.insert(query.symbol.clone(), &query.type_of);
 
-                    let mut state = query.instantiate_from_world(world);
-                    let value = Query::get_param(&mut state, world, Rc::clone(call_scope))
+                    let value = apply_pseudo_system_param!(world, query, call_scope)
                         .map_err(|err| ErrorWithRange { err, range: 0..1 })?;
                     query_states.insert(query.symbol.clone(), value);
                 }
@@ -1292,31 +1289,17 @@ impl Interpreter {
             })
         }
     }
-}
 
-impl<'w> Stage<'w> for Rc<RefCell<Interpreter>> {
-    fn init(&mut self, prev_stage_result: StageResult<'w>) -> Result<(), ErrorWithRange> {
-        match prev_stage_result {
-            StageResult::Preprocessor(global_scope, ast) => {
-                self.borrow_mut().ast = ast;
-
-                self.borrow_mut().environments = vec![Environment {
-                    scope: Rc::new(RefCell::new(global_scope)),
-                }];
-
-                Ok(())
-            }
-            _ => Err(ErrorWithRange {
-                err: Error::StageError(1, prev_stage_result.into()),
-                range: 0..1,
-            }),
-        }
+    pub fn initialize_pre_run(&mut self, ast: Vec<AstNode>, global_scope: Rc<RefCell<Scope>>) {
+        self.ast = ast;
+        self.environments = vec![Environment {
+            scope: global_scope,
+        }];
     }
 
-    fn run(self, world: &'w World, _source: String) -> Result<StageResult<'w>, ErrorWithRange> {
-        let entrypoint_fn = self.borrow().entrypoint_fn.clone();
+    pub fn run(&mut self, world: &World) -> Result<(), ErrorWithRange> {
+        let entrypoint_fn = self.entrypoint_fn.clone();
         let main_fn = self
-            .borrow()
             .get_current_scope()
             .borrow()
             .resolve_value(&entrypoint_fn)
@@ -1324,19 +1307,12 @@ impl<'w> Stage<'w> for Rc<RefCell<Interpreter>> {
 
         if let InterpreterValue::Function(_) = main_fn {
             let main_fn = self
-                .borrow()
                 .get_current_scope()
                 .borrow()
                 .resolve_type(&entrypoint_fn)
                 .expect("must be present if value is present");
-            let current_scope = self.borrow().get_current_scope();
-            self.borrow_mut().call_function(
-                &entrypoint_fn,
-                &vec![],
-                &current_scope,
-                main_fn,
-                world,
-            )?;
+            let current_scope = self.get_current_scope();
+            self.call_function(&entrypoint_fn, &vec![], &current_scope, main_fn, world)?;
         } else {
             return Err(ErrorWithRange {
                 err: Error::WrongType(
@@ -1349,8 +1325,7 @@ impl<'w> Stage<'w> for Rc<RefCell<Interpreter>> {
                         execution_body: FunctionExecutionStrategy::Interpreted(Rc::new(vec![])),
                     })
                     .to_string(),
-                    self.borrow()
-                        .get_current_scope()
+                    self.get_current_scope()
                         .borrow()
                         .resolve_type(&entrypoint_fn)
                         .expect("must be present if value is presen")
@@ -1360,6 +1335,6 @@ impl<'w> Stage<'w> for Rc<RefCell<Interpreter>> {
             });
         }
 
-        Ok(StageResult::Interpretation)
+        Ok(())
     }
 }

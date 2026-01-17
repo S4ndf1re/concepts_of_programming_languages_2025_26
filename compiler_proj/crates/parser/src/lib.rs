@@ -1,6 +1,9 @@
 pub mod stages;
 pub use stages::*;
 
+pub mod source_loader;
+pub use source_loader::*;
+
 #[cfg(test)]
 mod tests {
     use std::{fs::File, io::Write};

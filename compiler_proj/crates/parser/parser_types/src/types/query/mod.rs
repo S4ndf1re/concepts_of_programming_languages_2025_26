@@ -32,6 +32,26 @@ pub trait PseudoSystemParameter {
     ) -> Result<Self::Item<'w>, Error>;
 }
 
+#[macro_export]
+macro_rules! apply_pseudo_system_param {
+    ($world:expr, $query:expr, $scope:expr, $inner:block) => {{
+        let mut __state = $query.instantiate_from_world($world);
+        $inner;
+        ::parser_types::Query::get_param(&mut __state, $world, Rc::clone($scope))
+    }};
+    ($world:expr, $query:expr, $scope:expr) => {
+        apply_pseudo_system_param!($world, $query, $scope, {})
+    };
+    ($world:expr, $query:expr) => {
+        apply_pseudo_system_param!(
+            $world,
+            $query,
+            std::rc::Rc::new(std::cell::RefCell::new(Scope::default())),
+            {}
+        )
+    };
+}
+
 #[derive(Debug, PartialEq, Clone, Hash)]
 pub struct Query {
     pub symbol: Symbol,
@@ -148,7 +168,7 @@ impl PseudoSystemParameter for Query {
 macro_rules! parse_or {
     ( $left:tt || $($rest:tt)+ ) => {
         {
-            QueryCond::Or(Box::new(parse_or!{ $left }), Box::new(parse_or! { $($rest)+ }))
+            ::parser_types::QueryCond::Or(Box::new(parse_or!{ $left }), Box::new(parse_or! { $($rest)+ }))
         }
     };
     ( $($single:tt)* ) => {
@@ -160,7 +180,7 @@ macro_rules! parse_or {
 macro_rules! parse_and {
     ( $left:tt && $($rest:tt)+ ) => {
         {
-            QueryCond::And(Box::new(parse_and!{ $left }), Box::new(parse_and! { $($rest)+ }))
+            ::parser_types::QueryCond::And(Box::new(parse_and!{ $left }), Box::new(parse_and! { $($rest)+ }))
         }
     };
     ( $($single:tt)* ) => {
@@ -170,27 +190,28 @@ macro_rules! parse_and {
 
 #[macro_export]
 macro_rules! parse_primary {
-    ( $lit:literal ) => {
-        {
-            QueryCond::Component($lit.to_owned())
-        }
-    };
     ( ( $($inner:tt)* ) ) => {
         {
             parse_or! { $($inner)* }
         }
     };
+    ( $lit:literal ) => {
+        {
+            ::parser_types::QueryCond::Component($lit.to_owned())
+        }
+    };
 }
 
 #[macro_export]
+/// build a simple query. `not` operator is not supported, hence it is advised to only build simple queries using this technology
 macro_rules! build_query {
     (list { $( $names:literal ),* $(,)? $( % $($query:tt)* )? } ) => {
         {
-            Query {
+            ::parser_types::Query {
                 symbol: "".to_owned(),
                 type_of:
-                    QueryType::List {
-                        select: QueryTerm {
+                    ::parser_types::QueryType::List {
+                        select: ::parser_types::QueryTerm {
                             components: vec![$($names.to_owned()),*]
                         },
                         condition: build_query! { @inner $( parse_or! { $($query)* } )? }
@@ -200,11 +221,11 @@ macro_rules! build_query {
     };
     (single { $( $names:literal ),* $(,)? $( % $($query:tt)* )? } ) => {
         {
-            Query {
+            ::parser_types::Query {
                 symbol: "".to_owned(),
                 type_of:
-                    QueryType::Single {
-                        select: QueryTerm {
+                    ::parser_types::QueryType::Single {
+                        select: ::parser_types::QueryTerm {
                             components: vec![$($names.to_owned()),*]
                         },
                         condition: build_query! { @inner $( parse_or! { $($query)* } )? }
@@ -218,8 +239,6 @@ macro_rules! build_query {
 
 #[cfg(test)]
 pub mod tests {
-    use super::{QueryCond, QueryTerm, QueryType, Query};
-
     #[test]
     pub fn test_query_build1() {
         let query = build_query!(list { "hallo" % "a" || "b" });
@@ -235,6 +254,12 @@ pub mod tests {
     #[test]
     pub fn test_query_build3() {
         let query = build_query!(list { "hallo" % ("a" || "b") && "c" });
+        println!("{query:?}");
+    }
+
+    #[test]
+    pub fn test_query_build4() {
+        let query = build_query!(list { "hallo", "my_name_is" % ("a" || "b") && ("c" || "d") });
         println!("{query:?}");
     }
 }

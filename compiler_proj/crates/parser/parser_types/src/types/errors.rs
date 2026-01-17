@@ -4,7 +4,7 @@ use annotate_snippets::{AnnotationKind, Level, Patch, Renderer, Snippet, rendere
 use lalrpop_util::ParseError;
 use thiserror::Error;
 
-use crate::{Symbol, ast_grammar};
+use crate::Symbol;
 
 #[derive(Clone, Debug, Error)]
 pub struct ErrorWithRange {
@@ -54,8 +54,6 @@ pub enum Error {
     SymbolNotFound(Symbol),
     #[error("cant cast as type {0}")]
     CantCastAsType(Symbol),
-    #[error("parser error")]
-    ParseError(ParseError<usize, ast_grammar::Token<'static>, &'static str>),
     #[error("type is not a scope")]
     IsNotAScope,
     #[error("option value is none, can't get value")]
@@ -64,11 +62,13 @@ pub enum Error {
     ResultIsErr,
     #[error("result value is ok")]
     ResultIsOk,
+    #[error("IO error: {0}")]
+    IoError(String),
 }
 
 pub trait BeautifyError: Display {
     fn print_error(&self, source: &str);
-    fn panic_error(&self, source: &str) {
+    fn panic_error(&self, source: &str) -> ! {
         self.print_error(source);
         panic!("{}", self)
     }
@@ -290,9 +290,6 @@ impl BeautifyError for ErrorWithRange {
                 let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
                 println!("{}", renderer.render(report));
             }
-            Error::ParseError(err) => {
-                err.print_error(source);
-            }
             Error::StageError(should, is) => {
                 let report = &[Level::ERROR
                     .primary_title(format!("{}", &self.err))
@@ -447,12 +444,21 @@ impl BeautifyError for ErrorWithRange {
                 let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
                 println!("{}", renderer.render(report));
             }
-        }
-    }
+            Error::IoError(_msg) => {
+                let report = &[Level::ERROR
+                    .primary_title(format!("{}", &self.err))
+                    .element(
+                        Snippet::source(source).annotation(
+                            AnnotationKind::Primary
+                                .span(self.range.clone())
+                                .label("can't perform io operation"),
+                        ),
+                    )];
 
-    fn panic_error(&self, source: &str) {
-        self.print_error(source);
-        panic!("{}", self.err)
+                let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
+                println!("{}", renderer.render(report));
+            }
+        }
     }
 }
 
