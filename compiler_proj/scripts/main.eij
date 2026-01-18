@@ -1,6 +1,4 @@
 
-
-
 system update_position(positions: P)
     querying P as List with { Position2d }
 {

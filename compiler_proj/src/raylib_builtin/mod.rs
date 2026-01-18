@@ -90,7 +90,7 @@ fn raylib_error_helper(
     mut raylib_handler: SingleQuery<RaylibHandle>,
 ) -> Result<(), Error> {
     if raylib_handler.components.len() != 1 {
-        return Err(Error::CantBeEmpty);
+        return Ok(());
     }
 
     let raylib_handler = raylib_handler
