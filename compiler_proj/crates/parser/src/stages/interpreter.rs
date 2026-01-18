@@ -100,8 +100,8 @@ impl Interpreter {
         world: &World,
         file: &'static str,
     ) -> Result<InterpreterValue, ErrorWithRange> {
-        let lval = self.eval_node(left, world, file)?.unwrap();
-        let rval = self.eval_node(right, world, file)?.unwrap();
+        let lval = self.eval_node(left, world, file)?.unwrap().deref_value()?;
+        let rval = self.eval_node(right, world, file)?.unwrap().deref_value()?;
 
         let new_val = match op {
             InfixOperator::Plus => lval + rval,
@@ -138,7 +138,7 @@ impl Interpreter {
         world: &World,
         file: &'static str,
     ) -> Result<InterpreterValue, ErrorWithRange> {
-        let rval = self.eval_node(right, world, file)?.unwrap();
+        let rval = self.eval_node(right, world, file)?.unwrap().deref_value()?;
 
         let new_val = match op {
             PrefixOperator::Not => rval.negate_bool(),
