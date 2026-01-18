@@ -107,7 +107,10 @@ impl InterpreterValue {
     pub fn deref_value(&self) -> Result<InterpreterValue, Error> {
         match self {
             InterpreterValue::Strong(s) => Ok(s.borrow().clone()),
-            InterpreterValue::Weak(_) => Err(Error::CantDerefWeak),
+            InterpreterValue::Weak(inner) => inner
+                .upgrade()
+                .map(|v| v.borrow().clone())
+                .ok_or(Error::CantDerefWeak),
             _ => Ok(self.clone()),
         }
     }
@@ -390,10 +393,13 @@ impl InterpreterValue {
     pub fn negate_bool(self) -> Result<InterpreterValue, Error> {
         match self {
             InterpreterValue::Bool(b) => Ok(InterpreterValue::Bool(!b)),
-            _ => Err(Error::OperationUnsupported {
-                operation: "!".to_string(),
-                type_of: format!("{} cannot be boolean negated", self,),
-            }),
+            _ => {
+                dbg!(&self);
+                Err(Error::OperationUnsupported {
+                    operation: "!".to_string(),
+                    type_of: format!("{} cannot be boolean negated", self,),
+                })
+            }
         }
     }
     pub fn negate_number(self) -> Result<InterpreterValue, Error> {
@@ -670,6 +676,13 @@ impl Display for InterpreterValue {
             InterpreterValue::Float(fl) => write!(f, "{fl}"),
             InterpreterValue::Bool(b) => write!(f, "{b}"),
             InterpreterValue::String(s) => write!(f, "{s}"),
+            InterpreterValue::List(l) => {
+                write!(f, "[")?;
+                for entry in l {
+                    write!(f, "{entry}")?;
+                }
+                write!(f, "]")
+            }
             InterpreterValue::Struct(name, scope, _fields) => {
                 if let Some(type_of) = scope.borrow().resolve_defined_type(name) {
                     write!(f, "{name} {{ {type_of} }}",)

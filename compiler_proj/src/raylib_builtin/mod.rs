@@ -1,15 +1,26 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use ecs::{Component, EntityIndex, SingleQuery, World};
 use parser_macros::BuiltinComponent;
 use parser_types::{
-    Error, InterpreterValue, IsReturn, PseudoSystemParameter, Scope, apply_pseudo_system_param,
-    build_query, interpreter_component_instance_as_t,
+    BuiltinComponent, Error, Instantiable, InterpreterValue, IsReturn, PseudoSystemParameter,
+    Scope, TypeSymbolType, apply_pseudo_system_param, build_query, instantiate_component_as_t,
+    interpreter_component_instance_as_t,
 };
 use raylib::{
     color::Color,
     prelude::{RaylibDraw, RaylibDrawHandle},
 };
+
+#[derive(Debug, BuiltinComponent)]
+pub struct WasdControl {
+    pub w: InterpreterValue,
+    pub a: InterpreterValue,
+    pub s: InterpreterValue,
+    pub d: InterpreterValue,
+    #[scope]
+    pub scope: Rc<RefCell<Scope>>,
+}
 
 #[derive(BuiltinComponent, Debug)]
 pub struct Position2d {
@@ -43,12 +54,20 @@ impl Component for RaylibHandle {
     }
 }
 
-pub fn raylib_init(_scope: Rc<RefCell<Scope>>, world: &World) -> Result<IsReturn, Error> {
+pub fn raylib_init(scope: Rc<RefCell<Scope>>, world: &World) -> Result<IsReturn, Error> {
     let (mut rl, thread) = raylib::init().size(640, 480).title("ECSInject").build();
     rl.set_target_fps(60);
 
     let mut entity = world.spawn();
     entity.add_component(RaylibHandle(rl, thread));
+
+    let mut entity = world.spawn();
+    let (instance, _component) = instantiate_component_as_t!(scope, "WasdControl" => WasdControl,
+            vec![("w".to_owned(), Box::new(InterpreterValue::Bool(false))),
+                ("a".to_owned(), Box::new(InterpreterValue::Bool(false))),
+                ("s".to_owned(), Box::new(InterpreterValue::Bool(false))),
+                ("d".to_owned(), Box::new(InterpreterValue::Bool(false)))].into_iter().collect::<HashMap<_, _>>());
+    entity.add_component(instance);
 
     Ok(IsReturn::Return(InterpreterValue::Empty))
 }
@@ -65,10 +84,10 @@ fn draw_single(
     let (_, position) = interpreter_component_instance_as_t!(&components[1] => Position2d);
     let (_, rect_shape) = interpreter_component_instance_as_t!(&components[2] => RectangleShape);
 
-    let x: i64 = position.x.clone().try_into()?;
-    let y: i64 = position.y.clone().try_into()?;
-    let w: i64 = rect_shape.w.clone().try_into()?;
-    let h: i64 = rect_shape.h.clone().try_into()?;
+    let x: f64 = position.x.clone().try_into()?;
+    let y: f64 = position.y.clone().try_into()?;
+    let w: f64 = rect_shape.w.clone().try_into()?;
+    let h: f64 = rect_shape.h.clone().try_into()?;
 
     let entt = world.get_entity_mut(entt).unwrap();
     if let Some(color) = entt.get_component_by_name::<InterpreterValue>(&"Colorable".to_string()) {
@@ -122,6 +141,47 @@ fn raylib_error_helper(
 
 pub fn raylib_system(world: &World, raylib_handler: SingleQuery<RaylibHandle>) {
     if let Err(err) = raylib_error_helper(world, raylib_handler) {
+        println!("{err}");
+    }
+}
+
+fn raylib_input_helper(
+    world: &World,
+    mut raylib_handler: SingleQuery<RaylibHandle>,
+) -> Result<(), Error> {
+    let query = build_query!(list { "WasdControl" });
+    let applied = apply_pseudo_system_param!(world, query)?;
+
+    let raylib_handler = raylib_handler
+        .components
+        .get_mut(0)
+        .expect("already checked above");
+
+    if raylib_handler.1.0.window_should_close() {
+        return Ok(());
+    }
+
+    let handle = &raylib_handler.1.0;
+    let w_down = handle.is_key_down(raylib::prelude::KeyboardKey::KEY_W);
+    let a_down = handle.is_key_down(raylib::prelude::KeyboardKey::KEY_A);
+    let s_down = handle.is_key_down(raylib::prelude::KeyboardKey::KEY_S);
+    let d_down = handle.is_key_down(raylib::prelude::KeyboardKey::KEY_D);
+
+    for entry in applied.components.as_list()? {
+        let entry = entry.as_list()?;
+
+        let (_, position) = interpreter_component_instance_as_t!(&entry[0] => WasdControl);
+        position.w = InterpreterValue::Bool(w_down);
+        position.a = InterpreterValue::Bool(a_down);
+        position.s = InterpreterValue::Bool(s_down);
+        position.d = InterpreterValue::Bool(d_down);
+    }
+
+    Ok(())
+}
+
+pub fn raylib_input_system(world: &World, raylib_handler: SingleQuery<RaylibHandle>) {
+    if let Err(err) = raylib_input_helper(world, raylib_handler) {
         println!("{err}");
     }
 }

@@ -59,8 +59,8 @@ fn main() {
         preprocessor
             .register_builtin_component(Position2d {
                 scope: Rc::clone(&global_scope),
-                x: InterpreterValue::Int(0),
-                y: InterpreterValue::Int(0),
+                x: InterpreterValue::Float(0.0),
+                y: InterpreterValue::Float(0.0),
             })
             .unwrap();
 
@@ -76,8 +76,18 @@ fn main() {
         preprocessor
             .register_builtin_component(RectangleShape {
                 scope: Rc::clone(&global_scope),
-                w: InterpreterValue::Int(0),
-                h: InterpreterValue::Int(0),
+                w: InterpreterValue::Float(0.0),
+                h: InterpreterValue::Float(0.0),
+            })
+            .unwrap();
+
+        preprocessor
+            .register_builtin_component(WasdControl {
+                scope: Rc::clone(&global_scope),
+                w: InterpreterValue::Bool(false),
+                a: InterpreterValue::Bool(false),
+                s: InterpreterValue::Bool(false),
+                d: InterpreterValue::Bool(false),
             })
             .unwrap();
 
@@ -90,6 +100,7 @@ fn main() {
         }
 
         world.add_system(raylib_system);
+        world.add_system(raylib_input_system);
         world.run();
     }
 }

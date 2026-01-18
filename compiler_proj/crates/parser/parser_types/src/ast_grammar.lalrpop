@@ -104,6 +104,14 @@ Comma<T>: Vec<T> = { // (0)
 };
 
 /// Matches a or 1,...,n meaning any comma separated list
+CommaAtLeastOne<T>: Vec<T> = { // (0)
+    <e:T> <mut v:(comma <T>)*> (comma)?  => {
+        v.insert(0, e);
+        v
+    },
+};
+
+/// Matches a or 1,...,n meaning any comma separated list
 CommaNoPrecedence<T>: Vec<T> = { // (0)
     <mut v:(<T> comma)*> <e:T> =>  { // (1)
         v.push(e);
@@ -245,12 +253,7 @@ MapCreate: AstNode = {
 
 /// Is used in member call
 StructAssignmentList: Vec<(Symbol, Box<AstNode>)> = {
-    <p:StructParamRule> <n:FurtherStructAssignment> => vec![p].into_iter().chain(n).collect::<Vec<_>>(),
-}
-
-FurtherStructAssignment: Vec<(Symbol, Box<AstNode>)> = {
-    comma <StructAssignmentList>,
-    comma => vec![],
+    CommaAtLeastOne<StructParamRule>,
 }
 
 
@@ -333,7 +336,7 @@ StructDefinition: AstNode = {
 
 /// Any component definition s {a: float, b: int }, note, that member functions are NOT allowed!!
 ComponentDefinition: AstNode = {
-    <l:@L> component_term <name:id> l_brace <body:ComponentBlock> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef{typename: name, typedef: AstTypeDefinition::Component(body.attributes), execution_body: vec![]}),
+    <l:@L> component_term <name:id> l_brace <body:(<ComponentBlock>)?> r_brace <r:@R> => AstNode::new(l..r, AstNodeType::TypeDef{typename: name, typedef: AstTypeDefinition::Component(body.unwrap_or_default().attributes), execution_body: vec![]}),
 }
 
 /// Anything that may not return, i.e. struct and function definitions, inclusive assignments

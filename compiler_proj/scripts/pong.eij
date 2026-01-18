@@ -1,0 +1,163 @@
+// Left bar
+component LeftMarker {}
+
+// Right bar
+component RightMarker {}
+
+// any bar, left or right
+component BarMarker {}
+
+component BallMarker {}
+
+component Velocity {
+    x: int,
+    y: int,
+}
+
+fn mid_pos(pos: Position2d, rect: RectangleShape): [float] {
+    return [pos.x + rect.w / 2.0, pos.y + rect.h / 2.0];
+}
+
+fn clamp_position(pos: Position2d, rect: RectangleShape, min_y: float, max_y: float) {
+    if (pos.y < min_y) {
+        pos.y = min_y;
+    }
+
+    if (pos.y + rect.h > max_y) {
+        pos.y = max_y - rect.h;
+    }
+}
+
+
+system apply_input_left(left_bar: L, input: I)
+    querying L as List with { Position2d, RectangleShape % { LeftMarker && BarMarker } },
+             I as Single with { WasdControl }
+{
+    wasd_0 := input[0];
+    wasd := wasd_0[0]; // get the WasdControl Component
+
+    for (bar in left_bar) {
+        if (wasd.s) {
+            bar[0].y += 3.0;
+        } else if (wasd.w) {
+            bar[0].y -= 3.0;
+        }
+        clamp_position(bar[0], bar[1], 20.0, 460.0);
+    }
+}
+
+fn sign(a: int): int {
+    if (a < 0.0) {
+        return -1.0;
+    } else if(a == 0.0) {
+        return 0.0;
+    } else {
+        return 1.0;
+    }
+}
+
+system apply_right(right_bar: L, balls: B)
+    querying L as List with { Position2d, RectangleShape % { RightMarker && BarMarker } },
+             B as List with { Position2d, RectangleShape % { BallMarker } }
+{
+    ball_0 := balls[0];
+    ball := ball_0[0];
+    ball_rect := ball_0[1];
+
+    for (bar in right_bar) {
+        mid_ball := mid_pos(ball, ball_rect);
+        mid_bar := mid_pos(bar[0], bar[1]);
+        diff := sign(mid_ball[1] - mid_bar[1]);
+        bar[0].y += diff * 3.0;
+        clamp_position(bar[0], bar[1], 20.0, 460.0);
+    }
+}
+
+
+fn collides(a_pos: Position2d, a_rect: RectangleShape, b_pos: Position2d, b_rect: RectangleShape): bool {
+    a_left := a_pos.x;
+    a_right := a_pos.x + a_rect.w;
+    a_top := a_pos.y;
+    a_bottom := a_pos.y + a_rect.h;
+
+    b_left := b_pos.x;
+    b_right := b_pos.x + b_rect.w;
+    b_top := b_pos.y;
+    b_bottom := b_pos.y + b_rect.h;
+
+    return !(a_right < b_left || a_left > b_right || a_bottom < b_top || a_top > b_bottom);
+    // if(a_right <= b_left || a_left >= b_right || a_bottom >= b_top || a_top <= b_bottom) {
+    //     return false;
+    // } else {
+    //     return true;
+    // }
+}
+
+system handle_collisions(left_bar: L, right_bar: R, balls: B)
+    querying
+        L as List with { Position2d, RectangleShape % { LeftMarker && BarMarker } },
+        R as List with { Position2d, RectangleShape % { RightMarker && BarMarker } },
+        B as List with { Position2d, RectangleShape, Velocity % { BallMarker } }
+{
+    ball := balls[0];
+
+
+    for (left in left_bar) {
+        if(collides(left[0], left[1], ball[0], ball[1])) {
+            println("collides");
+            ball[2].x *= -1.0;
+        }
+    }
+
+    for (right in right_bar) {
+        if(collides(right[0], right[1], ball[0], ball[1])) {
+            println("collides");
+            ball[2].x *= -1.0;
+        }
+    }
+
+    if (ball[0].y < 0 || ball[0].y + ball[1].h > 480.0) {
+        ball[2].y *= -1.0;
+    }
+}
+
+system apply_velocity(movables: M)
+    querying M as List with { Position2d, Velocity }
+{
+    for (movable in movables) {
+        movable[0].x += movable[1].x;
+        movable[0].y += movable[1].y;
+    }
+}
+
+
+register apply_input_left;
+register apply_right;
+register apply_velocity;
+register handle_collisions;
+
+fn main() {
+    raylib_init();
+
+    create entity left_bar
+        with
+            LeftMarker{},
+            BarMarker{},
+            Position2d{ x: 40.0, y: 320.0 },
+            RectangleShape{ w: 20.0, h: 100.0 };
+
+    create entity right_bar
+        with
+            RightMarker{},
+            BarMarker{},
+            Position2d{ x: 580.0, y: 320.0 },
+            RectangleShape{ w: 20.0, h: 100.0 };
+
+    create entity ball
+        with
+            BallMarker{},
+            Velocity{x: 3, y: -3},
+            Position2d{ x: 310.0, y: 320.0 },
+            RectangleShape{ w: 20.0, h: 20.0 };
+
+}

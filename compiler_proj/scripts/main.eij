@@ -5,8 +5,8 @@ system update_position(positions: P)
     for (p in positions) {
         pos := p[0];
 
-        pos.x = (pos.x + 1) % 640;
-        pos.y = (pos.y - 1 + 480) % 480;
+        pos.x = (pos.x + 1.0) % 640.0;
+        pos.y = (pos.y - 1.0 + 480.0) % 480.0;
     }
 }
 
@@ -19,12 +19,12 @@ fn main() {
     create entity rect;
 
     rect += Position2d {
-        x: 0,
-        y: 0,
+        x: 0.0,
+        y: 0.0,
     };
     rect += RectangleShape {
-        w: 100,
-        h: 100,
+        w: 100.0,
+        h: 100.0,
     };
     rect += Colorable {
         r: 255,

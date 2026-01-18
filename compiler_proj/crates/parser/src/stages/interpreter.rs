@@ -120,11 +120,7 @@ impl Interpreter {
         };
 
         if let Ok(v) = new_val {
-            Ok(v.make_reference_counted().map_err(|e| ErrorWithRange {
-                err: e,
-                range: left.range.clone(),
-                file,
-            })?)
+            Ok(v)
         } else {
             let e = new_val.unwrap_err();
             Err(ErrorWithRange {
@@ -150,11 +146,7 @@ impl Interpreter {
         };
 
         if let Ok(v) = new_val {
-            Ok(v.make_reference_counted().map_err(|e| ErrorWithRange {
-                err: e,
-                range: right.range.clone(),
-                file,
-            })?)
+            Ok(v)
         } else {
             let e = new_val.unwrap_err();
             Err(ErrorWithRange {
@@ -191,17 +183,18 @@ impl Interpreter {
         node: &AstNode,
         world: &World,
         new_symbol: &Symbol,
+        default_components: &Option<Vec<AstNode>>,
         file: &'static str,
     ) -> Result<(), ErrorWithRange> {
-        let entity = world.spawn().id();
+        let mut entity = world.spawn();
 
         let scope = self.get_current_scope();
-        let mut scope = scope.borrow_mut();
 
         scope
+            .borrow_mut()
             .declare_variable(
                 new_symbol.clone(),
-                InterpreterValue::Entity(entity),
+                InterpreterValue::Entity(entity.id()),
                 TypeSymbol::strong(TypeSymbolType::Entity),
                 false,
                 false,
@@ -212,6 +205,22 @@ impl Interpreter {
                 range: node.range.clone(),
                 file,
             })?;
+
+        if let Some(default_components) = default_components {
+            for ast_node in default_components {
+                let value = self.eval_node(ast_node, world, file)?.unwrap();
+                let value_deref = value.deref_value().map_err(|err| ErrorWithRange {
+                    err,
+                    range: ast_node.range.clone(),
+                    file,
+                })?;
+                if matches!(value_deref, InterpreterValue::Component(_, _, _))
+                    || matches!(value_deref, InterpreterValue::BuiltinComponent(_, _))
+                {
+                    entity.add_component(value.clone());
+                }
+            }
+        }
 
         Ok(())
     }
@@ -820,6 +829,7 @@ impl Interpreter {
                             )
                         } else {
                             self.call_function(
+                                node,
                                 &call.member,
                                 params,
                                 &local_scope
@@ -1082,9 +1092,9 @@ impl Interpreter {
             }
             AstNodeType::EntityDef {
                 name,
-                default_components: _,
+                default_components,
             } => {
-                self.eval_entity_declaration(node, world, name, file)?;
+                self.eval_entity_declaration(node, world, name, default_components, file)?;
                 IsReturn::NoReturn(InterpreterValue::Empty)
             }
             AstNodeType::EntityDespawn { name } => {
@@ -1184,8 +1194,10 @@ impl Interpreter {
         Ok(IsReturn::NoReturn(InterpreterValue::Empty))
     }
 
+    #[allow(clippy::complexity)]
     pub fn call_function(
         &mut self,
+        node: &AstNode,
         fn_name: &Symbol,
         params: &Vec<Box<AstNode>>,
         call_scope: &Rc<RefCell<Scope>>,
@@ -1200,6 +1212,16 @@ impl Interpreter {
                 evaled_params.push((param, self.eval_node(param.as_ref(), world, file)?));
             }
 
+            if evaled_params.len() != fn_type.params.len() {
+                return Err(ErrorWithRange {
+                    err: Error::OperationUnsupported {
+                        operation: "function call".to_owned(),
+                        type_of: "non matching parameters".to_owned(),
+                    },
+                    range: node.range.clone(),
+                    file,
+                });
+            }
             let param_scope = {
                 let mut param_scope = Scope::new_parented(Rc::clone(call_scope));
                 for ((param_node, value), (param, type_of)) in zip(evaled_params, &fn_type.params) {
@@ -1458,7 +1480,9 @@ impl Interpreter {
                 .resolve_type(&entrypoint_fn)
                 .expect("must be present if value is present");
             let current_scope = self.get_current_scope();
+            let main_node = AstNode::new(0..1, AstNodeType::Bool(false));
             self.call_function(
+                &main_node,
                 &entrypoint_fn,
                 &vec![],
                 &current_scope,

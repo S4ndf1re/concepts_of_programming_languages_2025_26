@@ -183,6 +183,7 @@ pub struct StructBody {
     pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
 
+#[derive(Default)]
 pub struct ComponentBody {
     pub attributes: Vec<(Symbol, TypeSymbol)>,
 }
