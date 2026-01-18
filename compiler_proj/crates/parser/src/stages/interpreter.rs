@@ -320,7 +320,9 @@ impl Interpreter {
                     range: expression.range.clone(),
                     file,
                 })?;
-                if matches!(value_deref, InterpreterValue::Component(_, _, _)) {
+                if matches!(value_deref, InterpreterValue::Component(_, _, _))
+                    || matches!(value_deref, InterpreterValue::BuiltinComponent(_, _))
+                {
                     if let Some(mut entt) = world.get_entity_mut(entity) {
                         entt.add_component(value.clone());
                     }

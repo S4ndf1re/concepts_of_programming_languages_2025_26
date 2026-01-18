@@ -484,6 +484,7 @@ pub fn derive_builtin_component(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     let name = input.ident;
+    let name_string = name.to_string();
 
     let Data::Struct(ref data) = input.data else {
         panic!("is not a struct");
@@ -534,7 +535,7 @@ pub fn derive_builtin_component(input: TokenStream) -> TokenStream {
 
         impl ::ecs::Component for #name {
             fn get_ident(&self) -> String {
-                Self::ident()
+                #name_string.to_owned()
             }
         }
     };

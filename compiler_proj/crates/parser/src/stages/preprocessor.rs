@@ -14,8 +14,7 @@ use parser_types::{
 };
 
 use crate::{
-    Interpreter, SourceLoader, parse_content, register_buildin_component,
-    register_buildin_functions, register_buildin_struct, register_buildin_structs_and_comps,
+    BuiltinFunctionDescription, Interpreter, SourceLoader, parse_content, register_buildin_component, register_buildin_function, register_buildin_functions, register_buildin_struct, register_buildin_structs_and_comps
 };
 
 pub fn run_system(
@@ -56,6 +55,10 @@ where
 
     pub fn register_builtin_component<C: BuiltinComponent>(&self, strct: C) -> Result<(), Error> {
         register_buildin_component(Rc::clone(&self.global_scope), strct)
+    }
+
+    pub fn register_builtin_function(&self, func: BuiltinFunctionDescription) -> Result<(), Error> {
+        register_buildin_function(Rc::clone(&self.global_scope), func)
     }
 
     fn register_builtins(&self, file: &'static str) -> Result<(), ErrorWithRange> {

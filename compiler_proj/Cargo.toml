@@ -10,8 +10,10 @@ edition = "2024"
 ecs = { workspace = true }
 parser = {workspace = true }
 parser_types = { workspace = true }
+parser_macros = { workspace = true }
 graphviz-rust = "0.9.6"
 clap = {version = "4.5.54", features=["derive"]}
+raylib = "5.5"
 
 [workspace.dependencies]
 typed-generational-arena = "0.2"

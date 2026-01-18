@@ -32,20 +32,24 @@ impl QueryCond {
         match self {
             Self::Component(comp) => {
                 if let Some(entt) = world.get_entity_mut(entity) {
-                    entt.has_component_by_name(comp)
+                    if comp == "Entity" {
+                        true
+                    } else {
+                        entt.has_component_by_name(comp)
+                    }
                 } else {
                     false
                 }
-            },
-            Self::Not(cond) => {
-                !cond.entity_conforms_condition(entity, world)
-            },
+            }
+            Self::Not(cond) => !cond.entity_conforms_condition(entity, world),
             Self::And(left, right) => {
-                left.entity_conforms_condition(entity, world) && right.entity_conforms_condition(entity, world)
-            },
+                left.entity_conforms_condition(entity, world)
+                    && right.entity_conforms_condition(entity, world)
+            }
             Self::Or(left, right) => {
-                left.entity_conforms_condition(entity, world) || right.entity_conforms_condition(entity, world)
-            },
+                left.entity_conforms_condition(entity, world)
+                    || right.entity_conforms_condition(entity, world)
+            }
         }
     }
 }

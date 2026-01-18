@@ -7,14 +7,14 @@ use parser_types::{
     Scope, ScopeLike, Symbol, TypeSymbol, TypeSymbolType,
 };
 
-pub struct BuildinFunctionDescription {
+pub struct BuiltinFunctionDescription {
     pub name: String,
     pub callback: BuildinCallback,
     pub params: Vec<(Symbol, TypeSymbol)>,
     pub return_type: Option<Box<TypeSymbol>>,
 }
 
-impl BuildinFunctionDescription {
+impl BuiltinFunctionDescription {
     pub fn add_to_scope(self, scope: &mut Scope) -> Result<(), Error> {
         let value = InterpreterValue::Function(self.name.clone());
         let type_of = TypeSymbol::strong(TypeSymbolType::Function(FunctionType {

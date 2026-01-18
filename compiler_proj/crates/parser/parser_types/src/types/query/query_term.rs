@@ -16,6 +16,9 @@ impl QueryTerm {
         };
 
         for comp in &self.components {
+            if comp == "Entity" {
+                continue;
+            }
             has_all = has_all && entity.has_component_by_name(comp);
             if !has_all {
                 break;

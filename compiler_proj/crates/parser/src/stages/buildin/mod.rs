@@ -36,8 +36,15 @@ pub fn register_buildin_component<T: BuiltinComponent>(
     Ok(())
 }
 
+pub fn register_buildin_function(
+    scope: Rc<RefCell<Scope>>,
+    descriptor: BuiltinFunctionDescription,
+) -> Result<(), Error> {
+    descriptor.add_to_scope(&mut scope.borrow_mut())
+}
+
 pub fn register_buildin_functions(scope: Rc<RefCell<Scope>>) -> Result<(), Error> {
-    let println_descriptor = BuildinFunctionDescription {
+    let println_descriptor = BuiltinFunctionDescription {
         name: "println".to_string(),
         callback: println,
         params: vec![("val".to_string(), TypeSymbol::strong(TypeSymbolType::Any))],
@@ -45,7 +52,7 @@ pub fn register_buildin_functions(scope: Rc<RefCell<Scope>>) -> Result<(), Error
     };
     println_descriptor.add_to_scope(&mut scope.borrow_mut())?;
 
-    let assert_descriptor = BuildinFunctionDescription {
+    let assert_descriptor = BuiltinFunctionDescription {
         name: "assert".to_string(),
         callback: assert,
         params: vec![("attr".to_string(), TypeSymbol::strong(TypeSymbolType::Bool))],

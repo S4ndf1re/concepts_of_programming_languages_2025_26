@@ -418,8 +418,8 @@ impl InterpreterValue {
         Ok(v)
     }
 
-    pub fn as_list(self) -> Result<Vec<InterpreterValue>, Error> {
-        match &self {
+    pub fn as_list(&self) -> Result<Vec<InterpreterValue>, Error> {
+        match self {
             InterpreterValue::List(l) => Ok(l.clone()),
             InterpreterValue::Strong(s) => Ok(s.borrow().clone().as_list()?),
             InterpreterValue::Weak(_) => Ok(self.upgrade()?.as_list()?),
@@ -645,6 +645,7 @@ impl From<InterpreterValue> for Option<TypeSymbol> {
             InterpreterValue::Component(name, scope, _fields) => {
                 scope.borrow().resolve_defined_type(name)
             }
+            InterpreterValue::BuiltinComponent(_, value) => value.borrow().resolve_builtin_type(),
             InterpreterValue::List(_) => Some(TypeSymbol::strong(TypeSymbolType::List(Box::new(
                 TypeSymbol::strong(TypeSymbolType::Any),
             )))),
@@ -676,8 +677,24 @@ impl Display for InterpreterValue {
                     write!(f, "{name} {{  }}",)
                 }
             }
+            InterpreterValue::BuiltinStruct(name, value) => {
+                let outer = value.borrow().get_outer_scope().unwrap();
+                if let Some(type_of) = outer.borrow().resolve_defined_type(name) {
+                    write!(f, "{name} {{ {type_of} }}",)
+                } else {
+                    write!(f, "{name} {{  }}",)
+                }
+            }
             InterpreterValue::Component(name, scope, _fields) => {
                 if let Some(type_of) = scope.borrow().resolve_defined_type(name) {
+                    write!(f, "{name} {{ {type_of} }}",)
+                } else {
+                    write!(f, "{name} {{  }}",)
+                }
+            }
+            InterpreterValue::BuiltinComponent(name, value) => {
+                let outer = value.borrow().get_outer_scope().unwrap();
+                if let Some(type_of) = outer.borrow().resolve_defined_type(name) {
                     write!(f, "{name} {{ {type_of} }}",)
                 } else {
                     write!(f, "{name} {{  }}",)
@@ -705,7 +722,47 @@ impl Component for InterpreterValue {
             InterpreterValue::Component(name, _, _) | InterpreterValue::GenericName(name) => {
                 name.clone()
             }
+            InterpreterValue::BuiltinComponent(_, comp) => comp.borrow().get_ident(),
             _ => panic!("is not a componetn"),
+        }
+    }
+}
+
+impl TryFrom<InterpreterValue> for EntityIndex {
+    type Error = Error;
+    fn try_from(value: InterpreterValue) -> Result<Self, Self::Error> {
+        match value.deref_value()? {
+            InterpreterValue::Entity(idx) => Ok(idx),
+            _ => Err(Error::OperationUnsupported {
+                operation: "deref to entity".to_owned(),
+                type_of: "is not an entity".to_owned(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<InterpreterValue> for i64 {
+    type Error = Error;
+    fn try_from(value: InterpreterValue) -> Result<Self, Self::Error> {
+        match value.deref_value()? {
+            InterpreterValue::Int(idx) => Ok(idx),
+            _ => Err(Error::OperationUnsupported {
+                operation: "deref to i64".to_owned(),
+                type_of: "is not an i64".to_owned(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<InterpreterValue> for f64 {
+    type Error = Error;
+    fn try_from(value: InterpreterValue) -> Result<Self, Self::Error> {
+        match value.deref_value()? {
+            InterpreterValue::Float(idx) => Ok(idx),
+            _ => Err(Error::OperationUnsupported {
+                operation: "deref to f64".to_owned(),
+                type_of: "is not an f64".to_owned(),
+            }),
         }
     }
 }

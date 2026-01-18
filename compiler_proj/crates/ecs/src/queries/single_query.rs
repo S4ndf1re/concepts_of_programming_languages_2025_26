@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate::{Component, EntityIndex, SystemParameter};
 
 pub struct SingleQuery<'s, T> {
-    pub components: Vec<&'s mut T>,
+    pub components: Vec<(EntityIndex, &'s mut T)>,
     _data: PhantomData<T>,
 }
 
@@ -24,7 +24,7 @@ where
             if let Some(mut entt) = world.get_entity_mut(*entity)
                 && let Some(comp) = entt.get_component_mut::<T>()
             {
-                components.push(comp);
+                components.push((entt.id(), comp));
             }
         }
 

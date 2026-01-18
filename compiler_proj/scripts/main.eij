@@ -1,0 +1,36 @@
+
+
+
+system update_position(positions: P)
+    querying P as List with { Position2d }
+{
+    for (p in positions) {
+        pos := p[0];
+
+        pos.x = (pos.x + 1) % 640;
+        pos.y = (pos.y - 1 + 480) % 480;
+    }
+}
+
+register update_position;
+
+
+fn main() {
+    raylib_init();
+
+    create entity rect;
+
+    rect += Position2d {
+        x: 0,
+        y: 0,
+    };
+    rect += RectangleShape {
+        w: 100,
+        h: 100,
+    };
+    rect += Colorable {
+        r: 255,
+        g: 0,
+        b: 0,
+    };
+}

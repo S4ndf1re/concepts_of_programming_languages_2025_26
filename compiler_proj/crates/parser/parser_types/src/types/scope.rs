@@ -345,7 +345,8 @@ impl ScopeLike for InterpreterValue {
                 .cloned()
                 .ok_or(Error::SymbolNotFound(name.clone())),
             InterpreterValue::Strong(inner) => inner.borrow().resolve_value(name),
-            InterpreterValue::BuiltinStruct(name, value) => value.borrow().resolve_value(name),
+            InterpreterValue::BuiltinStruct(_name, value) => value.borrow().resolve_value(name),
+            InterpreterValue::BuiltinComponent(_name, value) => value.borrow().resolve_value(name),
             _ => Err(Error::OperationUnsupported {
                 operation: "resolve_value".to_owned(),
                 type_of: "type is not a scope or struct".to_owned(),
@@ -373,7 +374,10 @@ impl ScopeLike for InterpreterValue {
                 }
             }
             InterpreterValue::Strong(inner) => inner.borrow_mut().set_value(name, value),
-            InterpreterValue::BuiltinStruct(name, self_val) => {
+            InterpreterValue::BuiltinStruct(_name, self_val) => {
+                self_val.borrow_mut().set_value(name, value)
+            }
+            InterpreterValue::BuiltinComponent(_name, self_val) => {
                 self_val.borrow_mut().set_value(name, value)
             }
             _ => unimplemented!(),
@@ -435,6 +439,7 @@ impl ScopeLike for InterpreterValue {
             }
             InterpreterValue::Strong(inner) => inner.borrow().resolve_type(name),
             InterpreterValue::BuiltinStruct(_, self_val) => self_val.borrow().resolve_type(name),
+            InterpreterValue::BuiltinComponent(_, self_val) => self_val.borrow().resolve_type(name),
             _ => unimplemented!(),
         }
     }
@@ -446,6 +451,7 @@ impl ScopeLike for InterpreterValue {
             InterpreterValue::Component(_, outer_scope, _) => Ok(Rc::clone(outer_scope)),
             InterpreterValue::Strong(inner) => inner.borrow().get_outer_scope(),
             InterpreterValue::BuiltinStruct(_, value) => value.borrow().get_outer_scope(),
+            InterpreterValue::BuiltinComponent(_, value) => value.borrow().get_outer_scope(),
             _ => Err(Error::CantDerefWeak),
         }
     }

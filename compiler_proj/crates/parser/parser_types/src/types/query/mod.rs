@@ -46,7 +46,7 @@ macro_rules! apply_pseudo_system_param {
         apply_pseudo_system_param!(
             $world,
             $query,
-            std::rc::Rc::new(std::cell::RefCell::new(Scope::default())),
+            &std::rc::Rc::new(std::cell::RefCell::new(Scope::default())),
             {}
         )
     };
@@ -59,6 +59,7 @@ pub struct Query {
 }
 
 #[allow(unused)]
+#[derive(Debug)]
 pub struct QueryItem {
     symbol: Symbol,
     type_of: QueryType,
