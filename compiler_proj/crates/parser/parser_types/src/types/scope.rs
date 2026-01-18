@@ -347,7 +347,7 @@ impl ScopeLike for InterpreterValue {
             InterpreterValue::Strong(inner) => inner.borrow().resolve_value(name),
             InterpreterValue::BuiltinStruct(_name, value) => value.borrow().resolve_value(name),
             InterpreterValue::BuiltinComponent(_name, value) => value.borrow().resolve_value(name),
-            value => {
+            _ => {
                 Err(Error::OperationUnsupported {
                 operation: "resolve_value".to_owned(),
                 type_of: "type is not a scope or struct".to_owned(),
