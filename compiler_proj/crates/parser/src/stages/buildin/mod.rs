@@ -82,6 +82,14 @@ pub fn register_buildin_structs_and_comps(scope: Rc<RefCell<Scope>>) -> Result<(
 
     register_buildin_struct(
         Rc::clone(&scope),
+        CustomResult {
+            value: None,
+            scope: Rc::clone(&scope),
+        },
+    )?;
+
+    register_buildin_struct(
+        Rc::clone(&scope),
         WorldObj {
             scope: Rc::clone(&scope),
         },

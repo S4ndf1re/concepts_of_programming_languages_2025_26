@@ -14,7 +14,9 @@ use parser_types::{
 };
 
 use crate::{
-    BuiltinFunctionDescription, Interpreter, SourceLoader, parse_content, register_buildin_component, register_buildin_function, register_buildin_functions, register_buildin_struct, register_buildin_structs_and_comps
+    BuiltinFunctionDescription, Interpreter, SourceLoader, parse_content,
+    register_buildin_component, register_buildin_function, register_buildin_functions,
+    register_buildin_struct, register_buildin_structs_and_comps,
 };
 
 pub fn run_system(
@@ -426,16 +428,7 @@ where
                 }
                 AstNodeType::Register { schedule_entity } => match schedule_entity {
                     RegisterType::Chain(chain) => {
-                        if chain.len() > 1 {
-                            Err(ErrorWithRange {
-                                err: Error::OperationUnsupported {
-                                    operation: "register".to_owned(),
-                                    type_of: "other than chain".to_owned(),
-                                },
-                                range: node.range.clone(),
-                                file,
-                            })?
-                        } else if chain.is_empty() {
+                        if chain.is_empty() {
                             Err(ErrorWithRange {
                                 err: Error::OperationUnsupported {
                                     operation: "register".to_owned(),
@@ -446,14 +439,16 @@ where
                             })?
                         }
 
-                        let sys_reg = chain[0].clone();
+                        for sys in &chain {
+                            let sys_reg = sys.clone();
 
-                        world.add_system(run_system(
-                            sys_reg,
-                            Rc::clone(&interpreter),
-                            // TODO: Performace optimiziation
-                            file,
-                        ));
+                            world.add_system(run_system(
+                                sys_reg,
+                                Rc::clone(&interpreter),
+                                // TODO: Performace optimiziation
+                                file,
+                            ));
+                        }
                     }
                     _ => Err(ErrorWithRange {
                         err: Error::OperationUnsupported {

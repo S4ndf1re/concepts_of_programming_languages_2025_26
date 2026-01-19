@@ -86,11 +86,6 @@ fn collides(a_pos: Position2d, a_rect: RectangleShape, b_pos: Position2d, b_rect
     b_bottom := b_pos.y + b_rect.h;
 
     return !(a_right < b_left || a_left > b_right || a_bottom < b_top || a_top > b_bottom);
-    // if(a_right <= b_left || a_left >= b_right || a_bottom >= b_top || a_top <= b_bottom) {
-    //     return false;
-    // } else {
-    //     return true;
-    // }
 }
 
 system handle_collisions(left_bar: L, right_bar: R, balls: B)

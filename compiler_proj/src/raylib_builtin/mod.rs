@@ -147,15 +147,18 @@ pub fn raylib_system(world: &World, raylib_handler: SingleQuery<RaylibHandle>) {
 
 fn raylib_input_helper(
     world: &World,
-    mut raylib_handler: SingleQuery<RaylibHandle>,
+    raylib_handler: SingleQuery<RaylibHandle>,
 ) -> Result<(), Error> {
     let query = build_query!(list { "WasdControl" });
     let applied = apply_pseudo_system_param!(world, query)?;
 
-    let raylib_handler = raylib_handler
-        .components
-        .get_mut(0)
-        .expect("already checked above");
+    let mut raylib_handler = raylib_handler.components;
+
+    if raylib_handler.len() != 1 {
+        return Ok(());
+    }
+
+    let raylib_handler = raylib_handler.get_mut(0).ok_or(Error::CantBeEmpty)?;
 
     if raylib_handler.1.0.window_should_close() {
         return Ok(());
