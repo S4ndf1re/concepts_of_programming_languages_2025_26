@@ -24,7 +24,6 @@ impl IsReturn {
     }
 }
 
-/// ActualTypeValue only represents the concrete value of a type. The actual type def is defined by
 #[derive(Clone, Debug)]
 pub enum InterpreterValue {
     Int(i64),
