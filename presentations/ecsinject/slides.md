@@ -359,11 +359,10 @@ transition: null
   
 <v-click>
 
-- Hießt für mich: Eigenes ECS
+- Hieß für mich: Eigenes ECS
   - Aber stark an Bevys ECS angelehnt
   - Extrem einfach gehalten 
 </v-click>
-
 
 ---
 transition: null
@@ -687,7 +686,6 @@ image: /img/alarm.jpg
 
 ---
 transition: null
-title: Error Handling
 ---
 
 ## Error Handling
@@ -695,27 +693,116 @@ title: Error Handling
 - Immens hilfreich bei der Fehlersuche
 - Immer wenn möglich Quelltext mitsamt Zeilen-/Tokenangaben referenzieren
 - Bestenfalls farbliche Fehlerausgaben
+- [Annotate Snipptes](https://docs.rs/annotate-snippets/latest/annotate_snippets/)
 
 
-<img v-click="['1', '2']" src="/img/error_1.png" class="absolute transform -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2 w-2/3 m-auto"/>
-<img v-click="['2', '3']" src="/img/error_2.png" class="absolute transform -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2 w-2/3 m-auto"/>
-<img v-click="3" src="/img/error_3.png" class="absolute transform -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2 w-2/3 m-auto"/>
-
+<img v-click="['1', '2']" src="/img/error_1.png" class="absolute transform -translate-x-1/2 -translate-y-1/2 top-2/3 left-1/2 w-2/3 m-auto"/>
+<img v-click="['2', '3']" src="/img/error_2.png" class="absolute transform -translate-x-1/2 -translate-y-1/2 top-2/3 left-1/2 w-2/3 m-auto"/>
+<img v-click="3" src="/img/error_3.png" class="absolute transform -translate-x-1/2 -translate-y-1/2 top-2/3 left-1/2 w-2/3 m-auto"/>
 
 ---
 transition: null
-title: ECSInject <=> Rust integration
+title: ECS Integration 
 layout: image-right
 image: /img/integration.jpg
 ---
 
-## ECSInject <=> Rust integration
+## ECS Integration
 
-- Builtin
-  - Functions
-  - Structs
-  - Components
-  - Useful macros
+---
+transition: null
+---
+
+## ECS Integration
+
+````md magic-move
+```rust {*|1-4|6-11|13|15-20}{lines: true}
+component Velocity {
+    x: int,
+    y: int,
+}
+
+system apply_input_left(left_bar: L, input: I)
+    querying L as List with { Position2d, RectangleShape % { LeftMarker && BarMarker } },
+             I as Single with { WasdControl }
+{
+  [...]
+}
+
+register apply_input_left;
+
+create entity left_bar
+    with
+        LeftMarker{},
+        BarMarker{},
+        Position2d{ x: 40.0, y: 320.0 },
+        RectangleShape{ w: 20.0, h: 100.0 };
+```
+```rust {15-19}{lines: true}
+component Velocity {
+    x: int,
+    y: int,
+}
+
+system apply_input_left(left_bar: L, input: I)
+    querying L as List with { Position2d, RectangleShape % { LeftMarker && BarMarker } },
+             I as Single with { WasdControl }
+{
+  [...]
+}
+
+register apply_input_left;
+
+create entity left_bar;
+left_bar += LeftMarker{};
+left_bar += BarMarker{};
+left_bar += Position2d{ x: 40.0, y: 320.0};
+left_bar += RectangleShape{ w: 20.0, h: 100.0 };
+```
+```rust {15-20}{lines: true}
+component Velocity {
+    x: int,
+    y: int,
+}
+
+system apply_input_left(left_bar: L, input: I)
+    querying L as List with { Position2d, RectangleShape % { LeftMarker && BarMarker } },
+             I as Single with { WasdControl }
+{
+  [...]
+}
+
+register apply_input_left;
+
+create entity left_bar;
+left_bar += LeftMarker{};
+left_bar += BarMarker{};
+left_bar += Position2d{ x: 40.0, y: 320.0};
+left_bar += RectangleShape{ w: 20.0, h: 100.0 };
+left_bar -= LeftMarker;
+```
+````
+
+---
+transition: null
+---
+
+## ECS Integration
+
+```rust {*|1-3|6-8}{lines: true}
+system do_something(obj: P, world: W)
+  querying P as List with { Entity, AnyComponent },
+           W as World
+{
+  for(o in obj) {
+    if (o.x > 100) {
+      world.stop();
+    }
+    o.x += 1;
+    println(o.x);
+  }
+}
+```
 
 ---
 transition: null
@@ -726,11 +813,37 @@ image: /img/tests.jpg
 
 ## Tests
 
+
+---
+transition: null
+layout: image-right
+image: /img/unit_tests_2.png
+---
+
+## Tests
+
 - Unit tests
   - Parser
   - Interpreter
-- main.eij
-- pong.eij
+- Auch hier wieder: Fehler Ausgabe extrem hilfreich
+
+---
+transition: null
+---
+
+## Tests
+
+- RayLib integration
+  - Builtin Komponenten
+    - 2d Position
+    - 2d Rechtecke 
+    - Wasd Input
+  - Builtin Systeme
+    - User Input => Füllt Wasd komponente
+    - Raylib Render => Malt Rechtecke anhand der Größe und Position
+  - Builtin Funktion
+    - `raylib_init` => initialisiert Raylib und öffnet fenster
+
 
 ---
 transition: null
@@ -741,8 +854,33 @@ image: /img/ausblick.jpg
 
 ## Ausblick
 
-- Bekannte Probleme
-  - l[0][0]
-  - Fehlendes Statisches Typechecking für alle Operationen
-    - Häufig als TODO
-    - Es wird lediglich geprüft, ob alle explizit benannten Typen existieren
+
+---
+transition: null
+---
+
+## Ausblick
+
+- var\[0\]\[0\] => Fehler in der Grammatik, einfache Änderung nicht möglich, da ambiguity
+- Fehlendes Statisches Typechecking für nahezu alle Operationen
+  - Häufig als TODO
+  - Es wird lediglich geprüft, ob alle explizit benannten Typen existieren
+- Interpreter value wir häufig kopiert (Performance), da nur Objekte als Reference Counted Objekte verwaltet werden
+
+---
+transition: null
+---
+
+## Lessons Learned 
+
+- `InterpreterValue` sehr fragil
+  - Weniger Kopieren, mehr Referenzieren (auch RC)
+- Funktionstypen (`TypeSymbol`) sollten nicht den Funktionsbody enthalten
+  - Lambdas / Annonyme Funktionen
+  - Funktionsbody lieber in `InterpreterValue` hinterlegen
+- LR(1) ist nett
+  - Viel ambiguity
+  - Schwer, ambiguity schön zu entfernen (var.\[\].\[\])
+- Besseres Typechecking erleichtert Leben
+- Insgesamt fehlen Typen: Map, Tuple, sowie das dazugehörige unpacking 
+- Builtin Library aufbauen dauert lange
